@@ -1,0 +1,283 @@
+import { Request, Response, NextFunction } from 'express';
+import * as XLSX from 'xlsx';
+import bcrypt from 'bcryptjs';
+import UsnRegistry from '../models/UsnRegistry';
+import User from '../models/User';
+import Student from '../models/Student';
+import Department from '../models/Department';
+import db from '../config/database';
+
+/**
+ * POST /api/admin/onboarding/usn-registry
+ * Uploads pre-allocated USN Registry file
+ */
+export const uploadUSNRegistry = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    let valid = 0;
+    let invalid = 0;
+    const errors: string[] = [];
+    const registriesToCreate: any[] = [];
+
+    for (const row of rows) {
+      const usn = (row.usn || row.USN || '').toString().trim().toUpperCase();
+      const studentName = (row.studentName || row.name || row.Name || '').toString().trim();
+      const departmentCode = (row.departmentCode || row.department || row.Branch || '').toString().trim().toUpperCase();
+      const semester = parseInt(row.semester || row.sem || '1', 10);
+
+      if (!usn || !studentName || !departmentCode) {
+        invalid++;
+        errors.push(`Row missing required fields: USN=${usn}, Name=${studentName}, Dept=${departmentCode}`);
+        continue;
+      }
+
+      registriesToCreate.push({
+        usn,
+        studentName,
+        departmentCode,
+        semester: isNaN(semester) ? 1 : semester,
+        status: 'AVAILABLE'
+      });
+      valid++;
+    }
+
+    if (registriesToCreate.length > 0) {
+      await UsnRegistry.bulkCreate(registriesToCreate, { 
+        updateOnDuplicate: ['studentName', 'departmentCode', 'semester', 'status'] 
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Successfully processed USN Registry file.`,
+      data: {
+        total: rows.length,
+        valid,
+        invalid,
+        errors
+      }
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/**
+ * GET /api/admin/onboarding/usn-registry
+ * Returns registry list based on filters
+ */
+export const getUSNRegistry = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const { semester, department, status } = req.query as any;
+    const where: any = {};
+    if (semester) {
+      where.semester = parseInt(semester, 10);
+    }
+    if (department) {
+      where.departmentCode = department.toUpperCase();
+    }
+    if (status) {
+      where.status = status.toUpperCase();
+    }
+
+    const list = await UsnRegistry.findAll({ 
+      where, 
+      order: [['usn', 'ASC']] 
+    });
+
+    return res.json({
+      success: true,
+      data: list
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/**
+ * POST /api/admin/onboarding/students/bulk
+ * Onboards students in bulk via Excel spreadsheet
+ */
+export const bulkUploadStudents = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    
+    const preview = req.body.preview === 'true';
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    const errors: Array<{ usn: string; name: string; reason: string }> = [];
+    const validStudents: any[] = [];
+    let readyToCreate = 0;
+    let rejected = 0;
+
+    // Cache departments mapping to speed up verification
+    const departments = await Department.findAll();
+    const deptMap = new Map(departments.map(d => [d.code.toUpperCase(), d]));
+
+    for (const row of rows) {
+      const usn = (row.usn || row.USN || '').toString().trim().toUpperCase();
+      const name = (row.studentName || row.name || row.Name || '').toString().trim();
+      const email = (row.email || row.Email || '').toString().trim();
+      const phone = (row.phone || row.Phone || '').toString().trim();
+      const departmentCode = (row.departmentCode || row.department || row.Branch || '').toString().trim().toUpperCase();
+      const semester = parseInt(row.semester || row.sem || '1', 10);
+      const fatherName = (row.fatherName || row.FatherName || '').toString().trim();
+      const motherName = (row.motherName || row.MotherName || '').toString().trim();
+      const parentPhone = (row.parentPhone || row.ParentPhone || '').toString().trim();
+      const parentEmail = (row.parentEmail || row.ParentEmail || '').toString().trim();
+      const address = (row.address || row.Address || '').toString().trim();
+      const dobStr = (row.dateOfBirth || row.dob || row.DOB || '').toString().trim();
+
+      if (!usn || !name || !email || !departmentCode) {
+        rejected++;
+        errors.push({ usn, name, reason: 'Missing mandatory fields (USN, Name, Email, or Department)' });
+        continue;
+      }
+
+      // Verify department exists
+      const dept = deptMap.get(departmentCode);
+      if (!dept) {
+        rejected++;
+        errors.push({ usn, name, reason: `Invalid department code: ${departmentCode}` });
+        continue;
+      }
+
+      // Verify USN registry reservation
+      const registryEntry = await UsnRegistry.findOne({ where: { usn } });
+      if (!registryEntry) {
+        rejected++;
+        errors.push({ usn, name, reason: 'USN is not registered in pre-allocated USN registry' });
+        continue;
+      }
+      if (registryEntry.status === 'CLAIMED') {
+        rejected++;
+        errors.push({ usn, name, reason: 'USN has already been claimed/onboarded' });
+        continue;
+      }
+
+      // Check for user duplicate email
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser) {
+        rejected++;
+        errors.push({ usn, name, reason: `Email '${email}' is already in use` });
+        continue;
+      }
+
+      validStudents.push({
+        usn,
+        name,
+        email,
+        phone,
+        departmentId: dept.id,
+        departmentCode,
+        semester: isNaN(semester) ? 1 : semester,
+        fatherName,
+        motherName,
+        parentPhone,
+        parentEmail,
+        address,
+        dateOfBirth: dobStr ? new Date(dobStr) : null
+      });
+      readyToCreate++;
+    }
+
+    if (!preview && validStudents.length > 0) {
+      const transaction = await db.transaction();
+      try {
+        const passwordHash = await bcrypt.hash('password123', 10);
+        
+        for (const s of validStudents) {
+          const names = s.name.split(' ');
+          const firstName = names[0];
+          const lastName = names.slice(1).join(' ') || 'Student';
+
+          const user = await User.create({
+            username: s.usn.toLowerCase(),
+            email: s.email,
+            passwordHash,
+            role: 'STUDENT',
+            status: 'ACTIVE',
+            firstName,
+            lastName,
+            phone: s.phone,
+          }, { transaction });
+
+          const batchYear = new Date().getFullYear();
+          const seqStr = String(s.usn.slice(-3));
+          const enrollmentNumber = s.usn;
+          const rollNumber = `${batchYear}${s.departmentCode}${seqStr}`;
+
+          await Student.create({
+            userId: user.id,
+            usn: s.usn,
+            enrollmentNumber,
+            rollNumber,
+            batchYear,
+            departmentId: s.departmentId,
+            semester: s.semester,
+            dateOfBirth: s.dateOfBirth,
+            address: s.address,
+            fatherName: s.fatherName,
+            motherName: s.motherName,
+            parentPhone: s.parentPhone,
+            parentEmail: s.parentEmail,
+            admissionStatus: 'APPROVED'
+          }, { transaction });
+
+          // Update registry entry status
+          await UsnRegistry.update({ status: 'CLAIMED' }, { 
+            where: { usn: s.usn }, 
+            transaction 
+          });
+        }
+        
+        await transaction.commit();
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: preview 
+        ? `Spreadsheet validation complete. ${readyToCreate} student records ready for upload.`
+        : `Successfully onboarded ${validStudents.length} student records.`,
+      data: {
+        readyToCreate,
+        rejected,
+        errors,
+        validStudents: preview ? validStudents : undefined,
+        created: preview ? undefined : validStudents.length
+      }
+    });
+  } catch (err) {
+    return next(err);
+  }
+};

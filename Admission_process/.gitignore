@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+*/node_modules/
+packages/*/node_modules/
+
+# Nested git repos (admission-portal was previously a git submodule inside frontend)
+# Its code is tracked from the monorepo root — ignore its nested .git folder
+frontend/src/pages/admission/.git/
+# Also ignore admission portal's own node_modules (workspaces handles it)
+frontend/src/pages/admission/node_modules/
+# Ignore the old package-lock from the nested location
+frontend/src/pages/admission/package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+docker-compose.override.yml
+
+# Cache
+.cache/
+.next/
+.nuxt/
+dist/
+out/
+
+# Misc
+*.pem
+.env.*.local
+
+# Uploads and temporary build metadata
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.mjs
+*.ts.timestamp-*

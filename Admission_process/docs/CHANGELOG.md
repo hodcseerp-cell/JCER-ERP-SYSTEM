@@ -1,0 +1,4 @@
+# caused whiling logging ->
+# Found the issues! cookie-parser is NOT set up in app.ts, and our auth.service.ts uses its own JWT secret instead of the one in jwt.util.ts. I'll fix both issues now — simplify auth.service.ts to use the existing jwt.util.ts and add cookie-parser to app.ts
+# Now I need to update the generateTokens method to use generateToken from jwt.util.ts and fix the refresh token signing which still references jwt.sign directly:
+# I can see jwt.sign and jwt.verify are still being used directly. I'll fix the entire auth.service.ts to properly use generateToken/verifyToken from the util and add jwt back for the refresh token only:
