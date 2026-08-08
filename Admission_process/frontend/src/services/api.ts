@@ -3,7 +3,8 @@ import { store } from '../store/store';
 import { startLoading, stopLoading } from '../store/uiSlice';
 import { forceLogout } from '../utils/auth.utils';
 
-console.log("API URL =", import.meta.env.VITE_API_URL);
+const baseURL = import.meta.env.VITE_API_URL || 'https://vital-charlotte-parker-setting.trycloudflare.com/api';
+console.log("API URL =", baseURL);
 
 let startLoadingCallback: () => void = () => {};
 let stopLoadingCallback: () => void = () => {};
@@ -14,7 +15,7 @@ export const registerLoadingCallbacks = (start: () => void, stop: () => void) =>
 };
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: baseURL,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -77,7 +78,7 @@ API.interceptors.response.use(
       try {
         // Attempt to seamlessly refresh the session using the httpOnly cookie
         const refreshResponse = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh-token`,
+          `${baseURL}/auth/refresh-token`,
           {},
           { withCredentials: true }
         );
