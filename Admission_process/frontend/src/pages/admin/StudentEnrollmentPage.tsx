@@ -155,6 +155,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
     SUBMITTED:    applications.filter(a => a.applicationStatus === 'SUBMITTED').length,
     UNDER_REVIEW: applications.filter(a => a.applicationStatus === 'UNDER_REVIEW').length,
     APPROVED:     applications.filter(a => a.applicationStatus === 'APPROVED').length,
+    PRINCIPAL_APPROVED: applications.filter(a => a.applicationStatus === 'PRINCIPAL_APPROVED').length,
     FEE_RECEIPT_UPLOADED: applications.filter(a => a.applicationStatus === 'FEE_RECEIPT_UPLOADED').length,
     FEE_VERIFIED: applications.filter(a => a.applicationStatus === 'FEE_VERIFIED').length,
     REJECTED:     applications.filter(a => a.applicationStatus === 'REJECTED').length,
