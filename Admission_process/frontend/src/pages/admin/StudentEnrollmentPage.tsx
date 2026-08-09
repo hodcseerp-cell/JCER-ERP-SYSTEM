@@ -11,6 +11,7 @@ import admissionService, {
   AdmissionApplication,
   AdmissionStatus,
 } from '../../services/admission.service';
+import API from '../../services/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +169,17 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const getBranchStyle = (code?: string | null) => BRANCH_ACCENT[code || ''] || DEFAULT_BRANCH;
+  const getDocUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    const base = API.defaults.baseURL || '/api';
+    const host = base.replace(/\/api\/?$/, '');
+    if (host.startsWith('/')) {
+      return cleanPath;
+    }
+    return `${host}${cleanPath}`;
+  };
   const getDocumentList = (app: AdmissionApplication) => {
     const d = app.studentdocuments;
     if (!d) return [];
@@ -528,7 +540,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                       getDocumentList(selected).map((doc) => (
                         <a
                           key={doc.label}
-                          href={`http://localhost:5000${doc.url}`}
+                          href={getDocUrl(doc.url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-between p-3 rounded-xl border bg-emerald-50 border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all"

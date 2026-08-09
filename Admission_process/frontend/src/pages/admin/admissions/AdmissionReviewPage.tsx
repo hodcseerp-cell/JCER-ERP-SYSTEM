@@ -11,8 +11,14 @@ import { DocumentVerificationWorkspace } from './DocumentVerificationWorkspace';
 
 const getDocUrl = (url?: string | null) => {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return url;
+  if (url.startsWith('http') || url.startsWith('data:')) return url;
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  const base = API.defaults.baseURL || '/api';
+  const host = base.replace(/\/api\/?$/, '');
+  if (host.startsWith('/')) {
+    return cleanPath;
+  }
+  return `${host}${cleanPath}`;
 };
 
 const getMissingFields = (app: AdmissionApplication | null) => {
