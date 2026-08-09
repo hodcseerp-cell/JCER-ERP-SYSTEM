@@ -3,7 +3,7 @@ import { store } from '../store/store';
 import { startLoading, stopLoading } from '../store/uiSlice';
 import { forceLogout } from '../utils/auth.utils';
 
-const baseURL = import.meta.env.VITE_API_URL || 'https://vital-charlotte-parker-setting.trycloudflare.com/api';
+const baseURL = import.meta.env.VITE_API_URL || 'https://zone-material-carpet-estates.trycloudflare.com/api';
 console.log("API URL =", baseURL);
 
 let startLoadingCallback: () => void = () => {};
