@@ -117,6 +117,7 @@ const ActivityTimeline = ({ timeline = {}, compact = false }) => {
     const stepsToShow = TIMELINE_STEPS.filter(step => {
         if (step.key === 'rejectedAt' && !isRejected) return false;
         if (step.key === 'correctionRequestedAt' && !timeline.correctionRequestedAt) return false;
+        if (step.key === 'resubmittedAt' && !timeline.resubmittedAt) return false;
         if (step.key === 'approvedAt' && isRejected) return false;
         if (step.key === 'cancellationRequestedAt' && !isCancellationRequested) return false;
         if (step.key === 'cancellationApprovedAt' && !isCancelled) return false;
