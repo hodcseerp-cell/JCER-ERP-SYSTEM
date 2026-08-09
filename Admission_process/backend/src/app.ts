@@ -61,6 +61,14 @@ app.get('/api', (_req: Request, res: Response) => {
     timestamp: new Date()
   });
 });
+
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'JCER Admission Backend',
+    timestamp: new Date().toISOString(),
+  });
+});
 // ── API Routes ────────────────────────────────────────────────────────────────
 
 const v1Router = express.Router();

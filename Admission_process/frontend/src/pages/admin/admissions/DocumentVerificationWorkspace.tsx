@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import API from '../../../services/api';
+import API, { getBaseHostURL } from '../../../services/api';
 import {
   X,
   CheckCircle2,
@@ -199,6 +199,12 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
   const [hasError, setHasError] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  // States for on-demand active document loading
+  const [activeDocUrl, setActiveDocUrl] = useState<string | null>(null);
+  const [activeDocLoading, setActiveDocLoading] = useState<boolean>(false);
+  const [activeDocError, setActiveDocError] = useState<boolean>(false);
+  const [activeDocIsPdf, setActiveDocIsPdf] = useState<boolean>(false);
+
   const [studentNameState, setStudentNameState] = useState<string>(propStudentName || '');
   const [appNumberState, setAppNumberState] = useState<string>(propAppNumber || '');
   const [appUpdatedAt, setAppUpdatedAt] = useState<string>('');
@@ -379,45 +385,8 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
         }
         setCurrentDocumentIndex(matchedIdx);
 
-        if (availableDocs.length === 0) {
-          console.warn("No documents found for this application.");
-          setIsLoading(false);
-          return;
-        }
-
-        // Preload Blobs
-        setLoadingBlobs(true);
-        const updatedDocs = [...availableDocs];
-
-        try {
-          await Promise.all(
-            updatedDocs.map(async (doc, idx) => {
-              try {
-                if (targetAppId && doc.field) {
-                  const response = await API.get(`/admin/admissions/${targetAppId}/documents/${doc.field}`, {
-                    responseType: 'blob'
-                  });
-                  if (!active) return;
-                  const type = response.data?.type || '';
-                  const isPdf = type.includes('pdf') || (typeof doc.url === 'string' && doc.url.toLowerCase().endsWith('.pdf'));
-                  const blobUrl = URL.createObjectURL(response.data);
-                  updatedDocs[idx] = { ...updatedDocs[idx], blobUrl, isPdf: !!isPdf };
-                }
-              } catch (err) {
-                console.warn(`Fallback to direct url for field ${doc.field}:`, err);
-                const isPdf = typeof doc.url === 'string' && doc.url.toLowerCase().endsWith('.pdf');
-                updatedDocs[idx] = { ...updatedDocs[idx], isPdf: !!isPdf };
-              }
-            })
-          );
-        } catch (err) {
-          console.error("Error preloading document blobs:", err);
-        } finally {
-          if (active) {
-            setDocList(updatedDocs);
-            setLoadingBlobs(false);
-          }
-        }
+        setDocList(availableDocs);
+        setIsLoading(false);
       } catch (err: any) {
         console.error("Error initializing DocumentVerificationWorkspace:", err);
         if (active) {
@@ -438,6 +407,53 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
       active = false;
     };
   }, [effectiveIsOpen, targetAppId, propDocuments, propStudentName, propAppNumber]);
+
+  // On-demand loader for the selected document's URL (R2 signed URL or legacy local path)
+  useEffect(() => {
+    if (!effectiveIsOpen || docList.length === 0) return;
+    const activeDoc = docList[currentDocumentIndex];
+    if (!activeDoc) return;
+
+    let active = true;
+    setActiveDocUrl(null);
+    setActiveDocLoading(true);
+    setActiveDocError(false);
+
+    const loadActiveDoc = async () => {
+      try {
+        const res = await API.get(`/admin/admissions/${targetAppId}/documents/${activeDoc.field}`);
+        if (!active) return;
+
+        if (res.data?.url) {
+          let finalUrl = res.data.url;
+          if (!finalUrl.startsWith('http') && !finalUrl.startsWith('blob:')) {
+            const baseHost = getBaseHostURL();
+            finalUrl = baseHost + finalUrl;
+          }
+          setActiveDocUrl(finalUrl);
+          const isPdf = finalUrl.toLowerCase().includes('.pdf') || activeDoc.name.toLowerCase().includes('pdf') || activeDoc.url?.toLowerCase().includes('.pdf');
+          setActiveDocIsPdf(!!isPdf);
+        } else {
+          throw new Error('No URL returned from document metadata');
+        }
+      } catch (err) {
+        console.error('Failed to load active document URL:', err);
+        if (active) {
+          setActiveDocError(true);
+        }
+      } finally {
+        if (active) {
+          setActiveDocLoading(false);
+        }
+      }
+    };
+
+    loadActiveDoc();
+
+    return () => {
+      active = false;
+    };
+  }, [currentDocumentIndex, docList, targetAppId, effectiveIsOpen]);
 
   useEffect(() => {
     if (targetAppId && docList.length > 0) {
@@ -916,12 +932,11 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
                 type="button"
                 title="Download Document"
                 onClick={() => {
-                  if (!currentDocument) return;
-                  const url = currentDocument.blobUrl || currentDocument.url;
-                  if (!url) return;
+                  if (!activeDocUrl) return;
                   const a = document.createElement('a');
-                  a.href = url;
-                  a.download = currentDocument.name || 'document';
+                  a.href = activeDocUrl;
+                  a.target = '_blank';
+                  a.download = currentDocument?.name || 'document';
                   document.body.appendChild(a);
                   a.click();
                   document.body.removeChild(a);
@@ -962,51 +977,51 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
                 zoom > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
               }`}
             >
-              {loadingBlobs && !currentDocument?.blobUrl ? (
+              {activeDocLoading ? (
                 <div className="flex flex-col items-center justify-center text-slate-500 gap-3">
                   <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-600">Loading Document File...</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-650">Loading Document File...</p>
+                </div>
+              ) : activeDocError || !activeDocUrl ? (
+                <div className="flex flex-col items-center justify-center text-slate-500 gap-3 text-center p-6">
+                  <AlertTriangle size={36} className="text-amber-500" />
+                  <p className="text-xs font-bold text-slate-755">Document File Not Available or Unreadable</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Trigger refresh/retry by forcing current idx state update
+                      setCurrentDocumentIndex(currentDocumentIndex);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                  >
+                    Retry Loading
+                  </button>
                 </div>
               ) : currentDocument ? (
-                currentDocument.loadError ? (
-                  <div className="flex flex-col items-center justify-center text-slate-500 gap-3 text-center p-6">
-                    <AlertTriangle size={36} className="text-amber-500" />
-                    <p className="text-xs font-bold text-slate-700">Document File Not Available or Unreadable</p>
-                    <a
-                      href={currentDocument.url || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl border border-slate-300 transition-colors"
-                    >
-                      Open Original Direct Link
-                    </a>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      transform: `scale(${zoom}) rotate(${rotation}deg) translate(${position.x}px, ${position.y}px)`,
-                      transformOrigin: 'center center',
-                      transition: isPanning ? 'none' : 'transform 0.2s ease-out'
-                    }}
-                    className="flex items-center justify-center max-w-full max-h-full"
-                  >
-                    {currentDocument.isPdf ? (
-                      <iframe
-                        src={currentDocument.blobUrl || currentDocument.url!}
-                        className="w-[50vw] h-[65vh] rounded-2xl border border-slate-200 bg-white shadow-xs"
-                        title={currentDocument.name}
-                        onError={() => handleDocumentLoadError(currentDocument.id)}
-                      />
-                    ) : (
-                      <img
-                        src={currentDocument.blobUrl || currentDocument.url!}
-                        alt={currentDocument.name}
-                        onError={() => handleDocumentLoadError(currentDocument.id)}
-                        className="block max-w-full max-h-[66vh] w-auto h-auto object-contain rounded-2xl border border-slate-100 bg-white pointer-events-none shrink-0 shadow-xs"
-                      />
-                    )}
-                  </div>
-                )
+                <div
+                  style={{
+                    transform: `scale(${zoom}) rotate(${rotation}deg) translate(${position.x}px, ${position.y}px)`,
+                    transformOrigin: 'center center',
+                    transition: isPanning ? 'none' : 'transform 0.2s ease-out'
+                  }}
+                  className="flex items-center justify-center max-w-full max-h-full"
+                >
+                  {activeDocIsPdf ? (
+                    <iframe
+                      src={activeDocUrl}
+                      className="w-[50vw] h-[65vh] rounded-2xl border border-slate-200 bg-white shadow-xs"
+                      title={currentDocument.name}
+                      onError={() => setActiveDocError(true)}
+                    />
+                  ) : (
+                    <img
+                      src={activeDocUrl}
+                      alt={currentDocument.name}
+                      onError={() => setActiveDocError(true)}
+                      className="block max-w-full max-h-[66vh] w-auto h-auto object-contain rounded-2xl border border-slate-105 bg-white pointer-events-none shrink-0 shadow-xs"
+                    />
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center text-slate-400">
                   <FileText size={48} className="opacity-35 mb-2" />

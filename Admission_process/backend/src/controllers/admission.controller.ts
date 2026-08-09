@@ -20,6 +20,54 @@ import AdmissionAcademicDetail from '../models/AdmissionAcademicDetail';
 import Student from '../models/Student';
 import UsnRegistry from '../models/UsnRegistry';
 import Notification from '../models/Notification';
+import * as r2 from '../services/r2.service';
+import sharp from 'sharp';
+
+const TARGET_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_DIMENSION = 2000;
+const QUALITY_STEPS = [85, 75, 65];
+
+async function compressLocalImage(localPath: string, mimetype: string): Promise<void> {
+  if (!mimetype.startsWith('image/')) return;
+  try {
+    const buffer = fs.readFileSync(localPath);
+    if (buffer.length <= TARGET_SIZE_BYTES) {
+      const metadata = await sharp(buffer).metadata();
+      const needsResize = metadata.width && metadata.height && (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION);
+      if (!needsResize) return;
+    }
+
+    const pipeline = sharp(buffer).rotate();
+    const metadata = await pipeline.metadata();
+
+    let processedPipeline = pipeline;
+    if (metadata.width && metadata.height && (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION)) {
+      processedPipeline = processedPipeline.resize({
+        width: MAX_DIMENSION,
+        height: MAX_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true
+      });
+    }
+
+    let result = buffer;
+    for (const quality of QUALITY_STEPS) {
+      const compressed = await processedPipeline
+        .clone()
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer();
+      result = compressed;
+      if (compressed.length <= TARGET_SIZE_BYTES) {
+        break;
+      }
+    }
+
+    fs.writeFileSync(localPath, result);
+    logger.info(`[Local Compressor] Compressed image ${localPath} down to ${(result.length / 1024).toFixed(0)} KB`);
+  } catch (err) {
+    logger.warn(`[Local Compressor] Failed to compress image ${localPath}:`, err);
+  }
+}
 
 interface AuthRequest extends Request {
   user?: { id: string; role: string };
@@ -211,15 +259,41 @@ export const saveStep6 = async (
     }
 
     const studentId = req.user!.id;
-    // Build URL map: fieldname → /uploads/admissions/studentId/fieldname/filename (served as static)
+
+    // Fetch current document record to get old local paths for cleanup
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    const existingDocs = admission
+      ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
+      : null;
+
     const fileUrls: Record<string, string> = {};
     for (const field of Object.keys(files)) {
       const file = files[field][0];
+      // Compress the image locally before committing
+      await compressLocalImage(file.path, file.mimetype);
       fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
     }
 
     const admissionId = await admissionService.saveStep6(studentId, fileUrls);
     securityEvents.documentUpload(req, studentId, admissionId, Object.keys(fileUrls));
+
+    // Delete old local files after DB update succeeds
+    if (existingDocs) {
+      for (const dbKeyField of Object.keys(fileUrls)) {
+        const oldPath = existingDocs.get(dbKeyField as any) as string | null;
+        if (oldPath && oldPath !== fileUrls[dbKeyField]) {
+          const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+          try {
+            if (fs.existsSync(absolutePath)) {
+              fs.unlinkSync(absolutePath);
+            }
+          } catch (err) {
+            logger.warn(`Could not delete old local file: ${absolutePath}`, err);
+          }
+        }
+      }
+    }
+
     return res.json({ success: true, message: 'Documents uploaded.', data: fileUrls });
   } catch (err) {
     return next(err);
@@ -242,11 +316,62 @@ export const removeDocument = async (
       return res.status(400).json({ success: false, message: 'Invalid document field.' });
     }
 
-    const dbKey = `${field}Url`;
+    const dbKeyField = `${field}Url`;
     const studentId = req.user!.id;
-    const admissionId = await admissionService.saveStep6(studentId, { [dbKey]: null });
-    
-    return res.json({ success: true, message: 'Document removed.', data: { [dbKey]: null } });
+
+    // Get old local file path before nullifying
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    const existingDocs = admission
+      ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
+      : null;
+    const oldPath = existingDocs ? (existingDocs.get(dbKeyField as any) as string | null) : null;
+
+    // Null out the DB field
+    await admissionService.saveStep6(studentId, { [dbKeyField]: null });
+
+    // Delete local file
+    if (oldPath) {
+      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+      try {
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (err) {
+        logger.warn(`Could not delete local file: ${absolutePath}`, err);
+      }
+    }
+
+    return res.json({ success: true, message: 'Document removed.', data: { [dbKeyField]: null } });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/student/documents/:field — Student views their own document */
+export const getStudentDocument = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { field } = req.params;
+    const documentColumn = DOCUMENT_FIELD_MAP[field];
+    if (!documentColumn) {
+      return res.status(400).json({ error: 'Invalid document field.' });
+    }
+
+    const studentId = req.user!.id;
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    if (!admission) {
+      return res.status(404).json({ error: 'No admission application found.' });
+    }
+
+    const documents = await AdmissionDocument.findOne({ where: { admissionId: admission.id } });
+    const fileUrl = documents ? (documents.get(documentColumn as string) as string | null) : null;
+    if (!fileUrl) {
+      return res.status(404).json({ error: 'Document not uploaded.' });
+    }
+
+    const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+    return res.json({ success: true, url: relativePath });
   } catch (err) {
     return next(err);
   }
@@ -371,7 +496,17 @@ export const downloadHandbook = async (
   try {
     const config = await SystemConfiguration.findOne();
     if (config?.handbookUrl) {
-      const relativePath = config.handbookUrl.startsWith('/') ? config.handbookUrl.slice(1) : config.handbookUrl;
+      const key = config.handbookUrl;
+
+      // R2 object key (new format — does not start with '/' or 'http')
+      if (!key.startsWith('/') && !key.startsWith('http')) {
+        const signedUrl = await r2.getSignedUrl(key, 10 * 60); // 10 min TTL for download
+        res.setHeader('Content-Disposition', 'attachment; filename="Jain_College_Admission_Handbook.pdf"');
+        return res.redirect(302, signedUrl);
+      }
+
+      // Legacy local disk path
+      const relativePath = key.startsWith('/') ? key.slice(1) : key;
       const fullPath = path.join(process.cwd(), relativePath);
       if (fs.existsSync(fullPath)) {
         return res.download(fullPath, 'Jain_College_Admission_Handbook.pdf');
@@ -384,18 +519,13 @@ export const downloadHandbook = async (
       return res.download(staticHandbookPath, 'Jain_College_Admission_Handbook.pdf');
     }
 
-    // Generate handbook PDF buffer
+    // Generate handbook PDF buffer in memory as final fallback
     const pdfBuffer = generateHandbookPDFBuffer();
 
-    // Persist file to uploads and public/static directories
     try {
       const uploadsDir = path.join(process.cwd(), 'uploads');
-      const publicStaticDir = path.join(process.cwd(), 'public', 'static');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-      if (!fs.existsSync(publicStaticDir)) fs.mkdirSync(publicStaticDir, { recursive: true });
-
       fs.writeFileSync(staticHandbookPath, pdfBuffer);
-      fs.writeFileSync(path.join(publicStaticDir, 'Jain_College_Admission_Handbook.pdf'), pdfBuffer);
     } catch (saveErr: any) {
       logger.warn(`Could not save static handbook PDF file: ${saveErr.message}`);
     }
@@ -503,7 +633,7 @@ export const getAdmissionById = async (
   }
 };
 
-/** GET /api/admin/admissions/:id/documents/:field */
+/** GET /api/admin/admissions/:id/documents/:field — Admin views a student document */
 export const viewAdmissionDocument = async (
   req: AuthRequest, res: Response, next: NextFunction
 ): Promise<any> => {
@@ -525,25 +655,10 @@ export const viewAdmissionDocument = async (
       return res.status(404).json({ error: 'Document not uploaded.' });
     }
 
-    const relativePath = fileUrl.replace(/^\/+/, '');
-    if (!relativePath.startsWith('uploads/')) {
-      return res.status(400).json({ error: 'Invalid document path.' });
-    }
-
-    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
-    const absolutePath = path.resolve(process.cwd(), relativePath);
-    const isInsideUploads =
-      absolutePath === uploadsRoot || absolutePath.startsWith(`${uploadsRoot}${path.sep}`);
-
-    if (!isInsideUploads || !fs.existsSync(absolutePath)) {
-      return res.status(404).json({ error: 'Document file not found.' });
-    }
-
     securityEvents.documentDownload(req, req.user!.id, id, field);
 
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(absolutePath)}"`);
-    return res.sendFile(absolutePath);
+    const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+    return res.json({ success: true, url: relativePath });
   } catch (err) {
     return next(err);
   }
@@ -871,15 +986,37 @@ export const uploadFeeReceipt = async (
 ): Promise<any> => {
   try {
     const file = req.file;
-    let receiptUrl = req.body.receiptUrl;
-    if (file) {
-      receiptUrl = `/uploads/${file.filename}`;
-    }
-    if (!receiptUrl) {
+    if (!file) {
       return res.status(400).json({ success: false, message: 'Fee receipt file is required.' });
     }
 
-    const result = await admissionService.uploadFeeReceipt(req.user!.id, receiptUrl);
+    const studentId = req.user!.id;
+
+    // Fetch current receipt path for cleanup after successful DB update
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    const oldPath = admission ? admission.admissionFeeReceiptUrl : null;
+
+    // Compress the image locally
+    await compressLocalImage(file.path, file.mimetype);
+
+    // Save path in DB
+    const relativeToUploads = path.relative(path.join(process.cwd(), 'uploads'), file.path).replace(/\\/g, '/');
+    const receiptUrl = `/uploads/${relativeToUploads}`;
+
+    const result = await admissionService.uploadFeeReceipt(studentId, receiptUrl);
+
+    // Delete old local file
+    if (oldPath && oldPath !== receiptUrl) {
+      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+      try {
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (err) {
+        logger.warn(`Could not delete old fee receipt: ${absolutePath}`, err);
+      }
+    }
+
     return res.json(result);
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });
@@ -1026,15 +1163,39 @@ export const saveAdminDocuments = async (
       return res.status(400).json({ success: false, message: 'Could not resolve student identity.' });
     }
 
-    // Build URL map: fieldname → /uploads/admissions/studentId/fieldname/filename (served as static)
+    // Fetch existing doc paths for cleanup
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    const existingDocs = admission
+      ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
+      : null;
+
     const fileUrls: Record<string, string> = {};
     for (const field of Object.keys(files)) {
       const file = files[field][0];
+      await compressLocalImage(file.path, file.mimetype);
       fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
     }
 
     const admissionId = await admissionService.saveStep6(studentId, fileUrls);
     securityEvents.documentUpload(req, studentId, admissionId, Object.keys(fileUrls));
+
+    // Delete old local files
+    if (existingDocs) {
+      for (const dbKeyField of Object.keys(fileUrls)) {
+        const oldPath = existingDocs.get(dbKeyField as any) as string | null;
+        if (oldPath && oldPath !== fileUrls[dbKeyField]) {
+          const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+          try {
+            if (fs.existsSync(absolutePath)) {
+              fs.unlinkSync(absolutePath);
+            }
+          } catch (err) {
+            logger.warn(`Could not delete old local file: ${absolutePath}`, err);
+          }
+        }
+      }
+    }
+
     return res.json({ success: true, message: 'Documents uploaded.', data: fileUrls });
   } catch (err) {
     return next(err);
@@ -1057,14 +1218,33 @@ export const removeAdminDocument = async (
       return res.status(400).json({ success: false, message: 'Invalid document field.' });
     }
 
-    const dbKey = `${field}Url`;
+    const dbKeyField = `${field}Url`;
     const studentId = req.studentUserId;
     if (!studentId) {
       return res.status(400).json({ success: false, message: 'Could not resolve student identity.' });
     }
-    const admissionId = await admissionService.saveStep6(studentId, { [dbKey]: null });
-    
-    return res.json({ success: true, message: 'Document removed.', data: { [dbKey]: null } });
+
+    // Get old local file path
+    const admission = await Admission.findOne({ where: { userId: studentId } });
+    const existingDocs = admission
+      ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
+      : null;
+    const oldPath = existingDocs ? (existingDocs.get(dbKeyField as any) as string | null) : null;
+
+    await admissionService.saveStep6(studentId, { [dbKeyField]: null });
+
+    if (oldPath) {
+      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+      try {
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (err) {
+        logger.warn(`Could not delete local file: ${absolutePath}`, err);
+      }
+    }
+
+    return res.json({ success: true, message: 'Document removed.', data: { [dbKeyField]: null } });
   } catch (err) {
     return next(err);
   }

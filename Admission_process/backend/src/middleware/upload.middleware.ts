@@ -43,9 +43,10 @@ const fileFilter = (
 ) => {
   const allowedMimes = [
     'image/jpeg', 'image/jpg', 'image/png',
+    'application/pdf',
   ];
   if (!allowedMimes.includes(file.mimetype)) {
-    return cb(new BadRequestError(`File type not allowed: ${file.mimetype}. Only JPG, JPEG, and PNG images are accepted.`));
+    return cb(new BadRequestError(`File type not allowed: ${file.mimetype}. Only JPG, PNG, and PDF files are accepted.`));
   }
   cb(null, true);
 };
@@ -130,7 +131,12 @@ export const uploadDocuments = (req: Request, res: Response, next: NextFunction)
             return next(new BadRequestError(`File validation failed. Disguised files or macro scripts are not allowed.`));
           }
 
-          // Document Quality Validation (Color + Blur)
+          // Skip quality validation for PDFs — sharp cannot process them
+          if (file.mimetype === 'application/pdf') {
+            continue;
+          }
+
+          // Document Quality Validation (Color + Blur) — images only
           const qualityResult = await validateDocument(fieldName, file.path, file.originalname);
           if (!qualityResult.success) {
             try {
@@ -158,7 +164,7 @@ const feeReceiptMulterInstance = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5 MB limit
+    fileSize: 10 * 1024 * 1024, // 10 MB limit
   },
 }).single('admissionFeeReceipt');
 
@@ -180,22 +186,24 @@ export const uploadFeeReceiptMiddleware = (req: Request, res: Response, next: Ne
         return next(new BadRequestError(`File validation failed. Disguised files or macro scripts are not allowed.`));
       }
 
-      // Document Quality Validation (Blur Only for Fee Receipt)
-      const qualityResult = await validateDocument(file.fieldname, file.path, file.originalname);
-      if (!qualityResult.success) {
-        try {
-          fs.unlinkSync(file.path);
-        } catch (unlinkErr) {
-          logger.error(`Failed to delete unvalidated fee receipt: ${file.path}`, unlinkErr);
-        }
-        logger.warn(`Document quality validation failed for fee receipt: ${qualityResult.reason}`);
+      // Skip quality validation for PDFs
+      if (file.mimetype !== 'application/pdf') {
+        const qualityResult = await validateDocument(file.fieldname, file.path, file.originalname);
+        if (!qualityResult.success) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch (unlinkErr) {
+            logger.error(`Failed to delete unvalidated fee receipt: ${file.path}`, unlinkErr);
+          }
+          logger.warn(`Document quality validation failed for fee receipt: ${qualityResult.reason}`);
 
-        res.status(400).json({
-          success: false,
-          reason: qualityResult.reason,
-          message: qualityResult.message,
-        });
-        return;
+          res.status(400).json({
+            success: false,
+            reason: qualityResult.reason,
+            message: qualityResult.message,
+          });
+          return;
+        }
       }
     }
     next();

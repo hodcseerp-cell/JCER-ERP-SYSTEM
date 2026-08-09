@@ -28,6 +28,7 @@ studentRouter.put('/academic', admissionController.saveStep5);         // Step 5
 studentRouter.post('/validate-document', singleDocumentValidationMiddleware, admissionController.validateSingleDocument); // Instant single document quality validation
 studentRouter.post('/documents', uploadDocuments, admissionController.saveStep6); // Step 6
 studentRouter.delete('/documents/:field', admissionController.removeDocument);
+studentRouter.get('/documents/:field', admissionController.getStudentDocument); // Secure R2 signed URL
 studentRouter.post('/submit', admissionController.submitApplication);  // Step 7
 
 // Uniqueness checks

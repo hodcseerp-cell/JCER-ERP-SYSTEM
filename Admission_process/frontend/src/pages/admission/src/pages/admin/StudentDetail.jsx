@@ -82,6 +82,22 @@ const StudentDetail = () => {
         }
     };
 
+    /**
+     * Map from DB key (e.g. 'photoUrl') to the field name used by the backend route (e.g. 'photo').
+     * Then fetch a short-lived signed R2 URL and open the document in a new tab.
+     */
+    const openDocument = async (dbKey) => {
+        const field = dbKey.replace(/Url$/, '');
+        try {
+            const res = await api.get(`/admin/admissions/${id}/documents/${field}`);
+            if (res.data?.url) {
+                window.open(res.data.url, '_blank', 'noopener,noreferrer');
+            }
+        } catch (err) {
+            toast.error('Could not open document. Please try again.');
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-[60vh] flex items-center justify-center">
@@ -305,16 +321,14 @@ const StudentDetail = () => {
                             { key: 'gapCertificateUrl', label: 'Gap Certificate' },
                         ].map(({ key, label }) => (
                             docs[key] ? (
-                                <a
+                                <button
                                     key={key}
-                                    href={`${(import.meta.env.VITE_API_URL || '/api').replace('/api', '')}${docs[key]}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-primary-600 hover:bg-primary-50 transition"
+                                    onClick={() => openDocument(key)}
+                                    className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-primary-600 hover:bg-primary-50 transition cursor-pointer"
                                 >
                                     <FileText size={15} />
                                     {label}
-                                </a>
+                                </button>
                             ) : (
                                 <div key={key} className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-400">
                                     <FileText size={15} />

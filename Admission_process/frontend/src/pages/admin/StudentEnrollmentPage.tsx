@@ -185,22 +185,37 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
     if (!d) return [];
     const isLateral = app.qualification === 'DIPLOMA' || (!app.qualification && app.admissionType === 'DCET');
     return [
-      { label: 'Passport Photo',      url: d.photoUrl },
-      { label: 'Signature',           url: d.signatureUrl },
-      { label: '10th Marksheet',      url: d.tenthMarksheetUrl },
+      { label: 'Passport Photo',       field: 'photo',                        url: d.photoUrl },
+      { label: 'Signature',            field: 'signature',                    url: d.signatureUrl },
+      { label: '10th Marksheet',       field: 'tenthMarksheet',               url: d.tenthMarksheetUrl },
       ...(isLateral ? [
-        { label: 'Diploma 5th Sem Marksheet', url: d.diplomaSemester5MarksheetUrl },
-        { label: 'Diploma 6th Sem Marksheet', url: d.diplomaSemester6MarksheetUrl },
+        { label: 'Diploma 5th Sem Marksheet', field: 'diplomaSemester5Marksheet', url: d.diplomaSemester5MarksheetUrl },
+        { label: 'Diploma 6th Sem Marksheet', field: 'diplomaSemester6Marksheet', url: d.diplomaSemester6MarksheetUrl },
       ] : [
-        { label: '12th Marksheet', url: d.twelfthMarksheetUrl },
+        { label: '12th Marksheet',     field: 'twelfthMarksheet',             url: d.twelfthMarksheetUrl },
       ]),
-      { label: 'CET Score Card',      url: d.cetScoreCardUrl },
-      { label: 'Aadhaar Card',        url: d.aadhaarUrl },
-      { label: 'Fees Paid Receipt',   url: d.feesPaidReceiptUrl },
-      { label: 'Caste Certificate',   url: d.casteCertificateUrl },
-      { label: 'Domicile Certificate',url: d.domicileCertificateUrl },
-      { label: 'Gap Certificate',     url: d.gapCertificateUrl },
-    ].filter(d => d.url); // Only show uploaded ones
+      { label: 'CET Score Card',       field: 'cetScoreCard',                 url: d.cetScoreCardUrl },
+      { label: 'Aadhaar Card',         field: 'aadhaar',                      url: d.aadhaarUrl },
+      { label: 'Fees Paid Receipt',    field: 'feesPaidReceipt',              url: d.feesPaidReceiptUrl },
+      { label: 'Caste Certificate',    field: 'casteCertificate',             url: d.casteCertificateUrl },
+      { label: 'Domicile Certificate', field: 'domicileCertificate',          url: d.domicileCertificateUrl },
+      { label: 'Gap Certificate',      field: 'gapCertificate',               url: d.gapCertificateUrl },
+    ].filter(d => d.url);
+  };
+
+  /**
+   * Fetch a short-lived signed R2 URL from the backend (auth required),
+   * then open the document in a new browser tab.
+   */
+  const openDocument = async (admissionId: string, field: string) => {
+    try {
+      const res = await API.get(`/admin/admissions/${admissionId}/documents/${field}`);
+      if (res.data?.url) {
+        window.open(res.data.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setToast({ type: 'error', message: 'Could not open document. Please try again.' });
+    }
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -538,12 +553,10 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                       <p className="text-xs text-neutral-400 italic">No documents uploaded yet.</p>
                     ) : (
                       getDocumentList(selected).map((doc) => (
-                        <a
+                        <button
                           key={doc.label}
-                          href={getDocUrl(doc.url)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-3 rounded-xl border bg-emerald-50 border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all"
+                          onClick={() => openDocument(selected.id, doc.field)}
+                          className="w-full flex items-center justify-between p-3 rounded-xl border bg-emerald-50 border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all text-left"
                         >
                           <div className="flex items-center space-x-2.5">
                             <FileText className="w-3.5 h-3.5 text-emerald-600" />
@@ -552,7 +565,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                           <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full text-emerald-700 bg-emerald-100">
                             ✓ View
                           </span>
-                        </a>
+                        </button>
                       ))
                     )}
                   </div>

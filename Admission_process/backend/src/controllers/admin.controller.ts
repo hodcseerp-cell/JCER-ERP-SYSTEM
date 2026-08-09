@@ -13,6 +13,7 @@ import SystemConfiguration from '../models/SystemConfiguration';
 import securityEvents from '../services/securityEvents.service';
 import db from '../config/database';
 import AnalyticsService from '../services/analytics.service';
+import * as r2 from '../services/r2.service';
 
 interface AuthRequest extends Request {
   user?: { id: string; role: string };
@@ -387,22 +388,28 @@ export const uploadHandbook = async (
       return res.status(400).json({ success: false, error: 'No PDF file uploaded' });
     }
 
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-    const relativeToUploads = path.relative(uploadsDir, req.file.path).replace(/\\/g, '/');
-    const handbookUrl = `/uploads/${relativeToUploads}`;
-
     let config = await SystemConfiguration.findOne();
     if (!config) {
       config = await SystemConfiguration.create({});
     }
 
-    config.handbookUrl = handbookUrl;
+    const oldKey = config.handbookUrl;
+
+    // Upload to R2
+    const key = r2.buildHandbookKey();
+    await r2.uploadFromDisk(req.file.path, key, 'application/pdf');
+
+    // Save new key in DB
+    config.handbookUrl = key;
     await config.save();
+
+    // Delete old handbook from R2 only after successful DB save
+    if (oldKey) await r2.deleteFile(oldKey);
 
     return res.json({
       success: true,
       message: 'Admission Handbook PDF uploaded successfully.',
-      handbookUrl
+      handbookKey: key,
     });
   } catch (err) {
     return next(err);

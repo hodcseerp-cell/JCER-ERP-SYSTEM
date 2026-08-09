@@ -130,3 +130,12 @@ API.interceptors.response.use(
 );
 
 export default API;
+
+/**
+ * Returns the backend server base URL (without /api), used to build absolute
+ * URLs for /uploads/ static file paths returned by the server.
+ * e.g. https://example.com/api -> https://example.com
+ */
+export function getBaseHostURL(): string {
+  return baseURL.replace(/\/api(\/v\d+)?$/, '').replace(/\/+$/, '');
+}
