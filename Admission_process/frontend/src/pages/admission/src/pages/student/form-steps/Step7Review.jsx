@@ -247,7 +247,7 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
 
                         <div className="flex items-center gap-4 sm:gap-5 bg-white/5 backdrop-blur-sm p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-white/10">
                             <div className="relative group shrink-0">
-                                <div className="size-16 sm:size-20 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 flex items-center justify-center transition-all duration-500 group-hover:border-primary-400 shadow-xl">
+                                <div className="w-20 h-26 sm:w-18 sm:h-22 rounded-lg border-2 border-white/20 overflow-hidden bg-white/10 flex items-center justify-center transition-all duration-500 group-hover:border-primary-400 shadow-xl">
                                     {docs.photoUrl ? (
                                         <img
                                             src={getPhotoUrl(docs.photoUrl)}

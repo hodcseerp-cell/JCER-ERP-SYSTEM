@@ -20,9 +20,9 @@ function getDateRangeCondition(period?: string, startDate?: string, endDate?: st
 
   if (period === 'today') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  } else if (period === '7days') {
+  } else if (period === '7d' || period === '7days') {
     start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  } else if (period === '30days') {
+  } else if (period === '30d' || period === '30days') {
     start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   } else if (period === 'custom' && startDate) {
     start = new Date(startDate);
@@ -32,15 +32,54 @@ function getDateRangeCondition(period?: string, startDate?: string, endDate?: st
   }
 
   if (start) {
-    return {
-      [Op.gte]: start,
-      [Op.lte]: end,
-    };
+    const cond: any = {};
+    cond[Op.gte] = start;
+    cond[Op.lte] = end;
+    return cond;
+  }
+  return null;
+}
+
+function getPreviousDateRangeCondition(period?: string, startDate?: string, endDate?: string) {
+  const now = new Date();
+  let start: Date | null = null;
+  let end: Date | null = null;
+
+  if (period === 'today') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+  } else if (period === '7d' || period === '7days') {
+    start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    end = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (period === '30d' || period === '30days') {
+    start = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    end = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  } else if (period === 'custom' && startDate && endDate) {
+    const currentStart = new Date(startDate);
+    const currentEnd = new Date(endDate);
+    const diffMs = currentEnd.getTime() - currentStart.getTime();
+    start = new Date(currentStart.getTime() - diffMs - 24 * 60 * 60 * 1000);
+    end = new Date(currentStart.getTime() - 1);
+  }
+
+  if (start && end) {
+    const cond: any = {};
+    cond[Op.gte] = start;
+    cond[Op.lte] = end;
+    return cond;
   }
   return null;
 }
 
 export class AnalyticsService {
+  static getPreviousDateRange(period?: string, startDate?: string, endDate?: string) {
+    return getPreviousDateRangeCondition(period, startDate, endDate);
+  }
+
+  static getCurrentDateRange(period?: string, startDate?: string, endDate?: string) {
+    return getDateRangeCondition(period, startDate, endDate);
+  }
+
   private static getBaseWhere(filters: AnalyticsFilters) {
     const where: any = {};
     if (filters.academicYear && filters.academicYear !== 'ALL') {

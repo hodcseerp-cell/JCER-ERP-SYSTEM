@@ -125,26 +125,24 @@ const DashboardLayout = () => {
                             <HelpCircle size={18} className="text-current shrink-0" />
                             <span className="truncate">Support</span>
                         </NavLink>
-                    </nav>
 
-                    <div className="p-3 mt-auto mb-2 mx-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center gap-2.5 flex-shrink-0">
-                        <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0">
-                            {user?.name?.[0]?.toUpperCase() || 'S'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{user?.name || "Student User"}</p>
-                            <p className="text-xs text-slate-500 truncate">ID: {user?.id?.substring(0,8) || `ADM-${new Date().getFullYear()}`}</p>
-                        </div>
-                    </div>
-
-                    <div className="px-3 pb-4 flex-shrink-0">
                         <button
                             onClick={logout}
                             className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                         >
-                            <LogOut size={18} className="shrink-0" />
+                            <LogOut size={18} className="shrink-0 text-current" />
                             <span className="truncate">Logout</span>
                         </button>
+                    </nav>
+
+                    <div className="p-3 mt-auto mb-4 mx-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center gap-2.5 flex-shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0">
+                            {user?.name?.[0]?.toUpperCase() || 'S'}
+                        </div>
+                        <div className="flex-grow min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{user?.name || "Student User"}</p>
+                            <p className="text-xs text-slate-500 truncate">ID: {user?.id?.substring(0,8) || `ADM-${new Date().getFullYear()}`}</p>
+                        </div>
                     </div>
                 </aside>
 

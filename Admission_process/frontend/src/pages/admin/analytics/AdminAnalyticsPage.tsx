@@ -1,29 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ClipboardList, Users, ShieldCheck, CheckCircle2, Ban, TrendingUp, 
-  MapPin, Activity, Clock, ArrowRight, AlertTriangle, RefreshCw, 
-  Search, Filter, GraduationCap, ShieldAlert, Check, XCircle, ArrowUpRight
+  ClipboardList, ShieldCheck, CheckCircle2, TrendingUp, 
+  Clock, RefreshCw, GraduationCap, Eye, FileText
 } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, AreaChart, Area, LineChart, Line, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, LineChart, Line, Legend
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import officeService from '../../../services/office.service';
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b', '#06b6d4', '#ec4899'];
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#64748b'];
+
+const branchNameMap: Record<string, string> = {
+  'CSE': 'Computer Science Engineering',
+  'CSE-AIML': 'CSE - AI & ML',
+  'ECE': 'Electronics & Communication',
+  'ME': 'Mechanical Engineering',
+  'CV': 'Civil Engineering',
+};
+
+interface KPIState {
+  value: number;
+  change: number | null;
+}
 
 interface AnalyticsData {
-  kpis: {
-    totalApplications: number;
-    pendingReview: number;
-    underReview: number;
-    corrections: number;
-    awaitingPrincipal: number;
-    enrolled: number;
-    cancelled: number;
+  period: string;
+  range: {
+    from: string;
+    to: string;
+    previousFrom: string;
+    previousTo: string;
   };
-  funnel: { stage: string; count: number; percentage: number }[];
+  kpis: {
+    totalApplications: KPIState;
+    verifiedApplications: KPIState;
+    enrolledStudents: KPIState;
+    conversionRate: KPIState;
+  };
+  funnel: {
+    submitted: number;
+    underReview: number;
+    adminVerified: number;
+    principalApproved: number;
+    enrolled: number;
+  };
   trend: { date: string; submitted: number; approved: number; enrolled: number }[];
   branchPerformance: { name: string; applications: number; approved: number; enrolled: number }[];
   admissionTypes: { name: string; value: number }[];
@@ -40,6 +62,7 @@ interface AnalyticsData {
   };
   recentActivity: { id: string; appNumber: string; action: string; studentName: string; timestamp: string }[];
   pendingActions: { reviewApps: number; correctionResubmissions: number; awaitingPrincipal: number };
+  topPrograms: { name: string; applications: number; percentage: number }[];
 }
 
 export const AdminAnalyticsPage: React.FC = () => {
@@ -47,141 +70,111 @@ export const AdminAnalyticsPage: React.FC = () => {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [secondsAgo, setSecondsAgo] = useState<number>(0);
 
   // Filters
   const [academicYear, setAcademicYear] = useState<string>('2026-2027');
-  const [period, setPeriod] = useState<string>('cycle');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [period, setPeriod] = useState<string>('7d');
 
   const fetchAnalytics = async (isManual = false) => {
     if (isManual) setLoading(true);
     try {
-      const params: any = { academicYear, period };
-      if (period === 'custom') {
-        params.startDate = startDate;
-        params.endDate = endDate;
-      }
-      const res = await officeService.getAnalyticsData(params);
+      const res = await officeService.getAnalyticsData({ academicYear, period });
       setData(res);
-      setLastUpdated(new Date());
       setSecondsAgo(0);
       setError(null);
     } catch (err: any) {
       console.error('Error loading admin analytics:', err);
-      setError(`Connection issue. Showing data from ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      setError('Connection issue. Showing cached stats.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial fetch and filters change
+  // Initial fetch and filter change
   useEffect(() => {
     fetchAnalytics(true);
-  }, [academicYear, period, startDate, endDate]);
+  }, [academicYear, period]);
 
-  // Polling every 30 seconds
+  // Live timer & auto refresh
   useEffect(() => {
-    const pollInterval = setInterval(() => {
-      fetchAnalytics(false);
-    }, 30000);
-
     const secInterval = setInterval(() => {
       setSecondsAgo(prev => prev + 1);
     }, 1000);
 
+    const autoRefreshInterval = setInterval(() => {
+      fetchAnalytics(false);
+    }, 30000);
+
     return () => {
-      clearInterval(pollInterval);
       clearInterval(secInterval);
+      clearInterval(autoRefreshInterval);
     };
-  }, [academicYear, period, startDate, endDate]);
+  }, [academicYear, period]);
 
-  const kpis = data?.kpis || {
-    totalApplications: 0,
-    pendingReview: 0,
-    underReview: 0,
-    corrections: 0,
-    awaitingPrincipal: 0,
-    enrolled: 0,
-    cancelled: 0
+  const handleRefresh = () => {
+    fetchAnalytics(true);
   };
 
-  const pendingActions = data?.pendingActions || {
-    reviewApps: 0,
-    correctionResubmissions: 0,
-    awaitingPrincipal: 0
+  // Helper for trend formatting
+  const getPeriodLabel = () => {
+    if (period === 'today') return 'Yesterday';
+    if (period === '7d') return 'Last 7 days';
+    if (period === '30d') return 'Last 30 days';
+    return 'Previous Period';
   };
 
-  const rates = data?.rates || {
-    enrollmentRate: '—',
-    adminVerification: '—',
-    correctionRate: '—',
-    rejectionRate: '—',
-    cancellationRate: '—'
+  const getPeriodHeading = () => {
+    if (period === 'today') return 'Today';
+    if (period === '7d') return 'Last 7 Days';
+    if (period === '30d') return 'Last 30 Days';
+    return 'Admissions Cycle';
   };
 
-  const kpiStats = [
-    { 
-      label: 'Total Applications', 
-      value: kpis.totalApplications, 
-      desc: 'All processed forms',
-      icon: ClipboardList, 
-      color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50', 
-      path: '/admin/admissions/queue' 
-    },
-    { 
-      label: 'Pending Review', 
-      value: kpis.pendingReview, 
-      desc: 'Awaiting admin checklist',
-      icon: Clock, 
-      color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/50', 
-      path: '/admin/admissions/queue' 
-    },
-    { 
-      label: 'Under Review', 
-      value: kpis.underReview, 
-      desc: 'Currently in audit',
-      icon: Activity, 
-      color: 'text-blue-500 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50', 
-      path: '/admin/admissions/queue' 
-    },
-    { 
-      label: 'Correction Required', 
-      value: kpis.corrections, 
-      desc: 'Sent back to students',
-      icon: AlertTriangle, 
-      color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/50', 
-      path: '/admin/admissions/corrections' 
-    },
-    { 
-      label: 'Awaiting Principal', 
-      value: kpis.awaitingPrincipal, 
-      desc: 'Admin verified sign-offs',
-      icon: ShieldCheck, 
-      color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/50', 
-      path: '/admin/admissions/verified' 
-    },
-    { 
-      label: 'Enrolled', 
-      value: kpis.enrolled, 
-      desc: 'ERP Confirmed admissions',
-      icon: GraduationCap, 
-      color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50', 
-      path: '/admin/admissions/approved' 
+  const formatActivityTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const day = d.getDate();
+      const month = months[d.getMonth()];
+      const hours = d.getHours();
+      const mins = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const displayHrs = hours % 12 || 12;
+      return `${day} ${month} · ${displayHrs}:${mins} ${ampm}`;
+    } catch (e) {
+      return 'Just now';
     }
-  ];
+  };
 
+  const renderTrendChange = (change: number | null, isPercentagePoint = false) => {
+    if (change === null) {
+      return (
+        <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded">
+          New
+        </span>
+      );
+    }
+    const unit = isPercentagePoint ? ' pp' : '%';
+    if (change > 0) {
+      return <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">↑ {change}{unit}</span>;
+    }
+    if (change < 0) {
+      return <span className="text-xs font-bold text-rose-600 dark:text-rose-400">↓ {Math.abs(change)}{unit}</span>;
+    }
+    return <span className="text-xs font-bold text-slate-400 dark:text-neutral-500">— 0{unit}</span>;
+  };
+
+  // Custom tooltips
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white dark:bg-neutral-900 p-2.5 rounded-xl border border-neutral-100 dark:border-neutral-800 shadow-md text-left text-xs font-semibold">
-          <p className="font-extrabold text-neutral-800 dark:text-neutral-100 mb-1">{label}</p>
+        <div className="bg-white dark:bg-neutral-900 p-3 rounded-xl border border-slate-200 dark:border-neutral-800 shadow-md text-left text-xs">
+          <p className="font-extrabold text-neutral-800 dark:text-neutral-100 mb-1.5">{label}</p>
           {payload.map((item: any, idx: number) => (
-            <div key={idx} className="flex items-center gap-2 py-0.5">
+            <div key={idx} className="flex items-center gap-2 py-0.5 font-bold">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color || item.fill }} />
-              <span className="text-neutral-500 dark:text-neutral-450 font-bold uppercase text-[9px]">{item.name}:</span>
+              <span className="text-slate-400 dark:text-neutral-500 uppercase text-[9px]">{item.name}:</span>
               <span className="font-black text-neutral-800 dark:text-neutral-200 ml-auto">{item.value}</span>
             </div>
           ))}
@@ -191,189 +184,382 @@ export const AdminAnalyticsPage: React.FC = () => {
     return null;
   };
 
-  return (
-    <div className="space-y-5 animate-fade-in pb-8 font-sans max-w-full text-neutral-800 dark:text-neutral-200">
-      
-      {/* ═══ TOP HEADER ═══ */}
-      <div className="flex flex-row items-center justify-between gap-4 border-b border-neutral-100 dark:border-neutral-850 pb-3">
-        <div className="flex flex-col min-w-0">
-          <h2 className="text-base font-black text-neutral-900 dark:text-white uppercase tracking-wider leading-none">Admission Analytics</h2>
-          <span className="text-[10px] font-black text-neutral-450 dark:text-neutral-500 uppercase tracking-widest mt-1">
-            Jain College of Engineering & Research
-          </span>
+  if (loading && !data) {
+    return (
+      <div className="space-y-6 pb-12 font-sans animate-fade-in text-neutral-800">
+        {/* Header Skeleton */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="space-y-2">
+            <div className="h-6 w-48 bg-slate-200 rounded animate-pulse" />
+            <div className="h-4 w-96 bg-slate-100 rounded animate-pulse" />
+          </div>
+          <div className="h-10 w-64 bg-slate-200 rounded animate-pulse" />
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 select-none">
-          {error ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/20 border border-rose-250 dark:border-rose-900 text-rose-600 text-[10px] font-black uppercase">
-              <ShieldAlert size={12} className="animate-pulse" />
-              <span>{error}</span>
+        {/* KPI Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[...Array(4)].map((_, idx) => (
+            <div key={idx} className="bg-white border border-slate-100 rounded-2xl p-5 h-32 animate-pulse space-y-4">
+              <div className="flex justify-between">
+                <div className="h-4 w-28 bg-slate-200 rounded" />
+                <div className="h-8 w-8 bg-slate-200 rounded-lg" />
+              </div>
+              <div className="h-8 w-16 bg-slate-200 rounded" />
+              <div className="h-3 w-36 bg-slate-100 rounded" />
             </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-900 text-emerald-600 text-[10px] font-black uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-              <span>LIVE • Updated {secondsAgo}s ago</span>
-            </div>
-          )}
+          ))}
+        </div>
 
+        {/* Main Charts Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="bg-white border border-slate-100 rounded-2xl p-5 h-80 animate-pulse lg:col-span-2" />
+          <div className="bg-white border border-slate-100 rounded-2xl p-5 h-80 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  const kpis = data?.kpis || {
+    totalApplications: { value: 0, change: null },
+    verifiedApplications: { value: 0, change: null },
+    enrolledStudents: { value: 0, change: null },
+    conversionRate: { value: 0, change: null }
+  };
+
+  const funnel = data?.funnel || {
+    submitted: 0,
+    underReview: 0,
+    adminVerified: 0,
+    principalApproved: 0,
+    enrolled: 0
+  };
+
+  const trend = data?.trend || [];
+  const branchPerformance = data?.branchPerformance || [];
+  const admissionTypes = data?.admissionTypes || [];
+  const categories = data?.categories || [];
+  const genders = data?.genders || [];
+  const topPrograms = data?.topPrograms || [];
+  const recentActivity = data?.recentActivity || [];
+
+  // Drop-off calculations
+  const dropOffs = {
+    underReview: funnel.submitted > 0 ? Math.round(((funnel.submitted - funnel.underReview) / funnel.submitted) * 100) : 0,
+    adminVerified: funnel.underReview > 0 ? Math.round(((funnel.underReview - funnel.adminVerified) / funnel.underReview) * 100) : 0,
+    principalApproved: funnel.adminVerified > 0 ? Math.round(((funnel.adminVerified - funnel.principalApproved) / funnel.adminVerified) * 100) : 0,
+    enrolled: funnel.principalApproved > 0 ? Math.round(((funnel.principalApproved - funnel.enrolled) / funnel.principalApproved) * 100) : 0,
+  };
+
+  const activityIcons: Record<string, any> = {
+    'submitted': ClipboardList,
+    'verified': ShieldCheck,
+    'review': Eye,
+    'approved': CheckCircle2,
+    'document': FileText,
+    'enrolled': GraduationCap,
+  };
+
+  const getActivityIcon = (action: string) => {
+    const act = action.toLowerCase();
+    if (act.includes('submit')) return activityIcons.submitted;
+    if (act.includes('verify')) return activityIcons.verified;
+    if (act.includes('review')) return activityIcons.review;
+    if (act.includes('approve')) return activityIcons.approved;
+    if (act.includes('document') || act.includes('upload')) return activityIcons.document;
+    if (act.includes('enroll')) return activityIcons.enrolled;
+    return Clock;
+  };
+
+  const getActivityColor = (action: string) => {
+    const act = action.toLowerCase();
+    if (act.includes('submit')) return 'text-blue-500 bg-blue-50';
+    if (act.includes('verify')) return 'text-purple-500 bg-purple-50';
+    if (act.includes('review')) return 'text-amber-500 bg-amber-50';
+    if (act.includes('approve')) return 'text-green-500 bg-green-50';
+    if (act.includes('enroll')) return 'text-emerald-500 bg-emerald-50';
+    return 'text-slate-500 bg-slate-50';
+  };
+
+  return (
+    <div className="space-y-6 pb-12 font-sans max-w-full text-slate-800 bg-[#f7f8fc] dark:bg-neutral-950 dark:text-neutral-200 min-h-screen p-4 sm:p-6 lg:p-8 rounded-3xl">
+      
+      {/* ═══ REAL ANALYTICS HEADER ═══ */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-neutral-900 pb-4 select-none">
+        <div className="space-y-1">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Analytics Overview</h1>
+          <p className="text-xs text-slate-500 dark:text-neutral-450 leading-relaxed font-semibold">
+            Understand application trends, admission performance, and enrollment conversion in real time.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Live Indicator */}
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-neutral-900 border border-slate-100 dark:border-neutral-800 text-[10px] font-black uppercase text-slate-500 shadow-xs shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+            <span>Live • Updated {secondsAgo}s ago</span>
+          </div>
+
+          {/* Academic Year Selector */}
+          <select
+            value={academicYear}
+            onChange={(e) => setAcademicYear(e.target.value)}
+            className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer text-slate-700 dark:text-neutral-300 shadow-xs"
+          >
+            <option value="2026-2027">2026–2027</option>
+            <option value="2025-2026">2025–2026</option>
+          </select>
+
+          {/* Period Selector */}
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer text-slate-700 dark:text-neutral-300 shadow-xs"
+          >
+            <option value="today">Today</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days</option>
+          </select>
+
+          {/* Refresh Button */}
           <button 
-            onClick={() => fetchAnalytics(true)}
-            className="p-1.5 border border-neutral-200 dark:border-neutral-800 rounded-lg bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-850 transition shadow-sm"
+            onClick={handleRefresh}
+            className="p-2 border border-slate-200 dark:border-neutral-850 rounded-xl bg-white dark:bg-neutral-900 hover:bg-slate-50 dark:hover:bg-neutral-800 transition shadow-xs"
             title="Refresh analytics data"
           >
-            <RefreshCw size={12} className={`text-neutral-500 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw size={14} className={`text-slate-500 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* ═══ FILTERS ═══ */}
-      <div className="bg-white dark:bg-neutral-900 p-3 rounded-xl border border-neutral-200/85 dark:border-neutral-800/80 shadow-sm flex flex-wrap items-center justify-between gap-4 select-none">
-        <div className="flex items-center gap-2">
-          <Filter size={13} className="text-neutral-400" />
-          <span className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">Filters</span>
+      {/* ═══ KPI STATS CARDS ═══ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 select-none">
+        
+        {/* Card 1: Total Applications */}
+        <div className="bg-white dark:bg-neutral-900 border border-[#eceef4] dark:border-neutral-800 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.015)] flex items-center justify-between group hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">Total Applications</span>
+            <h4 className="text-3xl font-black text-slate-900 dark:text-white leading-none pt-1">
+              {kpis.totalApplications.value.toLocaleString()}
+            </h4>
+            <div className="pt-2.5 flex items-center gap-1">
+              {renderTrendChange(kpis.totalApplications.change)}
+              <span className="text-[10px] font-bold text-slate-400">vs previous period</span>
+            </div>
+            <div className="border-t border-slate-50 dark:border-neutral-800/50 mt-2.5 pt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+              {getPeriodLabel()}
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-950/20 text-blue-500 flex items-center justify-center shrink-0 shadow-xs self-start">
+            <ClipboardList size={20} />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Academic Year */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Year</span>
-            <select
-              value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
-              className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2 py-1 text-xs font-bold outline-none cursor-pointer text-neutral-700 dark:text-neutral-300"
-            >
-              <option value="ALL">All Years</option>
-              <option value="2026-2027">2026–2027</option>
-              <option value="2025-2026">2025–2026</option>
-            </select>
-          </div>
-
-          {/* Period */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Period</span>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2 py-1 text-xs font-bold outline-none cursor-pointer text-neutral-700 dark:text-neutral-300"
-            >
-              <option value="cycle">Admission Cycle</option>
-              <option value="today">Today</option>
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          {/* Custom Date Inputs */}
-          {period === 'custom' && (
-            <div className="flex items-center gap-1.5 animate-fade-in">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2 py-1 text-xs font-bold outline-none text-neutral-700 dark:text-neutral-300"
-              />
-              <span className="text-neutral-400 text-xs">—</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2 py-1 text-xs font-bold outline-none text-neutral-700 dark:text-neutral-300"
-              />
+        {/* Card 2: Verified Applications */}
+        <div className="bg-white dark:bg-neutral-900 border border-[#eceef4] dark:border-neutral-800 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.015)] flex items-center justify-between group hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">Verified Applications</span>
+            <h4 className="text-3xl font-black text-slate-900 dark:text-white leading-none pt-1">
+              {kpis.verifiedApplications.value.toLocaleString()}
+            </h4>
+            <div className="pt-2.5 flex items-center gap-1">
+              {renderTrendChange(kpis.verifiedApplications.change)}
+              <span className="text-[10px] font-bold text-slate-400">vs previous period</span>
             </div>
-          )}
+            <div className="border-t border-slate-50 dark:border-neutral-800/50 mt-2.5 pt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+              {getPeriodLabel()}
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-purple-50 dark:bg-purple-950/20 text-purple-500 flex items-center justify-center shrink-0 shadow-xs self-start">
+            <ShieldCheck size={20} />
+          </div>
         </div>
-      </div>
 
-      {/* ═══ KPI SECTION ═══ */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 select-none">
-        {kpiStats.map((stat, i) => (
-          <button
-            key={i}
-            onClick={() => navigate(stat.path)}
-            className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800/80 rounded-xl p-3.5 text-left transition hover:scale-[1.01] hover:border-neutral-300 dark:hover:border-neutral-700 shadow-sm flex flex-col justify-between h-24 group relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start w-full">
-              <span className="text-[9px] font-black uppercase tracking-wider text-neutral-450 leading-snug">{stat.label}</span>
-              <div className={`w-6 h-6 rounded-md ${stat.color} flex items-center justify-center shrink-0`}>
-                <stat.icon size={12} />
-              </div>
+        {/* Card 3: Enrolled Students */}
+        <div className="bg-white dark:bg-neutral-900 border border-[#eceef4] dark:border-neutral-800 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.015)] flex items-center justify-between group hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">Enrolled Students</span>
+            <h4 className="text-3xl font-black text-slate-900 dark:text-white leading-none pt-1">
+              {kpis.enrolledStudents.value.toLocaleString()}
+            </h4>
+            <div className="pt-2.5 flex items-center gap-1">
+              {renderTrendChange(kpis.enrolledStudents.change)}
+              <span className="text-[10px] font-bold text-slate-400">vs previous period</span>
             </div>
-            <div className="mt-auto">
-              <h4 className="text-xl font-black text-neutral-900 dark:text-white leading-none">{stat.value.toLocaleString()}</h4>
-              <p className="text-[9px] text-neutral-450 dark:text-neutral-500 font-bold mt-1 uppercase tracking-wide truncate">{stat.desc}</p>
+            <div className="border-t border-slate-50 dark:border-neutral-800/50 mt-2.5 pt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+              {getPeriodLabel()}
             </div>
-          </button>
-        ))}
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 flex items-center justify-center shrink-0 shadow-xs self-start">
+            <GraduationCap size={20} />
+          </div>
+        </div>
+
+        {/* Card 4: Conversion Rate */}
+        <div className="bg-white dark:bg-neutral-900 border border-[#eceef4] dark:border-neutral-800 rounded-[18px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.015)] flex items-center justify-between group hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">Conversion Rate</span>
+            <h4 className="text-3xl font-black text-slate-900 dark:text-white leading-none pt-1">
+              {kpis.conversionRate.value}%
+            </h4>
+            <div className="pt-2.5 flex items-center gap-1">
+              {renderTrendChange(kpis.conversionRate.change, true)}
+              <span className="text-[10px] font-bold text-slate-400">vs previous period</span>
+            </div>
+            <div className="border-t border-slate-50 dark:border-neutral-800/50 mt-2.5 pt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+              {getPeriodLabel()}
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-orange-50 dark:bg-orange-950/20 text-orange-500 flex items-center justify-center shrink-0 shadow-xs self-start">
+            <TrendingUp size={20} />
+          </div>
+        </div>
+
       </div>
 
       {/* ═══ MAIN ANALYTICS GRID ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
-        {/* Card A — Application Activity Area Chart (2/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[320px] flex flex-col lg:col-span-2">
-          <div className="flex items-center justify-between mb-3 select-none">
-            <h3 className="text-xs font-black uppercase text-neutral-450 dark:text-neutral-550 tracking-wider">Application Activity</h3>
-            <span className="text-[10px] bg-neutral-50 dark:bg-neutral-800 px-2 py-0.5 rounded font-black text-neutral-450 uppercase">{period === 'cycle' ? 'Full Cycle' : period}</span>
+        {/* Card A — Application Activity Smooth Line Chart (2/3 width) */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[340px] flex flex-col lg:col-span-2">
+          <div className="flex items-center justify-between mb-4 select-none">
+            <div className="space-y-0.5">
+              <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Application Activity</h3>
+              <p className="text-[10px] font-bold text-slate-400">Admission submissions & audit progression trends</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] bg-slate-50 dark:bg-neutral-800 border border-slate-100 dark:border-neutral-700 px-2 py-0.5 rounded font-black text-slate-500 uppercase shadow-2xs">
+                {getPeriodHeading()}
+              </span>
+            </div>
           </div>
           
           <div className="flex-1 min-h-0">
-            {data?.trend.length ? (
+            {trend.length ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.trend} margin={{ left: -25, right: 5, top: 5, bottom: 0 }}>
+                <LineChart data={trend} margin={{ left: -25, right: 5, top: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.02)" vertical={false} />
                   <XAxis dataKey="date" tick={{ fill: '#a3a3a3', fontSize: 9, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: '#a3a3a3', fontSize: 9, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
                   <RechartsTooltip content={<CustomTooltip />} />
-                  <Legend verticalAlign="top" height={28} iconType="circle" iconSize={5} wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }} />
-                  <Area type="monotone" dataKey="submitted" name="Submitted" stroke="#3b82f6" fill="rgba(59, 130, 246, 0.03)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="approved" name="Verified" stroke="#8b5cf6" fill="rgba(139, 92, 246, 0.03)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="enrolled" name="Enrolled" stroke="#10b981" fill="rgba(16, 185, 129, 0.03)" strokeWidth={2} />
-                </AreaChart>
+                  <Legend verticalAlign="top" align="right" height={28} iconType="circle" iconSize={5} wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', paddingBottom: '10px' }} />
+                  <Line type="monotone" dataKey="submitted" name="Submitted" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="approved" name="Verified" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="enrolled" name="Enrolled" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-neutral-400 select-none">
-                <p className="font-bold text-xs">No application activity data for this period</p>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none bg-slate-50/50 dark:bg-neutral-800/20 rounded-xl border border-dashed border-slate-200">
+                <p className="font-extrabold text-sm text-slate-700 dark:text-neutral-300">No application activity yet</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs leading-normal">Application activity will appear here once students submit their admission forms.</p>
+                <button onClick={() => navigate('/admin/admissions/queue')} className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition shadow-sm">
+                  View Applications
+                </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Card B — Admission Funnel (1/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[320px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-450 dark:text-neutral-550 tracking-wider mb-4 select-none">Admission Funnel</h3>
-          <div className="flex-1 overflow-y-auto pr-1">
-            {data?.funnel.length ? (
-              <div className="space-y-3.5">
-                {data.funnel.map((step, idx) => {
-                  const maxCount = data.funnel[0]?.count || 1;
-                  const pct = (step.count / maxCount) * 100;
-                  const colors = [
-                    'bg-blue-500', // Submitted
-                    'bg-blue-400/80', // Under Review
-                    'bg-violet-500', // Admin Verified
-                    'bg-indigo-500', // Principal Approved
-                    'bg-emerald-500' // Enrolled
-                  ];
-                  return (
-                    <div key={idx} className="flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <span className="font-extrabold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider">{step.stage}</span>
-                        <div className="flex items-center gap-1.5 font-black text-neutral-900 dark:text-white">
-                          <span>{step.count.toLocaleString()}</span>
-                          <span className="text-neutral-400 font-bold text-[9px] bg-neutral-50 dark:bg-neutral-800 px-1 py-0.2 rounded">{step.percentage}%</span>
-                        </div>
-                      </div>
-                      <div className="w-full h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                        <div className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
+        {/* Card B — Admission Funnel with conversion & drop-offs (1/3 width) */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[340px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Admission Funnel</h3>
+            <button onClick={() => navigate('/admin/admissions/queue')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View Details →
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4 select-none">
+            {funnel.submitted > 0 ? (
+              <div className="space-y-4">
+                {/* 1. Submitted */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-neutral-300">Submitted</span>
+                    <span className="text-slate-900 dark:text-white font-extrabold">{funnel.submitted} <span className="text-neutral-400 text-[10px] bg-slate-50 dark:bg-neutral-800 px-1 py-0.2 rounded ml-1">100%</span></span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                {/* 2. Under Review */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-neutral-300">Under Review</span>
+                    <span className="text-slate-900 dark:text-white font-extrabold">
+                      {funnel.underReview}{' '}
+                      <span className="text-neutral-400 text-[10px] bg-slate-50 dark:bg-neutral-800 px-1 py-0.2 rounded ml-1">
+                        {funnel.submitted > 0 ? Math.round((funnel.underReview / funnel.submitted) * 100) : 0}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-400/80 rounded-full" style={{ width: `${funnel.submitted > 0 ? (funnel.underReview / funnel.submitted) * 100 : 0}%` }} />
+                  </div>
+                  <p className="text-[10px] font-bold text-rose-500/85 pl-1">
+                    {dropOffs.underReview > 0 ? `↓ ${dropOffs.underReview}% drop-off` : '— 0% drop-off'}
+                  </p>
+                </div>
+
+                {/* 3. Admin Verified */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-neutral-300">Admin Verified</span>
+                    <span className="text-slate-900 dark:text-white font-extrabold">
+                      {funnel.adminVerified}{' '}
+                      <span className="text-neutral-400 text-[10px] bg-slate-50 dark:bg-neutral-800 px-1 py-0.2 rounded ml-1">
+                        {funnel.submitted > 0 ? Math.round((funnel.adminVerified / funnel.submitted) * 100) : 0}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-500 rounded-full" style={{ width: `${funnel.submitted > 0 ? (funnel.adminVerified / funnel.submitted) * 100 : 0}%` }} />
+                  </div>
+                  <p className="text-[10px] font-bold text-rose-500/85 pl-1">
+                    {dropOffs.adminVerified > 0 ? `↓ ${dropOffs.adminVerified}% drop-off` : '— 0% drop-off'}
+                  </p>
+                </div>
+
+                {/* 4. Principal Approved */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-neutral-300">Principal Approved</span>
+                    <span className="text-slate-900 dark:text-white font-extrabold">
+                      {funnel.principalApproved}{' '}
+                      <span className="text-neutral-400 text-[10px] bg-slate-50 dark:bg-neutral-800 px-1 py-0.2 rounded ml-1">
+                        {funnel.submitted > 0 ? Math.round((funnel.principalApproved / funnel.submitted) * 100) : 0}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${funnel.submitted > 0 ? (funnel.principalApproved / funnel.submitted) * 100 : 0}%` }} />
+                  </div>
+                  <p className="text-[10px] font-bold text-rose-500/85 pl-1">
+                    {dropOffs.principalApproved > 0 ? `↓ ${dropOffs.principalApproved}% drop-off` : '— 0% drop-off'}
+                  </p>
+                </div>
+
+                {/* 5. Enrolled */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-neutral-300">Enrolled</span>
+                    <span className="text-slate-900 dark:text-white font-extrabold">
+                      {funnel.enrolled}{' '}
+                      <span className="text-neutral-400 text-[10px] bg-slate-50 dark:bg-neutral-800 px-1 py-0.2 rounded ml-1">
+                        {funnel.submitted > 0 ? Math.round((funnel.enrolled / funnel.submitted) * 100) : 0}%
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${funnel.submitted > 0 ? (funnel.enrolled / funnel.submitted) * 100 : 0}%` }} />
+                  </div>
+                  <p className="text-[10px] font-bold text-rose-500/85 pl-1">
+                    {dropOffs.enrolled > 0 ? `↓ ${dropOffs.enrolled}% drop-off` : '— 0% drop-off'}
+                  </p>
+                </div>
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-neutral-400 select-none">
-                <p className="font-bold text-xs">No funnel statistics available</p>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 dark:bg-neutral-800/25 border border-dashed border-slate-150 rounded-xl">
+                <p className="font-extrabold text-xs text-slate-500">No funnel statistics available</p>
               </div>
             )}
           </div>
@@ -381,52 +567,93 @@ export const AdminAnalyticsPage: React.FC = () => {
 
       </div>
 
-      {/* Card C — Branch-wise Admissions (Full width) */}
-      <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[320px] flex flex-col">
-        <h3 className="text-xs font-black uppercase text-neutral-450 dark:text-neutral-550 tracking-wider mb-4 select-none">Branch Performance</h3>
-        <div className="flex-1 min-h-0">
-          {data?.branchPerformance.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.branchPerformance} margin={{ left: -25, right: 5, top: 5, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.02)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#a3a3a3', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#a3a3a3', fontSize: 9, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                <RechartsTooltip content={<CustomTooltip />} />
-                <Legend verticalAlign="top" height={28} iconType="circle" iconSize={5} wrapperStyle={{ fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }} />
-                <Bar dataKey="applications" name="Applications" fill="rgba(59, 130, 246, 0.85)" radius={[3, 3, 0, 0]} barSize={12} />
-                <Bar dataKey="approved" name="Verified" fill="rgba(139, 92, 246, 0.85)" radius={[3, 3, 0, 0]} barSize={12} />
-                <Bar dataKey="enrolled" name="Enrolled" fill="rgba(16, 185, 129, 0.85)" radius={[3, 3, 0, 0]} barSize={12} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-neutral-400 select-none">
-              <p className="font-bold text-xs">No branch statistics available</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* ═══ DISTRIBUTION ROW ═══ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
-        {/* Card D — Admission Type (1/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[280px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-450 dark:text-neutral-550 tracking-wider mb-4 select-none">Admission Type</h3>
-          <div className="flex-1 min-h-0 flex items-center justify-center">
-            {data?.admissionTypes.length ? (
+        {/* Card C1 — Grouped Horizontal Bar Chart for Branch Performance */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Branch Performance</h3>
+            <button onClick={() => navigate('/admin/students')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4 select-none">
+            {branchPerformance.length ? (
+              branchPerformance.map((branchItem, idx) => {
+                const maxVal = Math.max(...branchPerformance.map(b => b.applications)) || 1;
+                return (
+                  <div key={idx} className="space-y-1.5 border-b border-slate-50 dark:border-neutral-800/40 pb-2.5 last:border-b-0 last:pb-0">
+                    <p className="text-xs font-extrabold text-slate-800 dark:text-neutral-200">
+                      {branchNameMap[branchItem.name] || branchItem.name}
+                    </p>
+                    
+                    <div className="space-y-1">
+                      {/* Applications bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase w-16">Applications</span>
+                        <div className="flex-grow h-1.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(branchItem.applications / maxVal) * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] font-extrabold text-slate-800 dark:text-white w-6 text-right">{branchItem.applications}</span>
+                      </div>
+                      
+                      {/* Verified bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase w-16">Verified</span>
+                        <div className="flex-grow h-1.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-500 rounded-full" style={{ width: `${(branchItem.approved / maxVal) * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] font-extrabold text-slate-800 dark:text-white w-6 text-right">{branchItem.approved}</span>
+                      </div>
+
+                      {/* Enrolled bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase w-16">Enrolled</span>
+                        <div className="flex-grow h-1.5 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(branchItem.enrolled / maxVal) * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] font-extrabold text-slate-800 dark:text-white w-6 text-right">{branchItem.enrolled}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="h-full flex items-center justify-center text-center p-6 bg-slate-50/50 dark:bg-neutral-800/25 border border-dashed border-slate-150 rounded-xl">
+                <p className="font-extrabold text-xs text-slate-500">No branch statistics available</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Card C2 — Donut chart for Admission Type */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Admission Type</h3>
+            <button onClick={() => navigate('/admin/admissions/queue')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
+            {admissionTypes.length ? (
               <div className="flex items-center gap-4 w-full h-full">
+                {/* Donut ring container */}
                 <div className="relative w-1/2 h-full flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie 
-                        data={data.admissionTypes} 
+                        data={admissionTypes} 
                         dataKey="value" 
                         cx="50%" 
                         cy="50%" 
-                        innerRadius={42} 
-                        outerRadius={62} 
+                        innerRadius={52} 
+                        outerRadius={76} 
                         paddingAngle={3}
                       >
-                        {data.admissionTypes.map((entry, idx) => (
+                        {admissionTypes.map((entry, idx) => (
                           <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                         ))}
                       </Pie>
@@ -434,22 +661,24 @@ export const AdminAnalyticsPage: React.FC = () => {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-[9px] font-black uppercase text-neutral-400 leading-none">Total</span>
-                    <span className="text-base font-black text-neutral-805 dark:text-neutral-200 mt-1">
-                      {data.admissionTypes.reduce((acc, curr) => acc + curr.value, 0)}
+                    <span className="text-lg font-black text-slate-800 dark:text-white leading-none">
+                      {admissionTypes.reduce((acc, curr) => acc + curr.value, 0)}
                     </span>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider mt-1.5">Total</span>
                   </div>
                 </div>
+
+                {/* Donut legend */}
                 <div className="flex flex-col gap-2 w-1/2 select-none">
-                  {data.admissionTypes.map((entry, idx) => {
-                    const total = data.admissionTypes.reduce((acc, curr) => acc + curr.value, 0) || 1;
+                  {admissionTypes.map((entry, idx) => {
+                    const total = admissionTypes.reduce((acc, curr) => acc + curr.value, 0) || 1;
                     const pct = Math.round((entry.value / total) * 100);
                     return (
                       <div key={idx} className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                         <div className="flex flex-col min-w-0">
-                          <span className="text-[10px] font-bold text-neutral-600 dark:text-neutral-450 truncate">{entry.name}</span>
-                          <span className="text-[10px] font-black text-neutral-900 dark:text-white mt-0.5">{entry.value} ({pct}%)</span>
+                          <span className="text-[10px] font-bold text-slate-500 truncate leading-none">{entry.name}</span>
+                          <span className="text-[10px] font-black text-slate-900 dark:text-white mt-1">{entry.value} ({pct}%)</span>
                         </div>
                       </div>
                     );
@@ -457,247 +686,231 @@ export const AdminAnalyticsPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <p className="text-xs font-bold text-neutral-400 select-none">No quota distribution data</p>
+              <p className="text-xs font-bold text-slate-400 select-none">No quota distribution data</p>
             )}
           </div>
         </div>
 
-        {/* Card E — Category Distribution (1/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[280px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-450 dark:text-neutral-550 tracking-wider mb-4 select-none">Category Distribution</h3>
-          <div className="flex-1 overflow-y-auto pr-1">
-            {data?.categories.length ? (
-              <div className="space-y-3">
-                {data.categories
-                  .sort((a, b) => b.count - a.count)
-                  .map((item, idx) => {
-                    const maxVal = Math.max(...data.categories.map(c => c.count)) || 1;
-                    const total = data.categories.reduce((acc, curr) => acc + curr.count, 0) || 1;
-                    const pctBar = (item.count / maxVal) * 100;
-                    const pctText = Math.round((item.count / total) * 100);
+        {/* Card C3 — Donut chart for Category Distribution */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Category Distribution</h3>
+            <button onClick={() => navigate('/admin/admissions/queue')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
+            {categories.length ? (
+              <div className="flex items-center gap-4 w-full h-full">
+                {/* Donut ring container */}
+                <div className="relative w-1/2 h-full flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={categories.map(c => ({ name: c.category || 'General', value: c.count }))} 
+                        dataKey="value" 
+                        cx="50%" 
+                        cy="50%" 
+                        innerRadius={52} 
+                        outerRadius={76} 
+                        paddingAngle={3}
+                      >
+                        {categories.map((entry, idx) => (
+                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute flex flex-col items-center justify-center text-center">
+                    <span className="text-lg font-black text-slate-800 dark:text-white leading-none">
+                      {categories.reduce((acc, curr) => acc + curr.count, 0)}
+                    </span>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider mt-1.5">Total</span>
+                  </div>
+                </div>
+
+                {/* Donut legend */}
+                <div className="flex flex-col gap-2 w-1/2 select-none overflow-y-auto max-h-[220px] pr-1">
+                  {categories.map((entry, idx) => {
+                    const total = categories.reduce((acc, curr) => acc + curr.count, 0) || 1;
+                    const pct = Math.round((entry.count / total) * 100);
                     return (
-                      <div key={idx} className="flex flex-col gap-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="font-extrabold text-neutral-750 dark:text-neutral-300">{item.category || 'GM'}</span>
-                          <span className="font-black text-neutral-900 dark:text-white">{item.count} <span className="text-neutral-455 font-bold text-[9px]">({pctText}%)</span></span>
-                        </div>
-                        <div className="w-full h-1 bg-neutral-100 dark:bg-neutral-850 rounded-full overflow-hidden">
-                          <div className="h-full bg-purple-550 rounded-full" style={{ width: `${pctBar}%` }} />
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] font-bold text-slate-500 truncate leading-none">{entry.category || 'GM'}</span>
+                          <span className="text-[10px] font-black text-slate-900 dark:text-white mt-1">{entry.count} ({pct}%)</span>
                         </div>
                       </div>
                     );
                   })}
+                </div>
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-neutral-450 select-none">
-                <p className="font-bold text-xs">No category metrics available</p>
+              <p className="text-xs font-bold text-slate-400 select-none">No category distribution data</p>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ═══ DETAILED ANALYTICS ROW ═══ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        {/* Card D1 — Donut chart for Gender Distribution */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Gender Distribution</h3>
+            <button onClick={() => navigate('/admin/admissions/queue')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
+            {genders.length ? (
+              <div className="flex items-center gap-4 w-full h-full">
+                {/* Donut ring container */}
+                <div className="relative w-1/2 h-full flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={genders} 
+                        dataKey="value" 
+                        cx="50%" 
+                        cy="50%" 
+                        innerRadius={52} 
+                        outerRadius={76} 
+                        paddingAngle={3}
+                      >
+                        {genders.map((entry, idx) => (
+                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip content={<CustomTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute flex flex-col items-center justify-center text-center">
+                    <span className="text-lg font-black text-slate-800 dark:text-white leading-none">
+                      {genders.reduce((acc, curr) => acc + curr.value, 0)}
+                    </span>
+                    <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider mt-1.5">Total</span>
+                  </div>
+                </div>
+
+                {/* Donut legend */}
+                <div className="flex flex-col gap-2.5 w-1/2 select-none">
+                  {genders.map((entry, idx) => {
+                    const total = genders.reduce((acc, curr) => acc + curr.value, 0) || 1;
+                    const pct = Math.round((entry.value / total) * 100);
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] font-bold text-slate-500 truncate leading-none">{entry.name}</span>
+                          <span className="text-[10px] font-black text-slate-900 dark:text-white mt-1">{entry.value} ({pct}%)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs font-bold text-slate-400 select-none">No gender distribution data</p>
+            )}
+          </div>
+        </div>
+
+        {/* Card D2 — Ranked list for Top Programs */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-neutral-850 shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Top Programs</h3>
+            <button onClick={() => navigate('/admin/students')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4 select-none">
+            {topPrograms.length ? (
+              topPrograms.map((program, idx) => {
+                const rank = (idx + 1).toString().padStart(2, '0');
+                const displayName = branchNameMap[program.name] || program.name;
+                return (
+                  <div key={idx} className="space-y-1 border-b border-slate-50 pb-2.5 last:border-b-0 last:pb-0">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-xs font-black text-slate-400 select-none pt-0.5">{rank}</span>
+                      <div className="flex-grow space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-800 dark:text-neutral-200">{displayName}</span>
+                          <span className="font-black text-slate-900 dark:text-white ml-2">{program.applications}</span>
+                        </div>
+                        {/* Progress Bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-grow h-2 bg-slate-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${program.percentage}%` }} />
+                          </div>
+                          <span className="text-[10px] font-extrabold text-slate-400 w-8 text-right shrink-0">{program.percentage}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="h-full flex items-center justify-center text-center p-6 bg-slate-50/50 dark:bg-neutral-800/25 border border-dashed border-slate-150 rounded-xl">
+                <p className="font-extrabold text-xs text-slate-500">No applications recorded yet</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Card F — Gender Representation (1/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[280px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-455 dark:text-neutral-550 tracking-wider mb-4 select-none">Gender Distribution</h3>
-          <div className="flex-1 overflow-y-auto pr-1">
-            {data?.genders.length ? (
-              <div className="space-y-3.5 py-1">
-                {data.genders.map((entry, idx) => {
-                  const total = data.genders.reduce((acc, curr) => acc + curr.value, 0) || 1;
-                  const pct = Math.round((entry.value / total) * 100);
-                  const colors = ['bg-blue-500', 'bg-violet-500', 'bg-amber-500'];
+        {/* Card D3 — Audit Timeline for Recent Activity */}
+        <div className="bg-white dark:bg-neutral-900 p-5 rounded-[18px] border border-[#eceef4] dark:border-[#eceef4] shadow-[0_4px_20px_rgba(0,0,0,0.01)] h-[320px] flex flex-col">
+          <div className="flex justify-between items-center mb-4 select-none">
+            <h3 className="text-xs font-black uppercase text-slate-400 dark:text-neutral-500 tracking-widest">Recent Activity</h3>
+            <button onClick={() => navigate('/admin/admissions/history')} className="text-[10px] font-black uppercase tracking-wider text-primary-600 hover:text-primary-750">
+              View All →
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-4 relative pl-3 select-none">
+            {recentActivity.length ? (
+              <>
+                {/* Timeline vertical bar */}
+                <div className="absolute left-6 top-2 bottom-6 w-0.5 bg-slate-100 dark:bg-neutral-800" />
+                
+                {recentActivity.map((activity, idx) => {
+                  const IconComponent = getActivityIcon(activity.action);
+                  const colorClasses = getActivityColor(activity.action);
+                  
                   return (
-                    <div key={idx} className="flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <span className="font-extrabold text-neutral-700 dark:text-neutral-350">{entry.name}</span>
-                        <div className="flex items-center gap-1 font-black text-neutral-900 dark:text-white">
-                          <span>{entry.value}</span>
-                          <span className="text-[9px] text-neutral-450 font-bold">({pct}%)</span>
-                        </div>
+                    <div key={idx} className="flex gap-4 items-start relative z-10">
+                      {/* Timeline dot */}
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-sm border border-slate-100 dark:border-neutral-800 ${colorClasses}`}>
+                        <IconComponent size={14} className="stroke-[2.5]" />
                       </div>
-                      <div className="w-full h-1 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                        <div className={`h-full ${colors[idx % colors.length]} rounded-full`} style={{ width: `${pct}%` }} />
+                      
+                      {/* Description */}
+                      <div className="flex-grow min-w-0">
+                        <p className="text-xs font-black text-slate-800 dark:text-neutral-200 capitalize">
+                          {activity.action}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-450 dark:text-neutral-500 mt-0.5 truncate">
+                          {activity.studentName} · {activity.appNumber}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-wide">
+                          {formatActivityTime(activity.timestamp)}
+                        </p>
                       </div>
                     </div>
                   );
                 })}
-              </div>
+              </>
             ) : (
-              <div className="h-full flex items-center justify-center text-neutral-450 select-none">
-                <p className="font-bold text-xs">No gender data available</p>
+              <div className="h-full flex items-center justify-center text-center p-6 bg-slate-50/50 dark:bg-neutral-800/25 border border-dashed border-slate-150 rounded-xl">
+                <p className="font-extrabold text-xs text-slate-500">No recent activity logs</p>
               </div>
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        
-        {/* Card G — District distribution (2/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[280px] flex flex-col lg:col-span-2">
-          <h3 className="text-xs font-black uppercase text-neutral-455 dark:text-neutral-550 tracking-wider mb-4 select-none">Top districts</h3>
-          <div className="flex-1 overflow-y-auto pr-1">
-            {data?.districts.length ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-                {data.districts
-                  .sort((a, b) => b.count - a.count)
-                  .map((item, idx) => {
-                    const maxVal = Math.max(...data.districts.map(d => d.count)) || 1;
-                    const total = data.districts.reduce((acc, curr) => acc + curr.count, 0) || 1;
-                    const pctBar = (item.count / maxVal) * 100;
-                    const pctText = Math.round((item.count / total) * 100);
-                    return (
-                      <div key={idx} className="flex flex-col gap-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="font-extrabold text-neutral-750 dark:text-neutral-300 truncate">{item.district || 'Unspecified'}</span>
-                          <span className="font-black text-neutral-900 dark:text-white shrink-0">{item.count} <span className="text-neutral-450 font-bold text-[9px]">({pctText}%)</span></span>
-                        </div>
-                        <div className="w-full h-1 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pctBar}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-neutral-450 select-none">
-                <p className="font-bold text-xs">No district metrics available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Card H — Operational turnaround & rates (1/3) */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[280px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-455 dark:text-neutral-550 tracking-wider mb-4 select-none">Admission Processing</h3>
-          
-          <div className="flex-1 flex flex-col justify-between py-1">
-            <div className="grid grid-cols-2 gap-3 mb-2">
-              <div className="p-2 border border-neutral-100 dark:border-neutral-800/80 rounded-lg bg-neutral-50/50 dark:bg-neutral-800/25 flex flex-col justify-between min-h-[56px]">
-                <span className="text-[8px] font-black text-neutral-400 uppercase tracking-wide">Avg Review</span>
-                <span className="text-xs font-black text-neutral-805 dark:text-neutral-200 mt-1">{data?.workload.averageReviewTime || '—'}</span>
-              </div>
-              <div className="p-2 border border-neutral-100 dark:border-neutral-800/80 rounded-lg bg-neutral-50/50 dark:bg-neutral-800/25 flex flex-col justify-between min-h-[56px]">
-                <span className="text-[8px] font-black text-neutral-400 uppercase tracking-wide">Avg Principal</span>
-                <span className="text-xs font-black text-neutral-805 dark:text-neutral-200 mt-1">1.2 days</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 select-none border-t border-neutral-100 dark:border-neutral-850 pt-2.5">
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-bold text-neutral-450 uppercase tracking-wide">Enrollment Yield</span>
-                <span className="font-black text-neutral-900 dark:text-white">{rates.enrollmentRate}</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-bold text-neutral-450 uppercase tracking-wide">Verification Rate</span>
-                <span className="font-black text-neutral-900 dark:text-white">{rates.adminVerification}</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-bold text-neutral-450 uppercase tracking-wide">Correction Rate</span>
-                <span className="font-black text-neutral-900 dark:text-white">{rates.correctionRate}</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-bold text-neutral-450 uppercase tracking-wide">Rejection Rate</span>
-                <span className="font-black text-neutral-900 dark:text-white">{rates.rejectionRate}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ═══ BOTTOM SECTION ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        
-        {/* Pending Actions required */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm h-[260px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-rose-500 tracking-wider mb-3 flex items-center gap-1.5 select-none">
-            <AlertTriangle size={12} className="animate-pulse" /> Pending Actions
-          </h3>
-
-          <div className="flex-1 flex flex-col justify-between py-1">
-            <div className="space-y-2.5">
-              <button 
-                onClick={() => navigate('/admin/admissions/queue?status=SUBMITTED')}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl border border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-850 text-left transition relative overflow-hidden group select-none"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-black text-neutral-800 dark:text-neutral-200">Review Applications</span>
-                  <span className="text-[9px] font-bold text-neutral-400 mt-0.5">Submitted application forms awaiting verification</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="px-2 py-0.5 bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-450 rounded-lg text-xs font-black">
-                    {pendingActions.reviewApps}
-                  </span>
-                  <ArrowUpRight size={13} className="text-neutral-350 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </button>
-
-              <button 
-                onClick={() => navigate('/admin/admissions/resubmitted')}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl border border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-850 text-left transition relative overflow-hidden group select-none"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-black text-neutral-800 dark:text-neutral-200">Correction Resubmissions</span>
-                  <span className="text-[9px] font-bold text-neutral-400 mt-0.5">Forms corrected by student and resubmitted</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="px-2 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-450 rounded-lg text-xs font-black">
-                    {pendingActions.correctionResubmissions}
-                  </span>
-                  <ArrowUpRight size={13} className="text-neutral-350 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </button>
-
-              <button 
-                onClick={() => navigate('/admin/admissions/verified')}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl border border-neutral-100 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-850 text-left transition relative overflow-hidden group select-none"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[11px] font-black text-neutral-800 dark:text-neutral-200">Principal Pending</span>
-                  <span className="text-[9px] font-bold text-neutral-400 mt-0.5">Admin verified awaiting Principal sign-off</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="px-2 py-0.5 bg-violet-50 text-violet-600 dark:bg-violet-950/20 dark:text-violet-450 rounded-lg text-xs font-black">
-                    {pendingActions.awaitingPrincipal}
-                  </span>
-                  <ArrowUpRight size={13} className="text-neutral-350 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Activity audit logs */}
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm h-[260px] flex flex-col">
-          <h3 className="text-xs font-black uppercase text-neutral-455 dark:text-neutral-550 tracking-wider mb-3 select-none">Recent Activity</h3>
-          
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-            {data?.recentActivity.length ? (
-              data.recentActivity.map((act) => (
-                <div 
-                  key={act.id} 
-                  className="flex items-center justify-between p-2 rounded-lg bg-neutral-50/50 dark:bg-neutral-800/10 border border-neutral-100/50 dark:border-neutral-800/30 text-left"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[11px] font-bold text-neutral-800 dark:text-neutral-250 truncate">
-                        {act.studentName} {act.action}
-                      </span>
-                      <span className="text-[8px] font-black uppercase tracking-wider text-neutral-400 mt-0.5">
-                        {act.appNumber}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-extrabold text-neutral-400 shrink-0 select-none ml-2">
-                    {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs font-bold text-neutral-400 text-center py-6 select-none">No recent activity logs recorded</p>
             )}
           </div>
         </div>

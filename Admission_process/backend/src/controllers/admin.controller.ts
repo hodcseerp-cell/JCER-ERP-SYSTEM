@@ -423,15 +423,42 @@ export const getAnalyticsData = async (
   req: AuthRequest, res: Response, next: NextFunction
 ): Promise<any> => {
   try {
+    const period = req.query.period as string || '7d';
+    const academicYear = req.query.academicYear as string || '2026-2027';
+
     const filters = {
-      academicYear: req.query.academicYear as string || '2026-2027',
-      period: req.query.period as any || 'cycle',
+      academicYear,
+      period: period as any,
       startDate: req.query.startDate as string,
       endDate: req.query.endDate as string,
     };
 
+    // 1. Get dates range conditions
+    const dateRange = AnalyticsService.getCurrentDateRange(period, req.query.startDate as string, req.query.endDate as string);
+    const prevDateRange = AnalyticsService.getPreviousDateRange(period, req.query.startDate as string, req.query.endDate as string);
+
+    const baseWhere: any = { applicationStatus: { [Op.ne]: 'DRAFT' } };
+    if (academicYear && academicYear !== 'ALL') {
+      baseWhere.academicYear = academicYear;
+    }
+
+    // 2. Query KPIs for current period
+    const currentWhereTotal = { ...baseWhere };
+    if (dateRange) currentWhereTotal.submittedAt = dateRange;
+    else currentWhereTotal.submittedAt = { [Op.ne]: null };
+
+    const currentWhereVerified = { ...baseWhere, applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] } };
+    if (dateRange) currentWhereVerified.verifiedAt = dateRange;
+    else currentWhereVerified.verifiedAt = { [Op.ne]: null };
+
+    const currentWhereEnrolled = { ...baseWhere, applicationStatus: 'ENROLLED' };
+    if (dateRange) currentWhereEnrolled.enrolledAt = dateRange;
+    else currentWhereEnrolled.enrolledAt = { [Op.ne]: null };
+
     const [
-      kpis,
+      totalApplications,
+      verifiedApplications,
+      enrolledStudents,
       funnel,
       trend,
       branchPerformance,
@@ -444,7 +471,9 @@ export const getAnalyticsData = async (
       recentActivity,
       pendingActions
     ] = await Promise.all([
-      AnalyticsService.getOverviewKPIs('ADMIN', filters),
+      Admission.count({ where: currentWhereTotal }),
+      Admission.count({ where: currentWhereVerified }),
+      Admission.count({ where: currentWhereEnrolled }),
       AnalyticsService.getApplicationFunnel(filters),
       AnalyticsService.getApplicationTrend(filters, 'daily'),
       AnalyticsService.getBranchAnalytics(filters),
@@ -458,11 +487,92 @@ export const getAnalyticsData = async (
       AnalyticsService.getPendingActions(filters, 'ADMIN'),
     ]);
 
+    // 3. Query KPIs for previous period
+    let prevTotal = 0;
+    let prevVerified = 0;
+    let prevEnrolled = 0;
+
+    if (prevDateRange) {
+      const prevWhereTotal = { ...baseWhere, submittedAt: prevDateRange };
+      const prevWhereVerified = { ...baseWhere, verifiedAt: prevDateRange, applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] } };
+      const prevWhereEnrolled = { ...baseWhere, enrolledAt: prevDateRange, applicationStatus: 'ENROLLED' };
+
+      const [pTotal, pVerified, pEnrolled] = await Promise.all([
+        Admission.count({ where: prevWhereTotal }),
+        Admission.count({ where: prevWhereVerified }),
+        Admission.count({ where: prevWhereEnrolled }),
+      ]);
+      prevTotal = pTotal;
+      prevVerified = pVerified;
+      prevEnrolled = pEnrolled;
+    }
+
+    // 4. Calculate comparisons
+    const calculateChange = (current: number, previous: number) => {
+      if (!prevDateRange) return null;
+      if (previous === 0) {
+        if (current === 0) return 0;
+        return null; // Represents "New"
+      }
+      return parseFloat((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    const currentConversion = totalApplications > 0 ? (enrolledStudents / totalApplications) * 100 : 0;
+    const previousConversion = prevTotal > 0 ? (prevEnrolled / prevTotal) * 100 : 0;
+    const conversionChange = prevDateRange
+      ? parseFloat((currentConversion - previousConversion).toFixed(1))
+      : null;
+
+    const range = {
+      from: dateRange ? ((dateRange as any)[Op.gte] as Date).toISOString() : '',
+      to: dateRange ? ((dateRange as any)[Op.lte] as Date).toISOString() : '',
+      previousFrom: prevDateRange ? ((prevDateRange as any)[Op.gte] as Date).toISOString() : '',
+      previousTo: prevDateRange ? ((prevDateRange as any)[Op.lte] as Date).toISOString() : '',
+    };
+
+    const funnelObj = {
+      submitted: funnel.find((f: any) => f.stage === 'Submitted')?.count || 0,
+      underReview: funnel.find((f: any) => f.stage === 'Under Review')?.count || 0,
+      adminVerified: funnel.find((f: any) => f.stage === 'Admin Verified')?.count || 0,
+      principalApproved: funnel.find((f: any) => f.stage === 'Principal Approved')?.count || 0,
+      enrolled: funnel.find((f: any) => f.stage === 'Enrolled')?.count || 0,
+    };
+
+    const topPrograms = [...branchPerformance]
+      .sort((a, b) => b.applications - a.applications)
+      .map((item) => {
+        const total = branchPerformance.reduce((acc, curr) => acc + curr.applications, 0) || 1;
+        return {
+          name: item.name,
+          applications: item.applications,
+          percentage: parseFloat(((item.applications / total) * 100).toFixed(1)),
+        };
+      });
+
     return res.json({
       success: true,
       data: {
-        kpis,
-        funnel,
+        period,
+        range,
+        kpis: {
+          totalApplications: {
+            value: totalApplications,
+            change: calculateChange(totalApplications, prevTotal)
+          },
+          verifiedApplications: {
+            value: verifiedApplications,
+            change: calculateChange(verifiedApplications, prevVerified)
+          },
+          enrolledStudents: {
+            value: enrolledStudents,
+            change: calculateChange(enrolledStudents, prevEnrolled)
+          },
+          conversionRate: {
+            value: parseFloat(currentConversion.toFixed(2)),
+            change: conversionChange
+          }
+        },
+        funnel: funnelObj,
         trend,
         branchPerformance,
         admissionTypes,
@@ -472,7 +582,8 @@ export const getAnalyticsData = async (
         workload,
         rates,
         recentActivity,
-        pendingActions
+        pendingActions,
+        topPrograms
       }
     });
   } catch (err) {
