@@ -99,11 +99,27 @@ const getMissingFields = (app: AdmissionApplication | null) => {
   return missing;
 };
 
-const CorrectionContext = React.createContext<{ remarks: string | null; status: string }>({ remarks: null, status: '' });
+const CorrectionContext = React.createContext<{
+  remarks: string | null;
+  status: string;
+  onToggleFieldCorrection?: (fieldLabel: string) => void;
+  isFieldFlagged?: (fieldLabel: string) => boolean;
+}>({ remarks: null, status: '' });
 
-const FormField = ({ label, value }: { label: string; value?: string | number | null | boolean }) => {
-  const { remarks, status } = React.useContext(CorrectionContext);
+const FormField = ({ 
+  label, 
+  value, 
+  remarkText 
+}: { 
+  label: string; 
+  value?: string | number | null | boolean; 
+  remarkText?: string;
+}) => {
+  const { remarks, status, onToggleFieldCorrection, isFieldFlagged } = React.useContext(CorrectionContext);
   
+  const isFlagged = isFieldFlagged?.(remarkText || label) || false;
+  const isEditable = status !== 'REJECTED' && status !== 'ENROLLED' && status !== 'APPROVED' && status !== 'PRINCIPAL_APPROVED' && status !== 'CORRECTION_REQUIRED';
+
   const corrected = status === 'RESUBMITTED' && (() => {
     if (!remarks) return false;
     const remarksLower = remarks.toLowerCase();
@@ -139,18 +155,38 @@ const FormField = ({ label, value }: { label: string; value?: string | number | 
   })();
 
   return (
-    <div className={`p-3 rounded-lg border transition-all flex flex-col gap-1.5 ${
+    <div className={`group relative p-3 rounded-lg border transition-all flex flex-col gap-1.5 ${
       corrected 
         ? 'border-amber-400 bg-amber-50/30 shadow-[0_0_8px_rgba(245,158,11,0.08)] dark:bg-amber-950/15 dark:border-amber-800' 
-        : 'bg-neutral-50 dark:bg-neutral-800/40 border-neutral-100 dark:border-neutral-800/80'
+        : isFlagged
+        ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/10 shadow-[0_0_8px_rgba(239,68,68,0.08)]'
+        : 'bg-neutral-50 dark:bg-neutral-800/40 border-neutral-100 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700'
     }`}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 pr-4">
         <p className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider leading-none">{label}</p>
         {corrected && (
           <span className="text-[8px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-black uppercase shrink-0">Updated</span>
         )}
       </div>
       <p className="text-xs font-bold text-neutral-800 dark:text-neutral-200 leading-tight">{value !== null && value !== undefined && value !== '' ? String(value) : '—'}</p>
+      
+      {isEditable && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFieldCorrection?.(remarkText || label);
+          }}
+          className={`absolute top-1.5 right-1.5 transition-all duration-200 rounded-full p-0.5 ${
+            isFlagged
+              ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
+              : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
+          }`}
+          title={isFlagged ? "Remove correction request" : "Request correction for this field"}
+        >
+          <X size={12} className="stroke-[3]" />
+        </button>
+      )}
     </div>
   );
 };
@@ -269,6 +305,41 @@ export const AdmissionReviewPage: React.FC = () => {
   const [selectedCorrectionSections, setSelectedCorrectionSections] = useState<string[]>([]);
   const [correctionRemarks, setCorrectionRemarks] = useState('');
   const [correctionDeadline, setCorrectionDeadline] = useState('');
+
+  const isEditable = app 
+    ? (app.applicationStatus !== 'REJECTED' && 
+       app.applicationStatus !== 'ENROLLED' && 
+       app.applicationStatus !== 'APPROVED' && 
+       app.applicationStatus !== 'PRINCIPAL_APPROVED' && 
+       app.applicationStatus !== 'CORRECTION_REQUIRED')
+    : false;
+
+  const handleToggleFieldCorrection = (fieldLabel: string) => {
+    setRemarks(prev => {
+      const targetText = `• ${fieldLabel} needs correction`;
+      let lines = prev.split('\n').map(line => line.trim());
+      
+      const index = lines.findIndex(line => 
+        line.toLowerCase() === targetText.toLowerCase() || 
+        line.toLowerCase().includes(`${fieldLabel.toLowerCase()} needs correction`)
+      );
+
+      if (index !== -1) {
+        lines.splice(index, 1);
+      } else {
+        lines.push(targetText);
+      }
+      
+      return lines.filter(line => line.length > 0).join('\n');
+    });
+  };
+
+  const isFieldFlagged = (fieldLabel: string): boolean => {
+    if (!remarks) return false;
+    const remarksLower = remarks.toLowerCase();
+    const searchStr = `${fieldLabel.toLowerCase()} needs correction`;
+    return remarksLower.includes(searchStr);
+  };
 
   const isSectionFlaggedForCorrection = (sectionKey: string) => {
     if (!app?.correctionRequestedSections) return false;
@@ -546,6 +617,43 @@ export const AdmissionReviewPage: React.FC = () => {
           if (f.startsWith('Parent:'))  sectionSet.add('parent');
         });
 
+        // Also parse custom corrections requested in the remarks
+        const remarksLower = (remarks || '').toLowerCase();
+        
+        // Check personal details
+        const personalKeywords = [
+          'first name', 'middle name', 'last name', 'gender', 'birth', 'dob', 
+          'nationality', 'religion', 'caste', 'category', 'area type', 'email', 'mobile number', 'phone'
+        ];
+        if (personalKeywords.some(kw => remarksLower.includes(kw))) {
+          sectionSet.add('personal');
+        }
+
+        // Check parent details
+        const parentKeywords = [
+          'father', 'mother', 'parent', 'guardian', 'income'
+        ];
+        if (parentKeywords.some(kw => remarksLower.includes(kw))) {
+          sectionSet.add('parent');
+        }
+
+        // Check address
+        const addressKeywords = [
+          'address', 'residence', 'pincode', 'city', 'state'
+        ];
+        if (addressKeywords.some(kw => remarksLower.includes(kw))) {
+          sectionSet.add('address');
+        }
+
+        // Check academic
+        const academicKeywords = [
+          'school', 'board', 'passing year', 'register number', 'marks', 
+          'attempts', 'percentage', 'university', 'puc', 'diploma', 'cet', 'dcet'
+        ];
+        if (academicKeywords.some(kw => remarksLower.includes(kw))) {
+          sectionSet.add('academic');
+        }
+
         // Always include at least 'documents' if remarks mention document issues
         if (sectionSet.size === 0) sectionSet.add('documents');
 
@@ -644,7 +752,12 @@ export const AdmissionReviewPage: React.FC = () => {
   const missingFields = getMissingFields(app);
 
   return (
-    <CorrectionContext.Provider value={{ remarks: app?.correctionRemarks || null, status: app?.applicationStatus || '' }}>
+    <CorrectionContext.Provider value={{ 
+      remarks: app?.correctionRemarks || null, 
+      status: app?.applicationStatus || '',
+      onToggleFieldCorrection: handleToggleFieldCorrection,
+      isFieldFlagged
+    }}>
       <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* Top action bar */}
@@ -815,10 +928,10 @@ export const AdmissionReviewPage: React.FC = () => {
             <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-3">
               <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Father's Information</p>
               <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <FormField label="Name" value={par?.fatherName} />
-                <FormField label="Occupation" value={par?.fatherOccupation} />
-                <FormField label="Mobile" value={par?.fatherPhone} />
-                <FormField label="Annual Income" value={par?.fatherAnnualIncome ? `₹${par.fatherAnnualIncome.toLocaleString()}` : null} />
+                <FormField label="Name" value={par?.fatherName} remarkText="Father Name" />
+                <FormField label="Occupation" value={par?.fatherOccupation} remarkText="Father Occupation" />
+                <FormField label="Mobile" value={par?.fatherPhone} remarkText="Father Mobile" />
+                <FormField label="Annual Income" value={par?.fatherAnnualIncome ? `₹${par.fatherAnnualIncome.toLocaleString()}` : null} remarkText="Annual Income" />
               </div>
             </div>
             {/* Mother card */}
@@ -847,20 +960,58 @@ export const AdmissionReviewPage: React.FC = () => {
             )}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800">
+            <div className={`p-4 rounded-xl border transition-all relative group ${
+              isFieldFlagged?.('Current Residence')
+                ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/10 shadow-[0_0_8px_rgba(239,68,68,0.08)]'
+                : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
+            }`}>
               <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Current Residence</p>
-              <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
+              <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300 pr-5">
                 {[addr?.currentAddressLine1, addr?.currentAddressLine2, addr?.currentCity, addr?.currentState, addr?.currentPincode, addr?.currentCountry].filter(Boolean).join(', ') || '—'}
               </p>
+              {isEditable && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleFieldCorrection('Current Residence')}
+                  className={`absolute top-1.5 right-1.5 transition-all duration-200 rounded-full p-0.5 ${
+                    isFieldFlagged?.('Current Residence')
+                      ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
+                      : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
+                  }`}
+                  title={isFieldFlagged?.('Current Residence') ? "Remove correction request" : "Request correction for Current Residence"}
+                >
+                  <X size={12} className="stroke-[3]" />
+                </button>
+              )}
             </div>
-            <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800">
+            <div className={`p-4 rounded-xl border transition-all relative group ${
+              isFieldFlagged?.('Permanent Residence')
+                ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/10 shadow-[0_0_8px_rgba(239,68,68,0.08)]'
+                : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
+            }`}>
               <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Permanent Residence</p>
-              {addr?.sameAsCurrent ? (
-                <p className="text-xs italic text-neutral-400">Same as current address</p>
-              ) : (
-                <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
-                  {[addr?.permanentAddressLine1, addr?.permanentAddressLine2, addr?.permanentCity, addr?.permanentState, addr?.permanentPincode, addr?.permanentCountry].filter(Boolean).join(', ') || '—'}
-                </p>
+              <div className="pr-5">
+                {addr?.sameAsCurrent ? (
+                  <p className="text-xs italic text-neutral-400">Same as current address</p>
+                ) : (
+                  <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
+                    {[addr?.permanentAddressLine1, addr?.permanentAddressLine2, addr?.permanentCity, addr?.permanentState, addr?.permanentPincode, addr?.permanentCountry].filter(Boolean).join(', ') || '—'}
+                  </p>
+                )}
+              </div>
+              {isEditable && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleFieldCorrection('Permanent Residence')}
+                  className={`absolute top-1.5 right-1.5 transition-all duration-200 rounded-full p-0.5 ${
+                    isFieldFlagged?.('Permanent Residence')
+                      ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
+                      : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
+                  }`}
+                  title={isFieldFlagged?.('Permanent Residence') ? "Remove correction request" : "Request correction for Permanent Residence"}
+                >
+                  <X size={12} className="stroke-[3]" />
+                </button>
               )}
             </div>
           </div>
@@ -883,12 +1034,12 @@ export const AdmissionReviewPage: React.FC = () => {
             <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-3">
               <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">10th Standard (SSLC)</p>
               <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <FormField label="School Name" value={acad?.tenthSchool} />
-                <FormField label="Board" value={acad?.tenthBoard} />
-                <FormField label="Passing Year" value={acad?.tenthPassingYear} />
-                <FormField label="Register Number" value={acad?.tenthRegisterNumber} />
-                <FormField label="Marks Obtained" value={acad?.tenthMarksObtained && acad?.tenthMaxMarks ? `${acad.tenthMarksObtained} / ${acad.tenthMaxMarks}` : null} />
-                <FormField label="Attempts" value={acad?.tenthAttempts} />
+                <FormField label="School Name" value={acad?.tenthSchool} remarkText="10th School Name" />
+                <FormField label="Board" value={acad?.tenthBoard} remarkText="10th Board" />
+                <FormField label="Passing Year" value={acad?.tenthPassingYear} remarkText="10th Passing Year" />
+                <FormField label="Register Number" value={acad?.tenthRegisterNumber} remarkText="10th Register Number" />
+                <FormField label="Marks Obtained" value={acad?.tenthMarksObtained && acad?.tenthMaxMarks ? `${acad.tenthMarksObtained} / ${acad.tenthMaxMarks}` : null} remarkText="10th Marks" />
+                <FormField label="Attempts" value={acad?.tenthAttempts} remarkText="10th Attempts" />
               </div>
               {acad?.tenthPercentage && (
                 <div className="text-xs font-black text-primary-600 bg-primary-50 dark:bg-primary-900/20 px-3 py-1.5 rounded-lg inline-block">
@@ -902,10 +1053,10 @@ export const AdmissionReviewPage: React.FC = () => {
               <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-3 bg-blue-50/30 dark:bg-blue-950/10">
                 <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Diploma details (Lateral Entry)</p>
                 <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <FormField label="University/Institution" value={acad?.diplomaUniversity} />
-                  <FormField label="Passing Year" value={acad?.diplomaYear} />
-                  <FormField label="Register Number" value={acad?.diplomaRegisterNumber} />
-                  <FormField label="Marks Obtained" value={acad?.diplomaFinalYearObtained && acad?.diplomaFinalYearMaxMarks ? `${acad.diplomaFinalYearObtained} / ${acad.diplomaFinalYearMaxMarks}` : null} />
+                  <FormField label="University/Institution" value={acad?.diplomaUniversity} remarkText="Diploma University" />
+                  <FormField label="Passing Year" value={acad?.diplomaYear} remarkText="Diploma Passing Year" />
+                  <FormField label="Register Number" value={acad?.diplomaRegisterNumber} remarkText="Diploma Register Number" />
+                  <FormField label="Marks Obtained" value={acad?.diplomaFinalYearObtained && acad?.diplomaFinalYearMaxMarks ? `${acad.diplomaFinalYearObtained} / ${acad.diplomaFinalYearMaxMarks}` : null} remarkText="Diploma Marks" />
                 </div>
                 {acad?.diplomaPercentage && (
                   <div className="text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg inline-block">
@@ -918,14 +1069,14 @@ export const AdmissionReviewPage: React.FC = () => {
               <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-3">
                 <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">12th Standard / PUC</p>
                 <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                  <FormField label="School / College" value={acad?.twelfthSchool} />
-                  <FormField label="Board" value={acad?.twelfthBoard} />
-                  <FormField label="Passing Year" value={acad?.twelfthPassingYear} />
-                  <FormField label="Register Number" value={acad?.twelfthRegisterNumber} />
-                  <FormField label="Stream" value={acad?.twelfthStream} />
-                  <FormField label="Physics Marks" value={acad?.physicsMarks} />
-                  <FormField label="Maths Marks" value={acad?.mathsMarks} />
-                  <FormField label="Optional Marks" value={acad?.optionalMarks} />
+                  <FormField label="School / College" value={acad?.twelfthSchool} remarkText="12th/PUC School Name" />
+                  <FormField label="Board" value={acad?.twelfthBoard} remarkText="12th/PUC Board" />
+                  <FormField label="Passing Year" value={acad?.twelfthPassingYear} remarkText="12th/PUC Passing Year" />
+                  <FormField label="Register Number" value={acad?.twelfthRegisterNumber} remarkText="12th/PUC Register Number" />
+                  <FormField label="Stream" value={acad?.twelfthStream} remarkText="12th/PUC Stream" />
+                  <FormField label="Physics Marks" value={acad?.physicsMarks} remarkText="12th/PUC Physics Marks" />
+                  <FormField label="Maths Marks" value={acad?.mathsMarks} remarkText="12th/PUC Maths Marks" />
+                  <FormField label="Optional Marks" value={acad?.optionalMarks} remarkText="12th/PUC Optional Marks" />
                 </div>
                 {acad?.twelfthPercentage && (
                   <div className="text-xs font-black text-primary-600 bg-primary-50 dark:bg-primary-900/20 px-3 py-1.5 rounded-lg inline-block">
@@ -941,12 +1092,12 @@ export const AdmissionReviewPage: React.FC = () => {
             <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-3">
               <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Entrance Examination Details</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-3">
-                {app.cetNumber && <FormField label="KCET Number" value={app.cetNumber} />}
-                {app.cetNumber && acad?.cetScore && <FormField label="KCET Score" value={acad?.cetScore} />}
-                {app.cetNumber && acad?.cetRank && <FormField label="KCET Rank" value={`#${acad?.cetRank}`} />}
-                {app.dcetNumber && <FormField label="DCET Number" value={app.dcetNumber} />}
-                {app.dcetNumber && acad?.cetScore && <FormField label="DCET Score" value={acad?.cetScore} />}
-                {app.dcetNumber && acad?.cetRank && <FormField label="DCET Rank" value={`#${acad?.cetRank}`} />}
+                {app.cetNumber && <FormField label="KCET Number" value={app.cetNumber} remarkText="KCET Number" />}
+                {app.cetNumber && acad?.cetScore && <FormField label="KCET Score" value={acad?.cetScore} remarkText="KCET Score" />}
+                {app.cetNumber && acad?.cetRank && <FormField label="KCET Rank" value={`#${acad?.cetRank}`} remarkText="KCET Rank" />}
+                {app.dcetNumber && <FormField label="DCET Number" value={app.dcetNumber} remarkText="DCET Number" />}
+                {app.dcetNumber && acad?.cetScore && <FormField label="DCET Score" value={acad?.cetScore} remarkText="DCET Score" />}
+                {app.dcetNumber && acad?.cetRank && <FormField label="DCET Rank" value={`#${acad?.cetRank}`} remarkText="DCET Rank" />}
               </div>
             </div>
           )}
