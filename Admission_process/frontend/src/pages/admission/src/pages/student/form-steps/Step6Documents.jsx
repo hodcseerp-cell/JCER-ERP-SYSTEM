@@ -507,25 +507,68 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         const isDragging = dragOver === doc.id;
         const isBusy     = cardState === 'processing' || cardState === 'uploading';
         
+        const matches = {
+            photo: ['passport', 'photo'],
+            signature: ['signature'],
+            sslcMarkscard: ['sslc', '10th', 'tenth'],
+            pucMarkscard: ['puc', '12th', 'twelfth'],
+            diplomaSemester5Marksheet: ['diploma 5th', 'semester 5', 'sem 5'],
+            diplomaSemester6Marksheet: ['diploma 6th', 'semester 6', 'sem 6'],
+            cetScoreCard: ['cet', 'dcet', 'entrance'],
+            feesPaidReceipt: ['fees paid', 'receipt', 'fees verified'],
+            casteCertificate: ['caste'],
+            incomeCertificate: ['income', 'gap'],
+            studyCertificate: ['study', 'domicile']
+        };
+
         const isOriginalFlagged = (() => {
             if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
             if (!adminRemarks) return false;
             const remarksLower = adminRemarks.toLowerCase();
-            const matches = {
-                photo: ['passport', 'photo'],
-                signature: ['signature'],
-                sslcMarkscard: ['sslc', '10th', 'tenth'],
-                pucMarkscard: ['puc', '12th', 'twelfth'],
-                diplomaSemester5Marksheet: ['diploma 5th', 'semester 5', 'sem 5'],
-                diplomaSemester6Marksheet: ['diploma 6th', 'semester 6', 'sem 6'],
-                cetScoreCard: ['cet', 'dcet', 'entrance'],
-                feesPaidReceipt: ['fees paid', 'receipt', 'fees verified'],
-                casteCertificate: ['caste'],
-                incomeCertificate: ['income', 'gap'],
-                studyCertificate: ['study', 'domicile']
-            };
             const keywords = matches[doc.id] || [];
             return keywords.some(kw => remarksLower.includes(kw));
+        })();
+
+        const docRemarks = (() => {
+            if (!adminRemarks) return null;
+            const lines = adminRemarks.split('\n');
+            const keywords = matches[doc.id] || [];
+            if (keywords.length === 0) return null;
+
+            const lineIdx = lines.findIndex(line => {
+                const lowerLine = line.toLowerCase();
+                return line.trim().startsWith('•') && keywords.some(kw => lowerLine.includes(kw));
+            });
+
+            if (lineIdx === -1) return null;
+
+            const currentLine = lines[lineIdx];
+            const reasonMatch = currentLine.match(/\(([^)]+)\)/);
+            const reason = reasonMatch ? reasonMatch[1] : null;
+
+            const nextLine = lines[lineIdx + 1];
+            let note = null;
+            if (nextLine && nextLine.trim().startsWith('Note:')) {
+                note = nextLine.replace(/^\s*Note:\s*/i, '').trim();
+            }
+
+            return { reason, note };
+        })();
+
+        const rejectionMessage = (() => {
+            if (!docRemarks) {
+                return "This document was rejected by the admin. Please re-upload a clear, correct copy.";
+            }
+            const parts = ["This document was rejected by the admin."];
+            if (docRemarks.reason) {
+                parts.push(`Reason: ${docRemarks.reason}.`);
+            }
+            if (docRemarks.note) {
+                parts.push(`Instructions: "${docRemarks.note}"`);
+            } else if (!docRemarks.reason) {
+                parts.push("Please re-upload a clear, correct copy.");
+            }
+            return parts.join(" ");
         })();
 
         const isDocFlagged = isOriginalFlagged && !reuploadedDocs.includes(doc.id);
@@ -610,7 +653,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                     {isDocFlagged && (
                         <div className="mb-3 flex items-start gap-1.5 text-[11px] text-red-600 font-semibold border border-red-200/50 bg-red-50/50 rounded-lg p-2.5">
                             <AlertTriangle size={13} className="shrink-0 mt-0.5 text-red-500" />
-                            <span>This document was rejected by the admin. Please re-upload a clear, correct copy.</span>
+                            <span>{rejectionMessage}</span>
                         </div>
                     )}
 
