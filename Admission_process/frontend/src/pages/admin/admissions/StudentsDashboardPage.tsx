@@ -775,21 +775,20 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse">
+          <div className="w-full">
+            <table className="w-full text-left border-collapse table-fixed text-[11px]">
               <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-[10px] font-black uppercase tracking-widest text-neutral-400 bg-neutral-50/50 dark:bg-neutral-800/20">
-                  <th className="py-4.5 px-6 w-16">Photo</th>
-                  <th className="py-4.5 px-6">App Number</th>
-                  <th className="py-4.5 px-6">Student Name</th>
-                  <th className="py-4.5 px-6">Branch</th>
-                  <th className="py-4.5 px-6">Type</th>
-                  <th className="py-4.5 px-6">Qual</th>
-                  <th className="py-4.5 px-6">Mobile Number</th>
-                  <th className="py-4.5 px-6">Status</th>
-                  <th className="py-4.5 px-6">Submitted Date</th>
-                  <th className="py-4.5 px-6">Last Updated</th>
-                  <th className="py-4.5 px-6 text-right">Actions</th>
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-[9px] font-black uppercase tracking-widest text-neutral-400 bg-neutral-50/50 dark:bg-neutral-800/20">
+                  <th className="py-3 px-3 w-10">Photo</th>
+                  <th className="py-3 px-3 w-36">App Number</th>
+                  <th className="py-3 px-3">Student Name</th>
+                  <th className="py-3 px-3 w-20">Branch</th>
+                  <th className="py-3 px-3 w-20">Type</th>
+                  <th className="py-3 px-3 w-16">Qual</th>
+                  <th className="py-3 px-3 w-28">Mobile</th>
+                  <th className="py-3 px-3 w-32">Status</th>
+                  <th className="py-3 px-3 w-24">Submitted</th>
+                  <th className="py-3 px-3 w-24 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/40 text-xs font-semibold">
@@ -800,8 +799,8 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
 
                   return (
                     <tr key={app.id} className="hover:bg-neutral-50/40 dark:hover:bg-neutral-800/10 transition-colors">
-                      <td className="py-4 px-6">
-                        <div className="size-10 rounded-full border border-neutral-200 dark:border-neutral-800 overflow-hidden bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                      <td className="py-3 px-3">
+                        <div className="size-8 rounded-full border border-neutral-200 dark:border-neutral-800 overflow-hidden bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
                           {photo ? (
                             <img src={getPhotoUrl(photo)} alt="avatar" className="w-full h-full object-cover" />
                           ) : (
@@ -809,7 +808,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                           )}
                         </div>
                       </td>
-                      <td className="py-4 px-6 font-bold whitespace-nowrap">
+                      <td className="py-3 px-3 font-bold">
                         <button
                           onClick={() => handleViewStudent(app.id)}
                           className="hover:underline text-left text-neutral-800 hover:text-orange-600 dark:text-neutral-200 dark:hover:text-orange-400 transition-colors"
@@ -817,7 +816,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                           {app.applicationStatus === 'ENROLLED' ? app.user?.student?.enrollmentNumber || app.applicationNumber : app.applicationNumber}
                         </button>
                       </td>
-                      <td className="py-4 px-6 font-bold whitespace-nowrap">
+                      <td className="py-3 px-3 font-bold">
                         <button
                           onClick={() => handleViewStudent(app.id)}
                           className="hover:underline text-left text-neutral-900 hover:text-orange-600 dark:text-white dark:hover:text-orange-400 transition-colors"
@@ -825,44 +824,41 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                           {app.user ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim() : 'N/A'}
                         </button>
                       </td>
-                      <td className="py-4 px-6 font-extrabold text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                      <td className="py-3 px-3 font-extrabold text-neutral-600 dark:text-neutral-400">
                         {app.branch?.code || 'N/A'}
                       </td>
-                      <td className="py-4 px-6 font-bold whitespace-nowrap">
+                      <td className="py-3 px-3 font-bold">
                         {app.admissionType || 'N/A'}
                       </td>
-                      <td className="py-4 px-6 font-bold text-neutral-500 whitespace-nowrap">
+                      <td className="py-3 px-3 font-bold text-neutral-500">
                         {app.qualification || 'N/A'}
                       </td>
-                      <td className="py-4 px-6 text-neutral-500 whitespace-nowrap">
+                      <td className="py-3 px-3 text-neutral-500">
                         {pd?.phone || app.user?.phone || 'N/A'}
                       </td>
-                      <td className="py-4 px-6 whitespace-nowrap">
-                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border whitespace-nowrap ${STATUS_COLOR_MAP[app.applicationStatus] || STATUS_COLOR_MAP.DRAFT}`}>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${STATUS_COLOR_MAP[app.applicationStatus] || STATUS_COLOR_MAP.DRAFT}`}>
                           {STATUS_LABEL_MAP[app.applicationStatus] || app.applicationStatus}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-neutral-400 whitespace-nowrap">
+                      <td className="py-3 px-3 text-neutral-400">
                         {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : 'N/A'}
                       </td>
-                      <td className="py-4 px-6 text-neutral-400 whitespace-nowrap">
-                        {new Date(app.updatedAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-4 px-6 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <button 
                             onClick={() => handleViewStudent(app.id)}
                             className="p-1.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-600 dark:text-neutral-300 transition-colors"
                             title="View Profile"
                           >
-                            <Eye size={14} />
+                            <Eye size={13} />
                           </button>
                           <button 
                             onClick={() => handleDownloadPDF(app.id)}
                             className="p-1.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-600 dark:text-neutral-300 transition-colors"
                             title="Download PDF"
                           >
-                            <Download size={14} />
+                            <Download size={13} />
                           </button>
                           {!readOnly && (
                             <button 
@@ -873,7 +869,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                               className="p-1.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-600 dark:text-neutral-300 transition-colors"
                               title="Edit"
                             >
-                              <Edit size={14} />
+                              <Edit size={13} />
                             </button>
                           )}
                           {!readOnly && (app.applicationStatus === 'ENROLLED' || app.applicationStatus === 'APPROVED') && (
@@ -883,7 +879,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                               className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
                               title="Cancel Admission"
                             >
-                              <Ban size={14} />
+                              <Ban size={13} />
                             </button>
                           )}
                         </div>
