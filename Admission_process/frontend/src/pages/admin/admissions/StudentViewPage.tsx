@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import admissionService, { AdmissionApplication } from '../../../services/admission.service';
-import API from '../../../services/api';
+import API, { getBaseHostURL } from '../../../services/api';
 import { 
   ArrowLeft, User, BookOpen, Phone, MapPin, GraduationCap, Award, 
   FileText, ShieldCheck, Clock, Ban, Download, Eye, Loader2, 
@@ -93,7 +93,9 @@ const FormField = ({
       </p>
     </div>
   );
-};const DocumentSquareCard: React.FC<{ 
+};
+
+const DocumentSquareCard: React.FC<{ 
   field: string; 
   studentId: string; 
   label: string; 
@@ -103,7 +105,7 @@ const FormField = ({
   uploading?: boolean;
   hasUrl?: boolean;
 }> = ({ field, studentId, label, isEdit, onUpload, onRemove, uploading, hasUrl }) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [isPdf, setIsPdf] = useState(false);
@@ -111,7 +113,7 @@ const FormField = ({
   useEffect(() => {
     if (!hasUrl) {
       setLoading(false);
-      setBlobUrl(null);
+      setImgUrl(null);
       return;
     }
     let active = true;
@@ -119,14 +121,22 @@ const FormField = ({
       try {
         setLoading(true);
         setError(false);
-        const response = await API.get(`/admin/admissions/${studentId}/documents/${field}`, {
-          responseType: 'blob',
-        });
+        // Backend returns { success: true, url: '/uploads/...' }
+        const res = await API.get(`/admin/admissions/${studentId}/documents/${field}`);
         if (!active) return;
-        const type = response.data.type || '';
-        setIsPdf(type.includes('pdf'));
-        const url = URL.createObjectURL(response.data);
-        setBlobUrl(url);
+        const relativeUrl: string = res.data?.url || '';
+        if (!relativeUrl) throw new Error('No URL returned');
+        const isPdfFile = relativeUrl.toLowerCase().endsWith('.pdf');
+        setIsPdf(isPdfFile);
+        if (!isPdfFile) {
+          const baseHost = getBaseHostURL();
+          const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : baseHost + relativeUrl;
+          setImgUrl(fullUrl);
+        } else {
+          // For PDFs store the full URL for download
+          const baseHost = getBaseHostURL();
+          setImgUrl(relativeUrl.startsWith('http') ? relativeUrl : baseHost + relativeUrl);
+        }
       } catch (err) {
         console.error('Failed to load document preview:', field, err);
         if (active) setError(true);
@@ -138,17 +148,15 @@ const FormField = ({
     fetchDoc();
     return () => {
       active = false;
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
     };
   }, [field, studentId, hasUrl]);
 
   const handleDownload = () => {
-    if (!blobUrl) return;
+    if (!imgUrl) return;
     const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `${label.replace(/\s+/g, '_')}${isPdf ? '.pdf' : '.png'}`;
+    link.href = imgUrl;
+    link.target = '_blank';
+    link.download = `${label.replace(/\s+/g, '_')}${isPdf ? '.pdf' : '.jpg'}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -163,7 +171,7 @@ const FormField = ({
             <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
             <span className="text-[10px] font-black uppercase tracking-wider">{uploading ? 'Uploading...' : 'Loading...'}</span>
           </div>
-        ) : error || !hasUrl || !blobUrl ? (
+        ) : error || !hasUrl || !imgUrl ? (
           <div className="flex flex-col items-center gap-2 text-neutral-450 p-4 text-center">
             <FileText size={24} className="opacity-40" />
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">No Document</span>
@@ -175,7 +183,7 @@ const FormField = ({
           </div>
         ) : (
           <img 
-            src={blobUrl} 
+            src={imgUrl} 
             alt={label} 
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
           />
@@ -221,10 +229,10 @@ const FormField = ({
             </>
           ) : (
             <>
-              {hasUrl && blobUrl && (
+              {hasUrl && imgUrl && (
                 <>
                   <a
-                    href={blobUrl}
+                    href={imgUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-extrabold transition-all border border-white/10 select-none text-center"
