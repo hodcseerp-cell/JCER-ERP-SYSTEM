@@ -164,12 +164,13 @@ export const AdminLayout: React.FC = () => {
     {
       title: 'ADMISSIONS',
       items: [
-        { name: 'Application Queue',    path: '/admin/admissions/queue',       icon: ClipboardList,   badge: pendingCount      > 0 ? pendingCount      : undefined },
-        { name: 'Resubmitted',          path: '/admin/admissions/resubmitted', icon: RefreshCw,       badge: resubmittedCount  > 0 ? resubmittedCount  : undefined },
-        { name: 'Corrections',          path: '/admin/admissions/corrections', icon: AlertTriangle,   badge: correctionCount   > 0 ? correctionCount   : undefined },
-        { name: 'Verified',             path: '/admin/admissions/verified',    icon: FileCheck2,      badge: verifiedCount     > 0 ? verifiedCount     : undefined },
-        { name: 'Approved',             path: '/admin/admissions/approved',    icon: CheckCircle2 },
-        { name: 'History',              path: '/admin/admissions/history',     icon: CalendarDays },
+        { name: 'Application Queue',    path: '/admin/admissions/queue',         icon: ClipboardList,   badge: pendingCount                > 0 ? pendingCount                : undefined },
+        { name: 'Resubmitted',          path: '/admin/admissions/resubmitted',   icon: RefreshCw,       badge: resubmittedCount            > 0 ? resubmittedCount            : undefined },
+        { name: 'Corrections',          path: '/admin/admissions/corrections',   icon: AlertTriangle,   badge: correctionCount             > 0 ? correctionCount             : undefined },
+        { name: 'Verified',             path: '/admin/admissions/verified',      icon: FileCheck2,      badge: verifiedCount               > 0 ? verifiedCount               : undefined },
+        { name: 'Approved',             path: '/admin/admissions/approved',      icon: CheckCircle2 },
+        { name: 'Cancellation',         path: '/admin/admissions/cancellations', icon: XCircle,         badge: cancellationRequestsCount   > 0 ? cancellationRequestsCount   : undefined },
+        { name: 'History',              path: '/admin/admissions/history',       icon: CalendarDays },
       ],
     },
     {
