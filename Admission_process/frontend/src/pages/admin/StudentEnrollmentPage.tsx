@@ -196,7 +196,8 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
       ]),
       { label: 'CET Score Card',       field: 'cetScoreCard',                 url: d.cetScoreCardUrl },
       { label: 'Aadhaar Card',         field: 'aadhaar',                      url: d.aadhaarUrl },
-      { label: 'Fees Paid Receipt',    field: 'feesPaidReceipt',              url: d.feesPaidReceiptUrl },
+      { label: 'College Fees Receipt',    field: 'feesPaidReceipt',              url: d.feesPaidReceiptUrl },
+      { label: 'Admission Form Fee Receipt', field: 'admissionFormFeeReceipt',      url: d.admissionFormFeeReceiptUrl },
       { label: 'Caste Certificate',    field: 'casteCertificate',             url: d.casteCertificateUrl },
       { label: 'Domicile Certificate', field: 'domicileCertificate',          url: d.domicileCertificateUrl },
       { label: 'Gap Certificate',      field: 'gapCertificate',               url: d.gapCertificateUrl },
@@ -541,6 +542,24 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                           : '—'}
                       </p>
                     </div>
+                  </div>
+                </Section>
+              )}
+
+              {/* Admission Form Fee payment Details */}
+              {selected.studentdocuments && (selected.studentdocuments.admissionFormFeePaymentMode || selected.studentdocuments.admissionFormFeeUtr) && (
+                <Section title="Admission Form Fee Details">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-neutral-50 rounded-xl p-3 border border-neutral-100">
+                      <p className="text-[9px] text-neutral-400 font-bold uppercase">Payment Mode</p>
+                      <p className="text-xs font-bold text-neutral-800 mt-0.5">{selected.studentdocuments.admissionFormFeePaymentMode || '—'}</p>
+                    </div>
+                    {selected.studentdocuments.admissionFormFeePaymentMode === 'ONLINE' && (
+                      <div className="bg-neutral-50 rounded-xl p-3 border border-neutral-100">
+                        <p className="text-[9px] text-neutral-400 font-bold uppercase">UTR / Transaction ID</p>
+                        <p className="text-xs font-bold text-neutral-800 mt-0.5">{selected.studentdocuments.admissionFormFeeUtr || '—'}</p>
+                      </div>
+                    )}
                   </div>
                 </Section>
               )}

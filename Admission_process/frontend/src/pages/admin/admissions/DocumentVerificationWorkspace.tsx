@@ -198,6 +198,7 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
   const [loadingBlobs, setLoadingBlobs] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [docsData, setDocsData] = useState<any>(null);
 
   // States for on-demand active document loading
   const [activeDocUrl, setActiveDocUrl] = useState<string | null>(null);
@@ -296,6 +297,7 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
 
         if (!active) return;
 
+        setDocsData(safeDocs);
         setStudentNameState(nameToUse || 'Student');
         setAppNumberState(numberToUse || '—');
 
@@ -310,7 +312,8 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
           { id: 'diplomaSemester6', field: 'diplomaSemester6Marksheet', name: 'Diploma 6th Semester Marks Card', url: extractDocUrl(safeDocs, ['diplomaSemester6MarksheetUrl', 'diplomaSemester6Marksheet', 'diploma6thMarksheetUrl']) },
           { id: 'cet', field: 'cetScoreCard', name: 'Entrance Score Card (CET/DCET)', url: extractDocUrl(safeDocs, ['cetScoreCardUrl', 'cetScoreCard', 'entranceScoreCard', 'entranceScoreCardUrl', 'cet']) },
           { id: 'aadhaar', field: 'aadhaar', name: 'Aadhaar Card copy', url: extractDocUrl(safeDocs, ['aadhaarUrl', 'aadhaar', 'aadhaarCard', 'aadhaarCardUrl']) },
-          { id: 'feesPaidReceipt', field: 'feesPaidReceipt', name: 'Fees Paid Receipt', url: extractDocUrl(safeDocs, ['feesPaidReceiptUrl', 'feesPaidReceipt', 'feeReceipt', 'feeReceiptUrl', 'admissionFeeReceiptUrl']) },
+          { id: 'feesPaidReceipt', field: 'feesPaidReceipt', name: 'College Fees Receipt', url: extractDocUrl(safeDocs, ['feesPaidReceiptUrl', 'feesPaidReceipt', 'feeReceipt', 'feeReceiptUrl', 'admissionFeeReceiptUrl']) },
+          { id: 'admissionFormFeeReceipt', field: 'admissionFormFeeReceipt', name: 'Admission Form Fee Receipt', url: extractDocUrl(safeDocs, ['admissionFormFeeReceiptUrl', 'admissionFormFeeReceipt']) },
           { id: 'domicile', field: 'domicileCertificate', name: 'Domicile / Study Certificate', url: extractDocUrl(safeDocs, ['domicileCertificateUrl', 'domicileCertificate', 'studyCertificate']) },
           { id: 'caste', field: 'casteCertificate', name: 'Caste Certificate (Optional)', url: extractDocUrl(safeDocs, ['casteCertificateUrl', 'casteCertificate']) },
           { id: 'gap', field: 'gapCertificate', name: 'Income / Gap Year Certificate', url: extractDocUrl(safeDocs, ['gapCertificateUrl', 'gapCertificate', 'incomeCertificate', 'incomeCertificateUrl']) },
@@ -319,8 +322,8 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
         // Also check if safeDocs object contains any extra uploaded string URLs
         if (safeDocs && typeof safeDocs === 'object' && !Array.isArray(safeDocs)) {
           Object.entries(safeDocs).forEach(([key, val]) => {
-            if (typeof val === 'string' && val.trim() !== '' && !key.endsWith('Id') && key !== 'createdAt' && key !== 'updatedAt' && key !== 'id') {
-              const alreadyIncluded = allPossibleDocs.some(d => d.url === val);
+            if (typeof val === 'string' && val.trim() !== '' && key.endsWith('Url')) {
+              const alreadyIncluded = allPossibleDocs.some(d => d.url === val || d.id === key);
               if (!alreadyIncluded) {
                 const formattedName = key.replace(/Url$/, '').replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                 allPossibleDocs.push({
@@ -1080,6 +1083,24 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
                   <span className="font-semibold text-slate-400">File Size</span>
                   <span className="font-extrabold text-slate-800">{currentDocument ? getDocSize(currentDocument.name) : 'N/A'}</span>
                 </div>
+                {currentDocument?.id === 'admissionFormFeeReceipt' && docsData && (
+                  <>
+                    <div className="flex items-center justify-between text-xs border-b border-slate-50 pb-2.5">
+                      <span className="font-semibold text-slate-400">Payment Mode</span>
+                      <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-[10px] uppercase font-sans tracking-wide">{docsData.admissionFormFeePaymentMode || 'OFFLINE'}</span>
+                    </div>
+                    {docsData.admissionFormFeePaymentMode === 'ONLINE' && docsData.admissionFormFeeUtr && (
+                      <div className="flex flex-col gap-1.5 border-b border-slate-50 pb-3 mt-1">
+                        <span className="font-semibold text-[10px] text-slate-400 uppercase tracking-wider">UTR / Transaction ID</span>
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 text-center shadow-sm select-all">
+                          <span className="font-black text-indigo-800 font-mono text-base tracking-widest block">
+                            {docsData.admissionFormFeeUtr}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 

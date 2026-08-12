@@ -962,7 +962,8 @@ export const StudentViewPage: React.FC = () => {
                 ]),
                 { label: 'Entrance Score Card (CET/DCET)', field: 'cetScoreCard', url: docs?.cetScoreCardUrl },
                 { label: 'Aadhaar Card copy', field: 'aadhaar', url: docs?.aadhaarUrl },
-                { label: 'Fees Paid Receipt', field: 'feesPaidReceipt', url: docs?.feesPaidReceiptUrl },
+                { label: 'College Fees Receipt', field: 'feesPaidReceipt', url: docs?.feesPaidReceiptUrl },
+                { label: 'Admission Form Fee Receipt', field: 'admissionFormFeeReceipt', url: docs?.admissionFormFeeReceiptUrl },
                 { label: 'Caste Certificate (Optional)', field: 'casteCertificate', url: docs?.casteCertificateUrl },
                 { label: 'Domicile / Study Certificate', field: 'domicileCertificate', url: docs?.domicileCertificateUrl },
                 { label: 'Income / Gap Year Certificate', field: 'gapCertificate', url: docs?.gapCertificateUrl },
@@ -982,6 +983,23 @@ export const StudentViewPage: React.FC = () => {
                   />
                 ))}
             </div>
+            {docs && (docs.admissionFormFeePaymentMode || docs.admissionFormFeeUtr) && (
+              <div className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/20 dark:bg-neutral-850/10 space-y-3 mt-5">
+                <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest">Admission Form Fee payment Details</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[9px] text-neutral-400 font-bold uppercase">Payment Mode</p>
+                    <p className="text-xs font-bold text-neutral-800 dark:text-neutral-250 mt-0.5">{docs.admissionFormFeePaymentMode || '—'}</p>
+                  </div>
+                  {docs.admissionFormFeePaymentMode === 'ONLINE' && (
+                    <div>
+                      <p className="text-[9px] text-neutral-400 font-bold uppercase">UTR / Transaction ID</p>
+                      <p className="text-xs font-bold text-neutral-800 dark:text-neutral-250 mt-0.5">{docs.admissionFormFeeUtr || '—'}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

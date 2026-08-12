@@ -134,7 +134,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         },
         {
             id: 'feesPaidReceipt',
-            label: 'Fees Paid Receipt',
+            label: 'College Fees Receipt',
             description: 'Shows fee payment confirmation',
             icon: FileText,
             required: true,
@@ -176,11 +176,39 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             colorRequired: false,
             hint: 'JPG or PNG · Max 10 MB',
         },
+        {
+            id: 'admissionFormFeeReceipt',
+            label: 'Admission Form Fee Receipt',
+            description: 'Offline receipt or online payment screenshot',
+            icon: FileText,
+            required: true,
+            apiField: 'admissionFormFeeReceipt',
+            dbKey: 'admissionFormFeeReceiptUrl',
+            colorRequired: false,
+            hint: 'JPG or PNG · Max 10 MB',
+        },
     ];
 
     // ── State ────────────────────────────────────────────────────────────────
     const [docStates,        setDocStates]       = useState({});
     const [isUploading,      setIsUploading]     = useState(false);
+    const [paymentMode,      setPaymentMode]     = useState(() => data?.admissionFormFeePaymentMode || 'OFFLINE');
+    const [utrNumber,        setUtrNumber]       = useState(() => data?.admissionFormFeeUtr || '');
+    const [utrError,         setUtrError]        = useState('');
+
+    const handlePaymentModeChange = (mode) => {
+        if (readOnly) return;
+        setPaymentMode(mode);
+        if (mode === 'OFFLINE') {
+            setUtrError('');
+        }
+    };
+
+    const handleUtrChange = (e) => {
+        if (readOnly) return;
+        setUtrNumber(e.target.value);
+        setUtrError('');
+    };
     const [dragOver,         setDragOver]        = useState(null);
     const [previewDoc,       setPreviewDoc]      = useState(null);
     const [submitAttempted,  setSubmitAttempted] = useState(false);
@@ -429,7 +457,30 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             return;
         }
 
-        onNext();
+        if (paymentMode === 'ONLINE') {
+            if (!utrNumber || !utrNumber.trim()) {
+                setUtrError('UTR / Transaction Number is required for online payments.');
+                toast.error('Please enter the UTR / Transaction Number.');
+                return;
+            }
+        }
+
+        setIsUploading(true);
+        try {
+            const saveRes = await api.post('/student/documents', {
+                admissionFormFeeUtr: paymentMode === 'ONLINE' ? utrNumber : null,
+                admissionFormFeePaymentMode: paymentMode,
+            });
+            
+            if (saveRes.data.success) {
+                if (onUploadSuccess) await onUploadSuccess();
+                onNext();
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to save payment details.');
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     // ── Badge Renderer ───────────────────────────────────────────────────────
@@ -797,6 +848,86 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         );
     };
 
+    const renderCustomUploader = (docId) => {
+        const doc = DOCS.find(d => d.id === docId);
+        if (!doc) return null;
+        
+        const state      = docStates[docId] || {};
+        const cardState  = getCardState(doc);
+        const isBusy     = cardState === 'processing' || cardState === 'uploading';
+        const previewUrl = cardState === 'uploaded' ? resolveDocUrl(data?.[doc.dbKey]) : state?.previewUrl;
+        const showPreview = (cardState === 'uploaded' || cardState === 'ready' || cardState === 'uploading') && previewUrl;
+        const filename = cardState === 'uploaded' ? getFilenameFromUrl(data?.[doc.dbKey]) : '';
+
+        return (
+            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-white flex flex-col items-center justify-center space-y-3 min-h-[140px] relative">
+                {showPreview ? (
+                    <div className="w-full flex flex-col items-center">
+                        <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2 w-full max-w-[200px]">
+                            <img src={previewUrl} alt="Preview" className="w-full h-24 object-contain" />
+                            <button
+                                type="button"
+                                onClick={() => setPreviewDoc({ docId, url: previewUrl })}
+                                className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-md px-1.5 py-0.5 text-[9px] flex items-center gap-1 transition-colors"
+                            >
+                                <Eye size={9} /> View
+                            </button>
+                        </div>
+                        {filename && <p className="text-[10px] text-slate-500 font-medium truncate max-w-xs">{filename}</p>}
+                        
+                        <div className="flex gap-2 w-full max-w-[200px] mt-2">
+                            <button
+                                type="button"
+                                onClick={() => handleReplaceClick(docId)}
+                                disabled={isBusy || readOnly}
+                                className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-[10px] font-bold transition-all disabled:opacity-50"
+                            >
+                                <RefreshCw size={10} /> Replace
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleRemoveClick(docId)}
+                                disabled={isBusy || readOnly}
+                                className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-[10px] font-bold transition-all disabled:opacity-50"
+                            >
+                                <Trash2 size={10} /> Remove
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center flex flex-col items-center">
+                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mb-2 text-slate-400">
+                            <UploadCloud size={20} />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (fileInputRefs.current[docId]) {
+                                    fileInputRefs.current[docId].click();
+                                }
+                            }}
+                            disabled={isBusy || readOnly}
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
+                        >
+                            {isBusy ? <Loader2 size={12} className="animate-spin inline mr-1" /> : 'Choose File'}
+                        </button>
+                        <p className="text-[10px] text-slate-400 mt-1">PNG or JPG, max 10MB</p>
+                    </div>
+                )}
+
+                {/* Hidden input trigger */}
+                <input
+                    ref={el => { if (el) fileInputRefs.current[docId] = el; }}
+                    type="file"
+                    className="hidden"
+                    accept={ACCEPTED_MIME}
+                    disabled={isBusy || readOnly}
+                    onChange={(e) => handleFileInputChange(e, docId)}
+                />
+            </div>
+        );
+    };
+
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
         <>
@@ -854,7 +985,114 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
 
                 {/* Document grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {DOCS.map(renderCard)}
+                    {DOCS.filter(d => d.id !== 'admissionFormFeeReceipt').map(renderCard)}
+                </div>
+
+                {/* ── Admission Form Fee Receipt Section ── */}
+                <div className="bg-slate-50/50 rounded-xl border border-slate-200 p-5 mt-6 space-y-4">
+                    <div className="flex items-center gap-3 border-b border-slate-200/60 pb-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                            <ClipboardList size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-slate-900">Admission Form Fee Receipt <span className="text-red-500">*</span></h3>
+                            <p className="text-xs text-slate-500">Provide payment proof of ₹500 for the admission application form</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <label className={`flex-1 flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                            paymentMode === 'OFFLINE' ? 'border-primary-500 bg-primary-50/20' : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}>
+                            <div className="flex items-center gap-2.5">
+                                <input
+                                    type="radio"
+                                    name="admissionFormFeePaymentMode"
+                                    value="OFFLINE"
+                                    checked={paymentMode === 'OFFLINE'}
+                                    disabled={readOnly}
+                                    onChange={() => handlePaymentModeChange('OFFLINE')}
+                                    className="text-primary-600 focus:ring-primary-500"
+                                />
+                                <div>
+                                    <span className="text-xs font-bold text-slate-900 block">Paid Offline</span>
+                                    <span className="text-[10px] text-slate-500">Receipt given by college office</span>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label className={`flex-1 flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                            paymentMode === 'ONLINE' ? 'border-primary-500 bg-primary-50/20' : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}>
+                            <div className="flex items-center gap-2.5">
+                                <input
+                                    type="radio"
+                                    name="admissionFormFeePaymentMode"
+                                    value="ONLINE"
+                                    checked={paymentMode === 'ONLINE'}
+                                    disabled={readOnly}
+                                    onChange={() => handlePaymentModeChange('ONLINE')}
+                                    className="text-primary-600 focus:ring-primary-500"
+                                />
+                                <div>
+                                    <span className="text-xs font-bold text-slate-900 block">Pay Online via QR Code</span>
+                                    <span className="text-[10px] text-slate-500">Scan QR, enter UTR &amp; upload screenshot</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                    {paymentMode === 'OFFLINE' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                            <div>
+                                <h4 className="text-xs font-bold text-slate-700 mb-1">Upload Offline Fee Receipt</h4>
+                                <p className="text-[10px] text-slate-400 mb-3">Please upload a clear scan/photo of the physical receipt given by the college office.</p>
+                                {renderCustomUploader('admissionFormFeeReceipt')}
+                            </div>
+                        </div>
+                    )}
+
+                    {paymentMode === 'ONLINE' && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            {/* QR Code Card */}
+                            <div className="bg-white rounded-xl p-4 border border-slate-200 flex flex-col items-center justify-center space-y-3">
+                                <span className="text-[10px] font-bold text-slate-650 uppercase tracking-wider">Scan to Pay ₹500</span>
+                                <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                    <img src="/QR_code.jpg" alt="Payment QR Code" className="w-32 h-32 object-contain" />
+                                </div>
+                                <a href="/QR_code.jpg" download="Jain_College_Admission_Fee_QR.jpg" className="text-[10px] font-bold text-primary-600 hover:underline">
+                                    Download QR Code
+                                </a>
+                            </div>
+
+                            {/* Inputs Card */}
+                            <div className="md:col-span-2 space-y-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-700 block">
+                                        UTR / Transaction Number <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="admissionFormFeeUtr"
+                                        value={utrNumber}
+                                        onChange={handleUtrChange}
+                                        disabled={readOnly}
+                                        placeholder="Enter 12-digit UTR or Transaction ID"
+                                        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 text-xs text-slate-900 font-semibold"
+                                    />
+                                    {utrError && <p className="text-red-500 text-[10px] font-semibold mt-0.5">{utrError}</p>}
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-700 block">
+                                        Upload Payment Screenshot <span className="text-red-500">*</span>
+                                    </label>
+                                    <p className="text-[10px] text-slate-400 mb-2">Upload screenshot showing UTR number, date and amount.</p>
+                                    {renderCustomUploader('admissionFormFeeReceipt')}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Upload progress bar */}
@@ -882,9 +1120,9 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                         id="bottom-submit-btn"
                         disabled={isUploading || anyBusy}
                         className="btn-primary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-6 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold transition-opacity"
-                        aria-label="Save documents and continue to next step"
+                        aria-label={readOnly ? "Continue to next step" : "Save documents and continue to next step"}
                     >
-                        <span>Save &amp; Continue</span> <ChevronRight size={16} />
+                        <span>{readOnly ? 'Continue' : 'Save & Continue'}</span> <ChevronRight size={16} />
                     </button>
                 </div>
             </form>

@@ -81,10 +81,10 @@ export function normalizeDocumentType(docType: string): string {
     'studycertificate': 'domicileCertificate',
     '7yearsstudycertificate': 'domicileCertificate',
 
-    // 10. Fees Paid Receipt (Blur Only)
     'feespaidreceipt': 'feesPaidReceipt',
     'feereceipt': 'feesPaidReceipt',
     'admissionfeereceipt': 'admissionFeeReceipt',
+    'admissionformfeereceipt': 'admissionFormFeeReceipt',
   };
 
   return map[clean] || docType;
@@ -99,6 +99,7 @@ export const DOCUMENT_VALIDATION_CONFIG: Record<string, DocumentRule> = {
   tenthMarksheet: { checkColor: false, checkBlur: false },
   aadhaar: { checkColor: false, checkBlur: false },
   feesPaidReceipt: { checkColor: false, checkBlur: false },
+  admissionFormFeeReceipt: { checkColor: false, checkBlur: false },
 
   // COLOR OR BLACK & WHITE ACCEPTED
   signature: { checkColor: false, checkBlur: false },

@@ -92,7 +92,8 @@ const getMissingFields = (app: AdmissionApplication | null) => {
   } else {
     if (!docs?.twelfthMarksheetUrl) missing.push("Documents: 12th/PUC Marksheet");
   }
-  if (!docs?.feesPaidReceiptUrl) missing.push("Documents: Fees Paid Receipt");
+  if (!docs?.feesPaidReceiptUrl) missing.push("Documents: College Fees Receipt");
+  if (!docs?.admissionFormFeeReceiptUrl) missing.push("Documents: Admission Form Fee Receipt");
   if (!docs?.aadhaarUrl) missing.push("Documents: Aadhaar Card");
   if (!docs?.domicileCertificateUrl) missing.push("Documents: Domicile/Study Certificate");
 
@@ -350,7 +351,8 @@ export const AdmissionReviewPage: React.FC = () => {
     if (app?.applicationStatus !== 'RESUBMITTED') return false;
     if (sectionKey === 'documents' && documentsVerified) return false;
     if (
-      (sectionKey === 'personal' ||
+      (sectionKey === 'admission' ||
+        sectionKey === 'personal' ||
         sectionKey === 'parent' ||
         sectionKey === 'address' ||
         sectionKey === 'academic') &&
@@ -613,13 +615,22 @@ export const AdmissionReviewPage: React.FC = () => {
           if (f.startsWith('Address:'))  sectionSet.add('address');
           if (f.startsWith('Academic:')) sectionSet.add('academic');
           if (f.startsWith('Documents:')) sectionSet.add('documents');
-          if (f.startsWith('Personal:') || f.startsWith('Admission:')) sectionSet.add('personal');
+          if (f.startsWith('Personal:')) sectionSet.add('personal');
+          if (f.startsWith('Admission:')) sectionSet.add('admission');
           if (f.startsWith('Parent:'))  sectionSet.add('parent');
         });
 
         // Also parse custom corrections requested in the remarks
         const remarksLower = (remarks || '').toLowerCase();
         
+        // Check admission details
+        const admissionKeywords = [
+          'admission type', 'preferred branch', 'branch', 'aadhaar', 'qualification'
+        ];
+        if (admissionKeywords.some(kw => remarksLower.includes(kw))) {
+          sectionSet.add('admission');
+        }
+
         // Check personal details
         const personalKeywords = [
           'first name', 'middle name', 'last name', 'gender', 'birth', 'dob', 
@@ -631,7 +642,7 @@ export const AdmissionReviewPage: React.FC = () => {
 
         // Check parent details
         const parentKeywords = [
-          'father', 'mother', 'parent', 'guardian', 'income'
+          'father', 'mother', 'parent', 'guardian', 'annual income'
         ];
         if (parentKeywords.some(kw => remarksLower.includes(kw))) {
           sectionSet.add('parent');
@@ -883,7 +894,27 @@ export const AdmissionReviewPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ─── SECTION 1: Personal Profile ─── */}
+        {/* ─── SECTION 1: Admission Details ─── */}
+        <div className={getSectionClass('admission')}>
+          <h3 className="text-xs uppercase font-black tracking-widest text-neutral-450 flex items-center justify-between border-l-4 border-primary-500 pl-2">
+            <span className="flex items-center gap-2">
+              <GraduationCap size={14} className="text-primary-500" /> Admission Details
+            </span>
+            {app?.applicationStatus === 'RESUBMITTED' && (
+              isSectionCorrected('admission') 
+                ? <span className="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-bold">🟠 Corrected Section</span>
+                : <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">✅ Already Verified</span>
+            )}
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-4">
+            <FormField label="Admission Type" value={app.admissionType} remarkText="Admission Type" />
+            <FormField label="Preferred Branch" value={app.branch?.name} remarkText="Preferred Branch" />
+            <FormField label="Aadhaar Number" value={app.aadhaar} remarkText="Aadhaar" />
+            <FormField label="Qualification" value={app.qualification} remarkText="Qualification" />
+          </div>
+        </div>
+
+        {/* ─── SECTION 2: Personal Profile ─── */}
         <div className={getSectionClass('personal')}>
           <h3 className="text-xs uppercase font-black tracking-widest text-neutral-450 flex items-center justify-between border-l-4 border-primary-500 pl-2">
             <span className="flex items-center gap-2">
@@ -1153,7 +1184,8 @@ export const AdmissionReviewPage: React.FC = () => {
                 ]),
                 { label: 'Entrance Score Card (CET/DCET)', field: 'cetScoreCard', url: docs.cetScoreCardUrl },
                 { label: 'Aadhaar Card copy', field: 'aadhaar', url: docs.aadhaarUrl },
-                { label: 'Fees Paid Receipt', field: 'feesPaidReceipt', url: docs.feesPaidReceiptUrl },
+                { label: 'College Fees Receipt', field: 'feesPaidReceipt', url: docs.feesPaidReceiptUrl },
+                { label: 'Admission Form Fee Receipt', field: 'admissionFormFeeReceipt', url: docs.admissionFormFeeReceiptUrl },
                 { label: 'Caste Certificate (Optional)', field: 'casteCertificate', url: docs.casteCertificateUrl },
                 { label: 'Domicile / Study Certificate', field: 'domicileCertificate', url: docs.domicileCertificateUrl },
                 { label: 'Income / Gap Year Certificate', field: 'gapCertificate', url: docs.gapCertificateUrl },
@@ -1173,6 +1205,7 @@ export const AdmissionReviewPage: React.FC = () => {
                       diplomasemester6marksheet: ['diploma 6th', 'semester 6', 'sem 6'],
                       cetscorecard: ['cet', 'dcet', 'entrance'],
                       feespaidreceipt: ['fees paid', 'receipt', 'fees verified'],
+                      admissionformfeereceipt: ['admission form', 'offline receipt', 'payment screenshot', 'utr'],
                       castecertificate: ['caste'],
                       gapcertificate: ['income', 'gap'],
                       domicilecertificate: ['study', 'domicile']
@@ -1214,7 +1247,15 @@ export const AdmissionReviewPage: React.FC = () => {
                           {!isCorrected && status === 'REJECTED' && <XCircle size={16} />}
                           {!isCorrected && status === 'PENDING' && <FileText size={16} />}
                         </div>
-                        <span className="font-bold truncate">{label}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold truncate">{label}</span>
+                          {field === 'admissionFormFeeReceipt' && docs?.admissionFormFeePaymentMode && (
+                            <span className="text-[10px] text-neutral-500 font-semibold mt-0.5">
+                              Mode: {docs.admissionFormFeePaymentMode}
+                              {docs.admissionFormFeePaymentMode === 'ONLINE' && docs.admissionFormFeeUtr && ` (UTR: ${docs.admissionFormFeeUtr})`}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider shrink-0 ${

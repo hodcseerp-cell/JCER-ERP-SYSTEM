@@ -43,6 +43,14 @@ app.use(cookieParser());
 // 3. Structured Request Logging (Correlation ID & Latency tracking)
 app.use(loggingMiddleware);
 
+// Disable browser caching globally on dynamic API requests
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // 4. Rate Limiting (Perimeter Defense)
 app.use('/api', globalLimiter);
 

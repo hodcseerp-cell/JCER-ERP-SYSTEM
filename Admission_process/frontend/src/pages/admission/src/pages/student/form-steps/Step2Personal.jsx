@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../../../services/api';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SelectDropdown from '../../../components/SelectDropdown';
 
 const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [loading, setLoading] = useState(false);
+    const [originalValues, setOriginalValues] = useState(null);
+
+    useEffect(() => {
+        if (data && !originalValues) {
+            setOriginalValues({ ...data });
+        }
+    }, [data, originalValues]);
 
     const isFieldFlagged = (fieldName) => {
         if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
@@ -13,6 +20,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
         const remarksLower = adminRemarks.toLowerCase();
         const matches = {
             firstName: ['first name'],
+            middleName: ['middle name'],
             lastName: ['last name'],
             gender: ['gender'],
             dateOfBirth: ['date of birth', 'dob'],
@@ -25,6 +33,50 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
         };
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
+    };
+
+    const isFieldCorrected = (fieldName) => {
+        if (!originalValues) return false;
+        if (!isFieldFlagged(fieldName)) return false;
+        
+        const currentValue = data[fieldName] || '';
+        const originalValue = originalValues[fieldName] || '';
+        
+        return currentValue !== originalValue;
+    };
+
+    const getFieldContainerClass = (fieldName) => {
+        const base = "space-y-1.5 p-3.5 rounded-xl transition-all duration-300";
+        if (!isFieldFlagged(fieldName)) return base;
+        if (isFieldCorrected(fieldName)) {
+            return `${base} border-2 border-emerald-500 bg-emerald-50/10`;
+        }
+        return `${base} border-2 border-red-500 bg-red-50/10`;
+    };
+
+    const getFieldInputClass = (fieldName, extra = "") => {
+        const baseClass = `input-premium h-11 uppercase ${extra}`;
+        if (!isFieldFlagged(fieldName)) return baseClass;
+        if (isFieldCorrected(fieldName)) {
+            return `${baseClass} border-emerald-500 focus:border-emerald-500 focus:ring-emerald-500/20`;
+        }
+        return `${baseClass} border-red-500 focus:border-red-500 focus:ring-red-500/20`;
+    };
+
+    const renderFeedback = (fieldName) => {
+        if (!isFieldFlagged(fieldName)) return null;
+        if (isFieldCorrected(fieldName)) {
+            return (
+                <p className="text-emerald-600 text-[11px] font-bold mt-1 flex items-center gap-1">
+                    <CheckCircle2 size={12} className="text-emerald-500" /> Corrected
+                </p>
+            );
+        }
+        return (
+            <p className="text-red-500 text-[11px] font-bold mt-1">
+                🔴 Requires correction / verification
+            </p>
+        );
     };
 
     const handleSubmit = async (e) => {
@@ -103,45 +155,45 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             </div>
 
             <fieldset disabled={readOnly} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 p-0 m-0 border-0 w-full">
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('firstName') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* First Name */}
+                <div className={getFieldContainerClass('firstName')}>
                     <label className="text-sm font-medium text-slate-700">First Name (As per SSLC) <span className="text-red-500">*</span></label>
-                    <input required type="text" name="firstName" className={`input-premium h-11 uppercase ${isFieldFlagged('firstName') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`} value={data.firstName || ''} onChange={handleChange} placeholder="Enter first name" />
-                    {isFieldFlagged('firstName') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    <input required type="text" name="firstName" className={getFieldInputClass('firstName')} value={data.firstName || ''} onChange={handleChange} placeholder="Enter first name" />
+                    {renderFeedback('firstName')}
                     {!data.firstName && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className="space-y-1.5 p-3.5 rounded-xl">
+                {/* Middle Name */}
+                <div className={getFieldContainerClass('middleName')}>
                     <label className="text-sm font-medium text-slate-700">Middle Name</label>
-                    <input type="text" name="middleName" className="input-premium h-11 uppercase" value={data.middleName || ''} onChange={handleChange} placeholder="Enter middle name" />
+                    <input type="text" name="middleName" className={getFieldInputClass('middleName')} value={data.middleName || ''} onChange={handleChange} placeholder="Enter middle name" />
+                    {renderFeedback('middleName')}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('lastName') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Last Name */}
+                <div className={getFieldContainerClass('lastName')}>
                     <label className="text-sm font-medium text-slate-700">Last Name (As per SSLC) <span className="text-red-500">*</span></label>
-                    <input required type="text" name="lastName" className={`input-premium h-11 uppercase ${isFieldFlagged('lastName') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`} value={data.lastName || ''} onChange={handleChange} placeholder="Enter last name" />
-                    {isFieldFlagged('lastName') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    <input required type="text" name="lastName" className={getFieldInputClass('lastName')} value={data.lastName || ''} onChange={handleChange} placeholder="Enter last name" />
+                    {renderFeedback('lastName')}
                     {!data.lastName && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('caste') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Caste */}
+                <div className={getFieldContainerClass('caste')}>
                     <label className="text-sm font-medium text-slate-700">Caste <span className="text-red-500">*</span></label>
-                    <input required type="text" name="caste" className={`input-premium h-11 uppercase ${isFieldFlagged('caste') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`} value={data.caste || ''} onChange={handleChange} placeholder="Enter caste" />
-                    {isFieldFlagged('caste') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    <input required type="text" name="caste" className={getFieldInputClass('caste')} value={data.caste || ''} onChange={handleChange} placeholder="Enter caste" />
+                    {renderFeedback('caste')}
                     {!data.caste && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('gender') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Gender */}
+                <div className={getFieldContainerClass('gender')}>
                     <label className="text-sm font-medium text-slate-700">Gender <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="gender" name="gender" required
@@ -154,35 +206,33 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             { value: 'OTHER', label: 'Other' },
                         ]}
                     />
-                    {isFieldFlagged('gender') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('gender')}
                     {!data.gender && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('dateOfBirth') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Date of Birth */}
+                <div className={getFieldContainerClass('dateOfBirth')}>
                     <label className="text-sm font-medium text-slate-700">Date of Birth <span className="text-red-500">*</span></label>
                     <input
                         required
                         type="text"
                         name="dateOfBirth"
-                        className={`input-premium h-11 ${isFieldFlagged('dateOfBirth') ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                        className={getFieldInputClass('dateOfBirth')}
                         value={data.dateOfBirth || ''}
                         onChange={handleChange}
                         placeholder="DD/MM/YYYY"
                         maxLength={10}
                     />
-                    {isFieldFlagged('dateOfBirth') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('dateOfBirth')}
                     {!data.dateOfBirth && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('category') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Category */}
+                <div className={getFieldContainerClass('category')}>
                     <label className="text-sm font-medium text-slate-700">Category <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="category" name="category" required
@@ -203,15 +253,14 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             { value: 'SEBC', label: 'SEBC (Socially and Educationally Backward Classes)' },
                         ]}
                     />
-                    {isFieldFlagged('category') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('category')}
                     {!data.category && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('religion') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Religion */}
+                <div className={getFieldContainerClass('religion')}>
                     <label className="text-sm font-medium text-slate-700">Religion <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="religion" name="religion" required
@@ -220,15 +269,14 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         placeholder="Select religion..."
                         options={['HINDU', 'MUSLIM', 'CHRISTIAN', 'JAIN', 'SIKH', 'BUDDHIST', 'OTHER'].map(r => ({ value: r, label: r }))}
                     />
-                    {isFieldFlagged('religion') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('religion')}
                     {!data.religion && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('nationality') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Nationality */}
+                <div className={getFieldContainerClass('nationality')}>
                     <label className="text-sm font-medium text-slate-700">Nationality <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="nationality" name="nationality" required
@@ -241,15 +289,14 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             { value: 'FOREIGN', label: 'Foreign' },
                         ]}
                     />
-                    {isFieldFlagged('nationality') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('nationality')}
                     {!data.nationality && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('areaType') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                {/* Area Type */}
+                <div className={getFieldContainerClass('areaType')}>
                     <label className="text-sm font-medium text-slate-700">Area Type <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="areaType" name="areaType" required
@@ -261,16 +308,15 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             { value: 'RURAL', label: 'Rural' },
                         ]}
                     />
-                    {isFieldFlagged('areaType') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('areaType')}
                     {!data.areaType && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
-                <div className={`space-y-1.5 p-3.5 rounded-xl transition-all ${isFieldFlagged('studiedInKarnataka') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
-                    <label className="text-sm font-medium text-slate-755">Karnataka Resident (7yrs) <span className="text-red-500">*</span></label>
+                {/* studiedInKarnataka */}
+                <div className={getFieldContainerClass('studiedInKarnataka')}>
+                    <label className="text-sm font-medium text-slate-700">Karnataka Resident (7yrs) <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="studiedInKarnataka" name="studiedInKarnataka" required
                         value={data.studiedInKarnataka !== undefined ? String(data.studiedInKarnataka) : ''}
@@ -281,9 +327,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             { value: 'false', label: 'No' },
                         ]}
                     />
-                    {isFieldFlagged('studiedInKarnataka') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('studiedInKarnataka')}
                     {!data.studiedInKarnataka && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
@@ -313,7 +357,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     className="btn-primary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-6 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold"
                 >
                     {loading ? <Loader2 size={18} className="animate-spin" /> : (
-                        <>Save & Continue <ChevronRight size={16} /></>
+                        <>{readOnly ? 'Continue' : 'Save & Continue'} <ChevronRight size={16} /></>
                     )}
                 </button>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../../../../../services/api';
 import { Loader2, ChevronRight, CheckCircle2, XCircle, Fingerprint, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -7,6 +7,13 @@ import SelectDropdown from '../../../components/SelectDropdown';
 const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [branches, setBranches] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [originalValues, setOriginalValues] = useState(null);
+
+    useEffect(() => {
+        if (data && !originalValues) {
+            setOriginalValues({ ...data });
+        }
+    }, [data, originalValues]);
 
     const isFieldFlagged = (fieldName) => {
         if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
@@ -23,12 +30,50 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
     };
-    
-    // Validation states
-    const [isCheckingAadhaar, setIsCheckingAadhaar] = useState(false);
-    const [aadhaarError, setAadhaarError] = useState('');
-    const [isCheckingCet, setIsCheckingCet] = useState(false);
-    const [cetError, setCetError] = useState('');
+
+    const isFieldCorrected = (fieldName) => {
+        if (!originalValues) return false;
+        if (!isFieldFlagged(fieldName)) return false;
+        
+        const currentValue = data[fieldName] || '';
+        const originalValue = originalValues[fieldName] || '';
+        
+        return currentValue !== originalValue;
+    };
+
+    const getFieldContainerClass = (fieldName, extra = "") => {
+        const base = `space-y-1.5 p-3 rounded-xl transition-all duration-300 ${extra}`;
+        if (!isFieldFlagged(fieldName)) return base;
+        if (isFieldCorrected(fieldName)) {
+            return `${base} border-2 border-emerald-500 bg-emerald-50/10`;
+        }
+        return `${base} border-2 border-red-500 bg-red-50/10`;
+    };
+
+    const getFieldInputClass = (fieldName, extra = "") => {
+        const baseClass = `input-premium h-11 uppercase ${extra}`;
+        if (!isFieldFlagged(fieldName)) return baseClass;
+        if (isFieldCorrected(fieldName)) {
+            return `${baseClass} border-emerald-500 focus:border-emerald-500 focus:ring-emerald-500/20`;
+        }
+        return `${baseClass} border-red-500 focus:border-red-500 focus:ring-red-500/20`;
+    };
+
+    const renderFeedback = (fieldName) => {
+        if (!isFieldFlagged(fieldName)) return null;
+        if (isFieldCorrected(fieldName)) {
+            return (
+                <p className="text-emerald-600 text-[11px] font-bold mt-1 flex items-center gap-1">
+                    <CheckCircle2 size={12} className="text-emerald-500" /> Corrected
+                </p>
+            );
+        }
+        return (
+            <p className="text-red-500 text-[11px] font-bold mt-1">
+                🔴 Requires correction / verification
+            </p>
+        );
+    };
 
     useEffect(() => {
         const fetchBranches = async () => {
@@ -166,6 +211,12 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
         }
     };
 
+    // Validation states
+    const [isCheckingAadhaar, setIsCheckingAadhaar] = useState(false);
+    const [aadhaarError, setAadhaarError] = useState('');
+    const [isCheckingCet, setIsCheckingCet] = useState(false);
+    const [cetError, setCetError] = useState('');
+
     const isFormDisabled = !readOnly && (loading || isCheckingAadhaar || isCheckingCet || !!aadhaarError || !!cetError);
 
     return (
@@ -178,7 +229,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                 {/* Admission Type */}
-                <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('admissionType') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                <div className={getFieldContainerClass('admissionType')}>
                     <label className="block text-sm font-medium text-slate-700">Admission Type <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="admissionType"
@@ -201,16 +252,14 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                             { value: 'MANAGEMENT', label: 'Management Quota' },
                         ]}
                     />
-                    {isFieldFlagged('admissionType') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('admissionType')}
                     {!data.admissionType && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
 
                 {/* Preferred Branch */}
-                <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('branchId') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                <div className={getFieldContainerClass('branchId')}>
                     <label className="block text-sm font-medium text-slate-700">Preferred Branch <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="branchId"
@@ -220,9 +269,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                         placeholder="Select preferred engineering branch..."
                         options={branches.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))}
                     />
-                    {isFieldFlagged('branchId') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('branchId')}
                     {!data.branchId && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
@@ -230,7 +277,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
 
                 {/* Qualification (displayed only for MANAGEMENT) */}
                 {data.admissionType === 'MANAGEMENT' && (
-                    <div className={`space-y-1.5 md:col-span-2 p-3 rounded-xl transition-all ${isFieldFlagged('qualification') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    <div className={getFieldContainerClass('qualification', 'md:col-span-2')}>
                         <label className="block text-sm font-medium text-slate-700">Qualification <span className="text-red-500">*</span></label>
                         <SelectDropdown
                             id="qualification"
@@ -243,9 +290,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                                 { value: 'DIPLOMA', label: 'Diploma' },
                             ]}
                         />
-                        {isFieldFlagged('qualification') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        {renderFeedback('qualification')}
                         {!data.qualification && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
@@ -254,13 +299,13 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
 
                 {/* COMEDK Number */}
                 {data.admissionType === 'COMEDK' && (
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('cetNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    <div className={getFieldContainerClass('cetNumber')}>
                         <label className="block text-sm font-medium text-slate-700">COMEDK Application Number <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <input
                                 required
                                 type="text"
-                                className={`input-premium h-11 uppercase pr-10 ${cetError || isFieldFlagged('cetNumber') ? 'border-red-500' : ''}`}
+                                className={getFieldInputClass('cetNumber', 'pr-10')}
                                 value={data.cetNumber || ''}
                                 onChange={(e) => updateData({ cetNumber: e.target.value.toUpperCase() })}
                                 placeholder="Enter COMEDK application number"
@@ -271,9 +316,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                                 {!isCheckingCet && cetError && <XCircle size={18} className="text-red-500" />}
                             </div>
                         </div>
-                        {isFieldFlagged('cetNumber') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        {renderFeedback('cetNumber')}
                         {!data.cetNumber && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
@@ -282,7 +325,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                 )}
 
                 {/* Aadhaar Number */}
-                <div className={`space-y-1.5 md:col-span-2 p-3 rounded-xl transition-all ${isFieldFlagged('aadhaar') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                <div className={getFieldContainerClass('aadhaar', 'md:col-span-2')}>
                     <label className="block text-sm font-medium text-slate-700 flex items-center gap-2">
                         <Fingerprint size={16} className="text-slate-400" />
                         Aadhaar Number (UIDAI) <span className="text-red-500">*</span>
@@ -293,10 +336,10 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                             type="text"
                             maxLength={12}
                             placeholder="Enter 12-digit aadhaar number"
-                            className={`input-premium h-11 pr-10 uppercase ${
-                                (aadhaarError || isFieldFlagged('aadhaar')) ? 'border-red-500 ring-red-50' : 
+                            className={getFieldInputClass('aadhaar', `pr-10 ${
+                                (aadhaarError) ? 'border-red-500 ring-red-50' : 
                                 (data.aadhaar?.length === 12 && !isCheckingAadhaar) ? 'border-emerald-500 ring-emerald-50' : ''
-                            }`}
+                            }`)}
                             value={data.aadhaar || ''}
                             onChange={(e) => updateData({ aadhaar: e.target.value.replace(/\D/g, '') })}
                         />
@@ -306,18 +349,16 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                             {!isCheckingAadhaar && (aadhaarError || isFieldFlagged('aadhaar')) && <XCircle size={18} className="text-red-500" />}
                         </div>
                     </div>
-                    {isFieldFlagged('aadhaar') && (
-                        <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                    )}
+                    {renderFeedback('aadhaar')}
                     {!data.aadhaar && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                     {aadhaarError ? (
-                        <p className="text-[11px] font-medium text-red-500 flex items-center gap-1">
+                        <p className="text-[11px] font-medium text-red-500 flex items-center gap-1 mt-1">
                             <XCircle size={12} /> {aadhaarError}
                         </p>
                     ) : (
-                        <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                        <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-1">
                             <Info size={12} /> Aadhaar is required to prevent duplicate application profiles.
                         </p>
                     )}
@@ -325,13 +366,13 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
 
                 {/* KCET Number */}
                 {data.admissionType === 'KCET' && (
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('cetNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    <div className={getFieldContainerClass('cetNumber')}>
                         <label className="block text-sm font-medium text-slate-700">KCET Number <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <input
                                 required
                                 type="text"
-                                className={`input-premium h-11 uppercase pr-10 ${cetError || isFieldFlagged('cetNumber') ? 'border-red-500' : ''}`}
+                                className={getFieldInputClass('cetNumber', 'pr-10')}
                                 value={data.cetNumber || ''}
                                 onChange={(e) => updateData({ cetNumber: e.target.value.toUpperCase() })}
                                 placeholder="Enter kcet number"
@@ -342,9 +383,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                                 {!isCheckingCet && cetError && <XCircle size={18} className="text-red-500" />}
                             </div>
                         </div>
-                        {isFieldFlagged('cetNumber') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        {renderFeedback('cetNumber')}
                         {!data.cetNumber && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
@@ -354,13 +393,13 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
 
                 {/* DCET Number */}
                 {data.admissionType === 'DCET' && (
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('dcetNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    <div className={getFieldContainerClass('dcetNumber')}>
                         <label className="block text-sm font-medium text-slate-700">DCET Number <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <input
                                 required
                                 type="text"
-                                className={`input-premium h-11 uppercase pr-10 ${cetError || isFieldFlagged('dcetNumber') ? 'border-red-500' : ''}`}
+                                className={getFieldInputClass('dcetNumber', 'pr-10')}
                                 value={data.dcetNumber || ''}
                                 onChange={(e) => updateData({ dcetNumber: e.target.value.toUpperCase() })}
                                 placeholder="Enter dcet number"
@@ -371,9 +410,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                                 {!isCheckingCet && cetError && <XCircle size={18} className="text-red-500" />}
                             </div>
                         </div>
-                        {isFieldFlagged('dcetNumber') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        {renderFeedback('dcetNumber')}
                         {!data.dcetNumber && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
@@ -392,7 +429,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                 >
                     {loading ? <Loader2 size={18} className="animate-spin" /> : (
                         <span className="flex items-center gap-2">
-                            Save & Continue
+                            {readOnly ? 'Continue' : 'Save & Continue'}
                             <ChevronRight size={16} />
                         </span>
                     )}

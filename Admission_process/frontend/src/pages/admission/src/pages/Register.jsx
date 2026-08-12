@@ -284,7 +284,7 @@ const Register = () => {
                                         name="password"
                                         value={formData.password}
                                         onChange={handleChange}
-                                        className="w-full px-3 py-2 pr-8 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400"
+                                        className={`w-full px-3 py-2 pr-8 bg-slate-50 border rounded-lg focus:ring-2 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 ${passwordError ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-primary-600 focus:border-primary-600'}`}
                                         placeholder="••••••••"
                                         required
                                     />
@@ -296,6 +296,7 @@ const Register = () => {
                                         {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                                     </button>
                                 </div>
+                                {passwordError && <p className="text-[11px] text-red-500 font-medium mt-0.5">{passwordError}</p>}
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5" htmlFor="confirmPassword">

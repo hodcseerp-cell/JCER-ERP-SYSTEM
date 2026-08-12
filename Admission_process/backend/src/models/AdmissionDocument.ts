@@ -18,6 +18,9 @@ class AdmissionDocument extends Model {
   public gapCertificateUrl!: string | null;
   public feesPaidReceiptUrl!: string | null;
   public admissionFeeReceiptUrl!: string | null;
+  public admissionFormFeeReceiptUrl!: string | null;
+  public admissionFormFeeUtr!: string | null;
+  public admissionFormFeePaymentMode!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -86,6 +89,18 @@ AdmissionDocument.init(
     },
     admissionFeeReceiptUrl: {
       type: DataTypes.STRING(500),
+      allowNull: true,
+    },
+    admissionFormFeeReceiptUrl: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    admissionFormFeeUtr: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    admissionFormFeePaymentMode: {
+      type: DataTypes.STRING(50),
       allowNull: true,
     },
   },

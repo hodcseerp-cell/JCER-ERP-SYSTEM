@@ -901,9 +901,9 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 <button type="button" onClick={onPrev} className="btn-secondary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-5 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold">
                     <ChevronLeft size={16} /> Back
                 </button>
-                <button type="submit" id="bottom-submit-btn" disabled={loading || !isSslcFormValid() || !isPucFormValid()} className={`btn-primary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-6 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold ${(loading || !isSslcFormValid() || !isPucFormValid()) ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}>
+                <button type="submit" id="bottom-submit-btn" disabled={loading || (!readOnly && (!isSslcFormValid() || !isPucFormValid()))} className={`btn-primary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-6 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold ${(loading || (!readOnly && (!isSslcFormValid() || !isPucFormValid()))) ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}>
                     {loading ? <Loader2 size={18} className="animate-spin" /> : (
-                        <>Save & Continue <ChevronRight size={16} /></>
+                        <>{readOnly ? 'Continue' : 'Save & Continue'} <ChevronRight size={16} /></>
                     )}
                 </button>
             </div>

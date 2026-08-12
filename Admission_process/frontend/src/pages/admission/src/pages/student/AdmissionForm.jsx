@@ -43,7 +43,7 @@ const STEP_FIELDS_MAP = {
     3: ['fatherName', 'motherName', 'parentMobile', 'fatherPhone', 'parentEmail', 'fatherEmail', 'occupation', 'fatherOccupation', 'motherOccupation', 'motherPhone', 'annualIncome', 'fatherAnnualIncome'],
     4: ['currentAddressLine1', 'currentCity', 'currentState', 'currentPincode', 'permanentAddressLine1', 'permanentCity', 'permanentState', 'permanentPincode', 'Address', 'City', 'Taluk', 'DistrictId', 'Pincode', 'sameAsCurrent', 'permanentAddress', 'permanentCity', 'permanentTaluk', 'permanentDistrictId', 'permanentPincode'],
     5: ['tenthSchool', 'tenthBoard', 'tenthPassingYear', 'tenthRegisterNumber', 'tenthMarksObtained', 'tenthMaxMarks', 'tenthPercentage', 'tenthAttempts', 'tenthSubjectMarks', 'sslcSchool', 'sslcBoard', 'sslcYear', 'sslcRegisterNumber', 'sslcMarksObtained', 'sslcMaxMarks', 'sslcPercentage', 'sslcAttempts', 'sslcSubjectMarks', 'twelfthSchool', 'twelfthBoard', 'twelfthPassingYear', 'twelfthRegisterNumber', 'twelfthStream', 'physicsMarks', 'mathsMarks', 'chemistryMarks', 'optionalSubject', 'optionalMarks', 'twelfthMaxMarks', 'twelfthAggregate', 'twelfthPercentage', 'twelfthAttempts', 'pucSchool', 'pucBoard', 'pucYear', 'pucRegisterNumber', 'pucStream', 'pucMaxMarks', 'pucAggregate', 'pucPercentage', 'pucAttempts', 'diplomaUniversity', 'diplomaYear', 'diplomaRegisterNumber', 'diplomaFinalYearMaxMarks', 'diplomaFinalYearObtained', 'diplomaPercentage', 'diplomaAttempts', 'cetScore', 'cetRank', 'cetYear', 'hasGap', 'gapReason'],
-    6: ['photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl', 'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl', 'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl', 'gapCertificateUrl']
+    6: ['photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl', 'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl', 'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl', 'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFormFeeReceiptUrl', 'admissionFormFeeUtr', 'admissionFormFeePaymentMode']
 };
 
 const getInitialDraftData = () => {
@@ -135,7 +135,7 @@ const AdmissionForm = () => {
 
     const syncApplicationState = async () => {
         try {
-            const res = await api.get('/application/full-details');
+            const res = await api.get(`/application/full-details?_t=${Date.now()}`);
             if (res.data.success && res.data.data) {
                 const details = res.data.data;
                 setFullDetails(details);
@@ -245,7 +245,7 @@ const AdmissionForm = () => {
         const fetchFullDetailsData = async () => {
             try {
                 if (stepStatus?.applicationStatus && stepStatus.applicationStatus !== 'DRAFT') {
-                    const detailRes = await api.get('/application/full-details');
+                    const detailRes = await api.get(`/application/full-details?_t=${Date.now()}`);
                     if (detailRes.data.success) {
                         setFullDetails(detailRes.data.data);
                     }
@@ -469,7 +469,7 @@ const AdmissionForm = () => {
     const handleDownloadPDF = async () => {
         const toastId = toast.loading('Preparing your admission letter…');
         try {
-            const res = await api.get('/application/full-details');
+            const res = await api.get(`/application/full-details?_t=${Date.now()}`);
             if (!res.data.success) throw new Error('Failed to load latest details');
             const details = res.data.data;
 

@@ -39,7 +39,7 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
 
         const fetchDetails = async () => {
             try {
-                const res = await api.get('/application/full-details');
+                const res = await api.get(`/application/full-details?_t=${Date.now()}`);
                 if (res.data.success) {
                     setDetails(res.data.data);
                 }
@@ -51,7 +51,7 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
             }
         };
         fetchDetails();
-    }, []);
+    }, [externalDetails]);
 
     const handleSubmit = async () => {
         if (!isConfirmed) {
@@ -389,8 +389,13 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
                         ) : (
                             <DataItem label="PUC / 12th Marksheet" value={docs.twelfthMarksheetUrl ? '✅ Uploaded' : '❌ Missing'} />
                         )}
-                        <DataItem label="Fees Paid Receipt" value={docs.feesPaidReceiptUrl ? '✅ Uploaded' : '❌ Missing'} />
+                        <DataItem label="College Fees Receipt" value={docs.feesPaidReceiptUrl ? '✅ Uploaded' : '❌ Missing'} />
                         <DataItem label="Domicile/Study Certificate" value={docs.domicileCertificateUrl ? '✅ Uploaded' : '❌ Missing'} />
+                        <DataItem label="Admission Form Fee Receipt" value={docs.admissionFormFeeReceiptUrl ? '✅ Uploaded' : '❌ Missing'} />
+                        <DataItem label="Admission Form Fee Payment Mode" value={docs.admissionFormFeePaymentMode || '❌ Not Selected'} />
+                        {docs.admissionFormFeePaymentMode === 'ONLINE' && (
+                            <DataItem label="Admission Form Fee UTR" value={docs.admissionFormFeeUtr || '❌ Missing'} />
+                        )}
                     </ReviewSection>
                 </div>
 

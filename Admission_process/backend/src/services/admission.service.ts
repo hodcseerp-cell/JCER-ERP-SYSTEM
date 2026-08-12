@@ -186,11 +186,38 @@ function computeStepStatus(admission: any) {
   const completedCount = steps.filter((s) => s.completed).length;
   const activeStepIndex = steps.findIndex((s) => !s.completed) + 1 || 7;
 
+  // Self-heal requested sections by checking them dynamically against actual remarks content
+  const remarksLower = (admission?.correctionRemarks || admission?.adminRemarks || '').toLowerCase();
+  const requestedRaw = admission?.correctionRequestedSections || [];
+  const requested = requestedRaw.filter((sectionKey: string) => {
+    if (sectionKey === 'documents') return true;
+    if (sectionKey === 'admission') {
+      const keywords = ['admission type', 'preferred branch', 'branch', 'aadhaar', 'qualification', 'cet number', 'dcet number'];
+      return keywords.some(kw => remarksLower.includes(kw));
+    }
+    if (sectionKey === 'personal') {
+      const keywords = ['first name', 'middle name', 'last name', 'gender', 'birth', 'dob', 'nationality', 'religion', 'caste', 'category', 'area type', 'email', 'mobile number', 'phone'];
+      return keywords.some(kw => remarksLower.includes(kw));
+    }
+    if (sectionKey === 'parent') {
+      const keywords = ['father', 'mother', 'parent', 'guardian', 'annual income'];
+      return keywords.some(kw => remarksLower.includes(kw));
+    }
+    if (sectionKey === 'address') {
+      const keywords = ['address', 'residence', 'pincode', 'city', 'state'];
+      return keywords.some(kw => remarksLower.includes(kw));
+    }
+    if (sectionKey === 'academic') {
+      const keywords = ['school', 'board', 'passing year', 'register number', 'marks', 'attempts', 'percentage', 'university', 'puc', 'diploma', 'cet', 'dcet'];
+      return keywords.some(kw => remarksLower.includes(kw));
+    }
+    return true;
+  });
+
   // Map each step to COMPLETED | ACTIVE | LOCKED | CORRECTION_REQUIRED
   const stepStatus: Record<number, string> = {};
   if (admission?.applicationStatus === 'CORRECTION_REQUIRED') {
     const keyMap = { 1: 'admission', 2: 'personal', 3: 'parent', 4: 'address', 5: 'academic', 6: 'documents' };
-    const requested = admission.correctionRequestedSections || [];
     for (let i = 1; i <= 6; i++) {
       const stepKey = keyMap[i as 1|2|3|4|5|6];
       if (requested.includes(stepKey)) {
@@ -271,7 +298,7 @@ function computeStepStatus(admission: any) {
     cancellationApprovedAt: admission?.cancellationApprovedAt || null,
     cancellationApprovedById: admission?.cancellationApprovedById || null,
     cancellationAdminRemarks: admission?.cancellationAdminRemarks || null,
-    correctionRequestedSections: admission?.correctionRequestedSections || [],
+    correctionRequestedSections: requested,
     correctionRemarks: admission?.correctionRemarks || null,
     correctionDeadline: admission?.correctionDeadline || null,
     correctionRequestedAt: admission?.correctionRequestedAt || null,
@@ -426,7 +453,7 @@ class AdmissionService {
       case 'documents': {
         const data = await AdmissionDocument.findOne({
           where: { admissionId: admission.id },
-          attributes: ['id', 'admissionId', 'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl', 'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl', 'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl', 'gapCertificateUrl', 'feesPaidReceiptUrl']
+          attributes: ['id', 'admissionId', 'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl', 'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl', 'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl', 'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFormFeeReceiptUrl', 'admissionFormFeeUtr', 'admissionFormFeePaymentMode']
         });
         return data;
       }
@@ -438,28 +465,36 @@ class AdmissionService {
   /** Returns step completion status for the StepIndicator component */
   async getStepStatus(userId: string): Promise<any> {
     const cacheKey = `admission:status:${userId}`;
-    const cached = await redisService.getCache(cacheKey);
-    if (cached) return cached;
+    if (process.env.NODE_ENV !== 'development') {
+      const cached = await redisService.getCache(cacheKey);
+      if (cached) return cached;
+    }
 
     const admission = await this.getOrCreate(userId);
     const full = await loadFullAdmission(admission);
     const result = computeStepStatus(full);
 
-    await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    if (process.env.NODE_ENV !== 'development') {
+      await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    }
     return result;
   }
 
   /** Returns full details for Step 7 review & SubmittedView */
   async getFullDetails(userId: string): Promise<any> {
     const cacheKey = `admission:full:${userId}`;
-    const cached = await redisService.getCache(cacheKey);
-    if (cached) return cached;
+    if (process.env.NODE_ENV !== 'development') {
+      const cached = await redisService.getCache(cacheKey);
+      if (cached) return cached;
+    }
 
     const admission = await this.getOrCreate(userId);
     const full = await loadFullAdmission(admission);
     const result = serializeAdmission(full);
 
-    await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    if (process.env.NODE_ENV !== 'development') {
+      await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    }
     return result;
   }
 
@@ -500,11 +535,12 @@ class AdmissionService {
   async saveStep2(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'personal');
+    const { id, admissionId, ...cleanPayload } = payload;
     const existing = await AdmissionPersonalDetail.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(payload);
+      await existing.update(cleanPayload);
     } else {
-      await AdmissionPersonalDetail.create({ admissionId: admission.id, ...payload });
+      await AdmissionPersonalDetail.create({ admissionId: admission.id, ...cleanPayload });
     }
     await this.invalidateCache(userId);
     return admission.id;
@@ -515,11 +551,12 @@ class AdmissionService {
   async saveStep3(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'parent');
+    const { id, admissionId, ...cleanPayload } = payload;
     const existing = await AdmissionParentDetail.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(payload);
+      await existing.update(cleanPayload);
     } else {
-      await AdmissionParentDetail.create({ admissionId: admission.id, ...payload });
+      await AdmissionParentDetail.create({ admissionId: admission.id, ...cleanPayload });
     }
     await this.invalidateCache(userId);
     return admission.id;
@@ -530,11 +567,12 @@ class AdmissionService {
   async saveStep4(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'address');
+    const { id, admissionId, ...cleanPayload } = payload;
     const existing = await AdmissionAddress.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(payload);
+      await existing.update(cleanPayload);
     } else {
-      await AdmissionAddress.create({ admissionId: admission.id, ...payload });
+      await AdmissionAddress.create({ admissionId: admission.id, ...cleanPayload });
     }
     await this.invalidateCache(userId);
     return admission.id;
@@ -603,7 +641,7 @@ class AdmissionService {
 
   // ── Step 6: Documents ─────────────────────────────────────────────────────
 
-  async saveStep6(userId: string, fileUrls: Record<string, string | null>): Promise<string> {
+  async saveStep6(userId: string, fileUrls: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'documents');
     const existing = await AdmissionDocument.findOne({ where: { admissionId: admission.id } });
@@ -611,9 +649,11 @@ class AdmissionService {
     const filesToCleanup: string[] = [];
     if (existing) {
       for (const [key, newVal] of Object.entries(fileUrls)) {
-        const oldVal = (existing as any)[key];
-        if (oldVal && oldVal !== newVal) {
-          filesToCleanup.push(oldVal);
+        if (key.endsWith('Url')) {
+          const oldVal = (existing as any)[key];
+          if (oldVal && oldVal !== newVal) {
+            filesToCleanup.push(oldVal);
+          }
         }
       }
       await existing.update(fileUrls);
@@ -944,7 +984,7 @@ class AdmissionService {
         'SUBMITTED': ['UNDER_REVIEW', 'CORRECTION_REQUIRED', 'APPROVED', 'REJECTED'],
         'UNDER_REVIEW': ['CORRECTION_REQUIRED', 'APPROVED', 'REJECTED'],
         'CORRECTION_REQUIRED': ['RESUBMITTED'],
-        'RESUBMITTED': ['UNDER_REVIEW', 'APPROVED', 'REJECTED'],
+        'RESUBMITTED': ['UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CORRECTION_REQUIRED'],
         'APPROVED': ['PRINCIPAL_APPROVED', 'REJECTED', 'CORRECTION_REQUIRED'],
         'PRINCIPAL_APPROVED': ['ENROLLED', 'REJECTED', 'CORRECTION_REQUIRED'],
         'ENROLLED': [],
@@ -1323,8 +1363,10 @@ class AdmissionService {
   /** Admin: stats for dashboard */
   async getDashboardStats(): Promise<any> {
     const cacheKey = 'admin:stats';
-    const cached = await redisService.getCache(cacheKey);
-    if (cached) return cached;
+    if (process.env.NODE_ENV !== 'development') {
+      const cached = await redisService.getCache(cacheKey);
+      if (cached) return cached;
+    }
 
     const [
       total,
@@ -1398,7 +1440,9 @@ class AdmissionService {
       recent 
     };
 
-    await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    if (process.env.NODE_ENV !== 'development') {
+      await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
+    }
     return result;
   }
 }

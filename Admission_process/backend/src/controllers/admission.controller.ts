@@ -87,6 +87,7 @@ const DOCUMENT_FIELD_MAP: Record<string, keyof AdmissionDocument> = {
   gapCertificate: 'gapCertificateUrl',
   feesPaidReceipt: 'feesPaidReceiptUrl',
   admissionFeeReceipt: 'admissionFeeReceiptUrl',
+  admissionFormFeeReceipt: 'admissionFormFeeReceiptUrl',
 };
 
 // ─── Student Endpoints ───────────────────────────────────────────────────────
@@ -254,8 +255,11 @@ export const saveStep6 = async (
 ): Promise<any> => {
   try {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
-    if (!files || Object.keys(files).length === 0) {
-      return res.status(400).json({ success: false, message: 'No files uploaded.' });
+    const hasFiles = files && Object.keys(files).length > 0;
+    const hasTextUpdates = req.body.admissionFormFeeUtr !== undefined || req.body.admissionFormFeePaymentMode !== undefined;
+
+    if (!hasFiles && !hasTextUpdates) {
+      return res.status(400).json({ success: false, message: 'No files or updates provided.' });
     }
 
     const studentId = req.user!.id;
@@ -267,14 +271,24 @@ export const saveStep6 = async (
       : null;
 
     const fileUrls: Record<string, string> = {};
-    for (const field of Object.keys(files)) {
-      const file = files[field][0];
-      // Compress the image locally before committing
-      await compressLocalImage(file.path, file.mimetype);
-      fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
+    if (hasFiles && files) {
+      for (const field of Object.keys(files)) {
+        const file = files[field][0];
+        // Compress the image locally before committing
+        await compressLocalImage(file.path, file.mimetype);
+        fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
+      }
     }
 
-    const admissionId = await admissionService.saveStep6(studentId, fileUrls);
+    const updateData: Record<string, any> = { ...fileUrls };
+    if (req.body.admissionFormFeeUtr !== undefined) {
+      updateData.admissionFormFeeUtr = req.body.admissionFormFeeUtr || null;
+    }
+    if (req.body.admissionFormFeePaymentMode !== undefined) {
+      updateData.admissionFormFeePaymentMode = req.body.admissionFormFeePaymentMode || null;
+    }
+
+    const admissionId = await admissionService.saveStep6(studentId, updateData);
     securityEvents.documentUpload(req, studentId, admissionId, Object.keys(fileUrls));
 
     // Delete old local files after DB update succeeds

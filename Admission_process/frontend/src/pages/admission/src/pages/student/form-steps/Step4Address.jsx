@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../../../../services/api';
-import { Loader2, ChevronLeft, ChevronRight, Home, MapPin } from 'lucide-react';
-import SelectDropdown from '../../../components/SelectDropdown';
+import { Loader2, ChevronLeft, ChevronRight, Home, MapPin, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [loading, setLoading] = useState(false);
+    const [originalValues, setOriginalValues] = useState(null);
+
+    useEffect(() => {
+        if (data && !originalValues) {
+            setOriginalValues({
+                ...data,
+                // Handle pre-mapped database names
+                Address: data.Address || data.currentAddressLine1 || '',
+                City: data.City || data.currentCity || '',
+                Pincode: data.Pincode || data.currentPincode || '',
+                permanentAddress: data.permanentAddress || data.permanentAddressLine1 || ''
+            });
+        }
+    }, [data, originalValues]);
 
     const isFieldFlagged = (fieldName) => {
         if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
@@ -26,6 +39,57 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
     };
+
+    const isFieldCorrected = (fieldName) => {
+        if (!originalValues) return false;
+        if (!isFieldFlagged(fieldName)) return false;
+        
+        let currentValue = data[fieldName] || '';
+        let originalValue = originalValues[fieldName] || '';
+
+        // Fallback checks for mapped values
+        if (fieldName === 'Address' && !currentValue) currentValue = data.currentAddressLine1 || '';
+        if (fieldName === 'City' && !currentValue) currentValue = data.currentCity || '';
+        if (fieldName === 'Pincode' && !currentValue) currentValue = data.currentPincode || '';
+        if (fieldName === 'permanentAddress' && !currentValue) currentValue = data.permanentAddressLine1 || '';
+        
+        return String(currentValue) !== String(originalValue);
+    };
+
+    const getFieldContainerClass = (fieldName, extra = "") => {
+        const base = `space-y-1.5 p-3 rounded-xl transition-all duration-300 ${extra}`;
+        if (!isFieldFlagged(fieldName)) return base;
+        if (isFieldCorrected(fieldName)) {
+            return `${base} border-2 border-emerald-500 bg-emerald-50/10`;
+        }
+        return `${base} border-2 border-red-500 bg-red-50/10`;
+    };
+
+    const getFieldInputClass = (fieldName, extra = "") => {
+        const baseClass = `input-premium h-11 uppercase ${extra}`;
+        if (!isFieldFlagged(fieldName)) return baseClass;
+        if (isFieldCorrected(fieldName)) {
+            return `${baseClass} border-emerald-500 focus:border-emerald-500 focus:ring-emerald-500/20`;
+        }
+        return `${baseClass} border-red-500 focus:border-red-500 focus:ring-red-500/20`;
+    };
+
+    const renderFeedback = (fieldName) => {
+        if (!isFieldFlagged(fieldName)) return null;
+        if (isFieldCorrected(fieldName)) {
+            return (
+                <p className="text-emerald-600 text-[11px] font-bold mt-1 flex items-center gap-1">
+                    <CheckCircle2 size={12} className="text-emerald-500" /> Corrected
+                </p>
+            );
+        }
+        return (
+            <p className="text-red-500 text-[11px] font-bold mt-1">
+                🔴 Requires correction / verification
+            </p>
+        );
+    };
+
     const [sameAsCurrent, setSameAsCurrent] = useState(() => {
         if (data.sameAsCurrent !== undefined) {
             return data.sameAsCurrent === true || data.sameAsCurrent === 'true';
@@ -43,30 +107,8 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
         }
         return false;
     });
-    const [districts, setDistricts] = useState([]);
     const [pincodeError, setPincodeError] = useState('');
     const [permanentPincodeError, setPermanentPincodeError] = useState('');
-
-    useEffect(() => {
-        const fetchDistricts = async () => {
-            try {
-                const res = await api.get('/address/districts');
-                if (res.data.success) {
-                    setDistricts(res.data.data);
-                }
-            } catch (error) {
-                console.error("Failed to fetch districts:", error);
-                toast.error("Could not load districts list", { id: 'fetch-districts-error' });
-            }
-        };
-        fetchDistricts();
-    }, []);
-
-    useEffect(() => {
-        if (data.sameAsCurrent !== undefined) {
-            setSameAsCurrent(data.sameAsCurrent === true || data.sameAsCurrent === 'true');
-        }
-    }, [data.sameAsCurrent]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -76,26 +118,33 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
             return;
         }
 
+        if (pincodeError || permanentPincodeError) {
+            toast.error('Please resolve validation errors first.');
+            return;
+        }
+
         setLoading(true);
+
         try {
             const payload = {
-                currentAddressLine1: data.Address || data.currentAddressLine1,
-                currentCity: data.City || data.currentCity,
-                currentState: 'Karnataka',
-                currentPincode: data.Pincode || data.currentPincode,
-                currentCountry: 'India',
-                sameAsCurrent,
-                permanentAddressLine1: sameAsCurrent ? (data.Address || data.currentAddressLine1) : (data.permanentAddress || data.permanentAddressLine1),
-                permanentCity: sameAsCurrent ? (data.City || data.currentCity) : (data.permanentCity || data.permanentCity),
-                permanentState: 'Karnataka',
-                permanentPincode: sameAsCurrent ? (data.Pincode || data.currentPincode) : (data.permanentPincode || data.permanentPincode),
-                permanentCountry: 'India',
+                currentAddressLine1: data.Address || data.currentAddressLine1 || '',
+                currentCity: data.City || data.currentCity || '',
+                currentTaluk: data.Taluk || '',
+                currentDistrictId: data.DistrictId || null,
+                currentPincode: data.Pincode || data.currentPincode || '',
+                currentState: data.currentState || 'KARNATAKA',
+                sameAsCurrent: sameAsCurrent,
+                permanentAddressLine1: sameAsCurrent ? (data.Address || data.currentAddressLine1 || '') : (data.permanentAddress || data.permanentAddressLine1 || ''),
+                permanentCity: sameAsCurrent ? (data.City || data.currentCity || '') : (data.permanentCity || ''),
+                permanentTaluk: sameAsCurrent ? (data.Taluk || '') : (data.permanentTaluk || ''),
+                permanentDistrictId: sameAsCurrent ? (data.DistrictId || null) : (data.permanentDistrictId || null),
+                permanentPincode: sameAsCurrent ? (data.Pincode || data.currentPincode || '') : (data.permanentPincode || ''),
+                permanentState: sameAsCurrent ? (data.currentState || 'KARNATAKA') : (data.permanentState || 'KARNATAKA')
             };
 
             const res = await api.put('/student/address', payload);
             if (res.data.success) {
-                toast.success('Address details saved!');
-                updateData({ sameAsCurrent });
+                toast.success('Address saved!');
                 onNext();
             }
         } catch (error) {
@@ -156,176 +205,143 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <div className={`md:col-span-2 lg:col-span-3 space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('Address') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    {/* Street Address */}
+                    <div className={getFieldContainerClass('Address', 'md:col-span-2 lg:col-span-3')}>
                         <label className="text-sm font-medium text-slate-700">Street Address <span className="text-red-500">*</span></label>
-                        <textarea required name="Address" rows="3" className={`input-premium py-3 h-auto min-h-[80px] uppercase ${isFieldFlagged('Address') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.Address || data.currentAddressLine1 || ''} onChange={handleChange} placeholder="Enter street address" />
-                        {isFieldFlagged('Address') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        <textarea required name="Address" rows="3" className={getFieldInputClass('Address', 'py-3 h-auto min-h-[80px]')} value={data.Address || data.currentAddressLine1 || ''} onChange={handleChange} placeholder="Enter street address" />
+                        {renderFeedback('Address')}
                         {!(data.Address || data.currentAddressLine1) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('City') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                    {/* City */}
+                    <div className={getFieldContainerClass('City')}>
                         <label className="text-sm font-medium text-slate-700">City / Village <span className="text-red-500">*</span></label>
-                        <input required type="text" name="City" className={`input-premium h-11 uppercase ${isFieldFlagged('City') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.City || data.currentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
-                        {isFieldFlagged('City') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        <input required type="text" name="City" className={getFieldInputClass('City')} value={data.City || data.currentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
+                        {renderFeedback('City')}
                         {!(data.City || data.currentCity) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('Taluk') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                    {/* Taluk */}
+                    <div className={getFieldContainerClass('Taluk')}>
                         <label className="text-sm font-medium text-slate-700">Taluk <span className="text-red-500">*</span></label>
-                        <input required type="text" name="Taluk" className={`input-premium h-11 uppercase ${isFieldFlagged('Taluk') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.Taluk || ''} onChange={handleChange} placeholder="Enter taluk" />
-                        {isFieldFlagged('Taluk') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        <input required type="text" name="Taluk" className={getFieldInputClass('Taluk')} value={data.Taluk || ''} onChange={handleChange} placeholder="Enter taluk" />
+                        {renderFeedback('Taluk')}
                         {!data.Taluk && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('DistrictId') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                    {/* District */}
+                    <div className={getFieldContainerClass('DistrictId')}>
                         <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                        <SelectDropdown
-                            id="DistrictId" name="DistrictId" required
-                            value={data.DistrictId || ''}
-                            onChange={(val) => handleChange({ target: { name: 'DistrictId', value: val } })}
-                            placeholder="Select district..."
-                            options={districts.map(d => ({ value: d.id, label: d.name }))}
-                        />
-                        {isFieldFlagged('DistrictId') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        <input required type="text" name="DistrictId" className={getFieldInputClass('DistrictId')} value={data.DistrictId || ''} onChange={handleChange} placeholder="Enter district" />
+                        {renderFeedback('DistrictId')}
                         {!data.DistrictId && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
-                    <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('Pincode') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                    {/* Pincode */}
+                    <div className={getFieldContainerClass('Pincode')}>
                         <label className="text-sm font-medium text-slate-700">Pincode <span className="text-red-500">*</span></label>
-                        <input
-                            required
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={6}
-                            pattern="[0-9]{6}"
-                            name="Pincode"
-                            className={`input-premium h-11 ${isFieldFlagged('Pincode') ? 'border-red-500 focus:border-red-500' : ''}`}
-                            value={data.Pincode || data.currentPincode || ''}
-                            onChange={handlePincodeChange}
-                            onKeyPress={(e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
-                            placeholder="Enter 6-digit pincode"
-                        />
-                        {isFieldFlagged('Pincode') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                        )}
+                        <input required type="text" name="Pincode" className={getFieldInputClass('Pincode')} value={data.Pincode || data.currentPincode || ''} onChange={handlePincodeChange} placeholder="Enter pincode" />
+                        {renderFeedback('Pincode')}
                         {!(data.Pincode || data.currentPincode) && applicationStatus === 'REJECTED' && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
+                            <p className="text-red-550 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
-                        {pincodeError && (
-                            <p className="text-red-500 text-[11px] font-semibold mt-1">⚠ {pincodeError}</p>
-                        )}
+                        {pincodeError && <p className="text-red-500 text-[11px] font-semibold mt-1">⚠ {pincodeError}</p>}
+                    </div>
+
+                    <div className="space-y-1.5 p-3 rounded-xl">
+                        <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
+                        <input readOnly type="text" name="currentState" className="input-premium h-11 bg-slate-50 border-slate-200 cursor-not-allowed uppercase" value={data.currentState || 'KARNATAKA'} />
                     </div>
                 </div>
             </div>
 
             {/* Permanent Address */}
-            <div className="space-y-5 pt-4">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-slate-100 pb-4 gap-4">
+            <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                             <Home size={18} />
                         </div>
                         <div>
                             <h2 className="text-lg font-semibold text-slate-900">Permanent Address</h2>
-                            <p className="text-xs text-slate-500">Permanent home address</p>
+                            <p className="text-xs text-slate-500">Legal domicile address details</p>
                         </div>
                     </div>
-
-                    <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-lg hover:bg-slate-100 transition-colors">
-                        <input
-                            type="checkbox"
-                            checked={sameAsCurrent}
-                            onChange={handleCheckboxChange}
-                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="text-sm font-medium text-slate-700">Same as Current Address</span>
-                    </label>
+                    
+                    {!readOnly && (
+                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-4 py-2 select-none transition-colors">
+                            <input type="checkbox" checked={sameAsCurrent} onChange={handleCheckboxChange} className="rounded text-primary-600 focus:ring-primary-500" />
+                            <span className="text-xs font-semibold text-slate-700">Same as current address</span>
+                        </label>
+                    )}
                 </div>
 
                 {!sameAsCurrent && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-fade-in">
-                        <div className={`md:col-span-2 lg:col-span-3 space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('permanentAddress') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {/* Permanent Address Street */}
+                        <div className={getFieldContainerClass('permanentAddress', 'md:col-span-2 lg:col-span-3')}>
                             <label className="text-sm font-medium text-slate-700">Street Address <span className="text-red-500">*</span></label>
-                            <textarea required name="permanentAddress" rows="3" className={`input-premium py-3 h-auto min-h-[80px] uppercase ${isFieldFlagged('permanentAddress') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.permanentAddress || data.permanentAddressLine1 || ''} onChange={handleChange} placeholder="Enter street address" />
-                            {isFieldFlagged('permanentAddress') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                            )}
+                            <textarea required name="permanentAddress" rows="3" className={getFieldInputClass('permanentAddress', 'py-3 h-auto min-h-[80px]')} value={data.permanentAddress || data.permanentAddressLine1 || ''} onChange={handleChange} placeholder="Enter permanent street address" />
+                            {renderFeedback('permanentAddress')}
                             {!(data.permanentAddress || data.permanentAddressLine1) && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                         </div>
-                        <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('permanentCity') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                        {/* Permanent City */}
+                        <div className={getFieldContainerClass('permanentCity')}>
                             <label className="text-sm font-medium text-slate-700">City / Village <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentCity" className={`input-premium h-11 uppercase ${isFieldFlagged('permanentCity') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.permanentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
-                            {isFieldFlagged('permanentCity') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                            )}
-                            {!(data.permanentCity) && applicationStatus === 'REJECTED' && (
+                            <input required type="text" name="permanentCity" className={getFieldInputClass('permanentCity')} value={data.permanentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
+                            {renderFeedback('permanentCity')}
+                            {!data.permanentCity && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                         </div>
-                        <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('permanentTaluk') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                        {/* Permanent Taluk */}
+                        <div className={getFieldContainerClass('permanentTaluk')}>
                             <label className="text-sm font-medium text-slate-700">Taluk <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentTaluk" className={`input-premium h-11 uppercase ${isFieldFlagged('permanentTaluk') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.permanentTaluk || ''} onChange={handleChange} placeholder="Enter taluk" />
-                            {isFieldFlagged('permanentTaluk') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                            )}
+                            <input required type="text" name="permanentTaluk" className={getFieldInputClass('permanentTaluk')} value={data.permanentTaluk || ''} onChange={handleChange} placeholder="Enter permanent taluk" />
+                            {renderFeedback('permanentTaluk')}
                             {!data.permanentTaluk && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                         </div>
-                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('permanentDistrictId') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                        {/* Permanent District */}
+                        <div className={getFieldContainerClass('permanentDistrictId')}>
                             <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                            <SelectDropdown
-                                id="permanentDistrictId" name="permanentDistrictId" required
-                                value={data.permanentDistrictId || ''}
-                                onChange={(val) => handleChange({ target: { name: 'permanentDistrictId', value: val } })}
-                                placeholder="Select district..."
-                                options={districts.map(d => ({ value: d.id, label: d.name }))}
-                            />
-                            {isFieldFlagged('permanentDistrictId') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                            )}
+                            <input required type="text" name="permanentDistrictId" className={getFieldInputClass('permanentDistrictId')} value={data.permanentDistrictId || ''} onChange={handleChange} placeholder="Enter permanent district" />
+                            {renderFeedback('permanentDistrictId')}
                             {!data.permanentDistrictId && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                         </div>
-                        <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('permanentPincode') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+
+                        {/* Permanent Pincode */}
+                        <div className={getFieldContainerClass('permanentPincode')}>
                             <label className="text-sm font-medium text-slate-700">Pincode <span className="text-red-500">*</span></label>
-                            <input
-                                required
-                                type="text"
-                                inputMode="numeric"
-                                maxLength={6}
-                                pattern="[0-9]{6}"
-                                name="permanentPincode"
-                                className={`input-premium h-11 ${isFieldFlagged('permanentPincode') ? 'border-red-500 focus:border-red-500' : ''}`}
-                                value={data.permanentPincode || ''}
-                                onChange={handlePincodeChange}
-                                onKeyPress={(e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
-                                placeholder="Enter 6-digit pincode"
-                            />
-                            {isFieldFlagged('permanentPincode') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
-                            )}
-                            {!(data.permanentPincode) && applicationStatus === 'REJECTED' && (
+                            <input required type="text" name="permanentPincode" className={getFieldInputClass('permanentPincode')} value={data.permanentPincode || ''} onChange={handlePincodeChange} placeholder="Enter permanent pincode" />
+                            {renderFeedback('permanentPincode')}
+                            {!data.permanentPincode && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                             {permanentPincodeError && (
-                                <p className="text-red-500 text-[11px] font-semibold mt-1">⚠ {permanentPincodeError}</p>
+                                <p className="text-red-550 text-[11px] font-semibold mt-1">⚠ {permanentPincodeError}</p>
                             )}
+                        </div>
+
+                        <div className="space-y-1.5 p-3 rounded-xl">
+                            <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
+                            <input readOnly type="text" name="permanentState" className="input-premium h-11 bg-slate-50 border-slate-200 cursor-not-allowed uppercase" value={data.permanentState || 'KARNATAKA'} />
                         </div>
                     </div>
                 )}
@@ -350,7 +366,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                 </button>
                 <button type="submit" id="bottom-submit-btn" disabled={loading} className="btn-primary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-6 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold">
                     {loading ? <Loader2 size={18} className="animate-spin" /> : (
-                        <>Save & Continue <ChevronRight size={16} /></>
+                        <>{readOnly ? 'Continue' : 'Save & Continue'} <ChevronRight size={16} /></>
                     )}
                 </button>
             </div>

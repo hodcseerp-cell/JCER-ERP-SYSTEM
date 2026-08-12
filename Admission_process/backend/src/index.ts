@@ -345,6 +345,26 @@ async function startServer() {
     
     console.log('Database connection has been established successfully.');
     
+    // Invalidate Redis/In-memory cache on startup in development to prevent stale caches
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const { default: redisClient } = await import('./config/redis');
+        if (redisClient) {
+          if (typeof redisClient.flushall === 'function') {
+            await redisClient.flushall();
+            console.log('✓ Redis cache flushed on startup.');
+          } else if (typeof redisClient.flushDb === 'function') {
+            await redisClient.flushDb();
+            console.log('✓ Redis cache flushed on startup.');
+          } else {
+            console.log('✓ In-memory/Redis fallback cache reset.');
+          }
+        }
+      } catch (cacheErr: any) {
+        console.warn('Could not flush Redis cache on startup:', cacheErr.message);
+      }
+    }
+    
     // Auto-seed database if no Admin accounts exist
     try {
       const { default: User } = await import('./models/User');
