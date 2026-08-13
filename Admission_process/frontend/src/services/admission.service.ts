@@ -189,6 +189,9 @@ export interface AdmissionApplication {
     gapCertificateUrl: string | null;
     feesPaidReceiptUrl: string | null;
     admissionFeeReceiptUrl?: string | null;
+    admissionFormFeeReceiptUrl?: string | null;
+    admissionFormFeePaymentMode?: string | null;
+    admissionFormFeeUtr?: string | null;
   } | null;
 }
 
