@@ -169,6 +169,8 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
     const docs = details?.studentdocuments || {};
     const branch = details?.branch || {};
     const user = details?.user || {};
+    console.log('Step7Review details:', details);
+    console.log('Step7Review docs:', docs);
     const q = (details?.qualification || '').toUpperCase();
     const showPUC = q === 'PUC' || (!q && details?.admissionType === 'KCET');
     const showDiploma = q === 'DIPLOMA' || (!q && details?.admissionType === 'DCET');
