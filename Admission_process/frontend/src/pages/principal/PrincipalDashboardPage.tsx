@@ -369,7 +369,12 @@ export const PrincipalDashboardPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {pendingApplications.map((app) => {
-                  const studentName = app.user ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim() : 'Guest Applicant';
+                  const pd = app.studentpersonaldetails;
+                  const studentName = pd
+                    ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+                    : app.user
+                      ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+                      : 'Guest Applicant';
                   return (
                     <tr key={app.id} className="hover:bg-slate-50/80 dark:hover:bg-neutral-800/40 transition-colors">
                       <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">

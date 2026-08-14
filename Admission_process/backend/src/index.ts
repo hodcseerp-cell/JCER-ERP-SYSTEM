@@ -267,6 +267,18 @@ async function startServer() {
             ) THEN
               ALTER TABLE "admissions" ADD COLUMN "correctionRequestedById" UUID;
             END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admissions' AND column_name = 'verifiedDocuments'
+            ) THEN
+              ALTER TABLE "admissions" ADD COLUMN "verifiedDocuments" JSON;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admissions' AND column_name = 'usn'
+            ) THEN
+              ALTER TABLE "admissions" ADD COLUMN "usn" VARCHAR(50) UNIQUE;
+            END IF;
           END
           $$;
         `);

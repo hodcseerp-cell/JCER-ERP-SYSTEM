@@ -485,28 +485,33 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
     }
   }, [currentDocumentIndex, docList, targetAppId]);
 
-  const handleClose = () => {
+  const handleClose = async () => {
     // Auto-save current verification progress before closing (same as Save & Exit)
     if (docList.length > 0) {
-      const updatedMap: Record<string, 'ACCEPTED' | 'REJECTED'> = {};
+      const updatedMap: Record<string, 'ACCEPTED' | 'REJECTED' | 'PENDING'> = {};
       docList.forEach(d => {
         if (d.status === 'APPROVED') updatedMap[d.name] = 'ACCEPTED';
         if (d.status === 'REJECTED') updatedMap[d.name] = 'REJECTED';
+        if (d.status === 'PENDING') updatedMap[d.name] = 'PENDING';
       });
+
+      if (targetAppId) {
+        localStorage.setItem(`doc_status_${targetAppId}`, JSON.stringify(updatedMap));
+        try {
+          await API.put(`/admin/admissions/${targetAppId}/documents/status`, { statuses: updatedMap });
+        } catch (e) {
+          console.error("Failed to save doc statuses to database:", e);
+        }
+      }
+
       const allVerified = docList.length > 0 && docList.every(d => d.status !== 'PENDING');
       const rejectionNotes = buildRejectionNotes(docList);
       if (onCompleteVerification) {
-        onCompleteVerification(updatedMap, allVerified, rejectionNotes);
-      }
-      // Also persist to localStorage
-      if (targetAppId) {
-        const statusMap: Record<string, string> = {};
-        docList.forEach(d => {
-          if (d.status === 'APPROVED') statusMap[d.name] = 'ACCEPTED';
-          if (d.status === 'REJECTED') statusMap[d.name] = 'REJECTED';
-          if (d.status === 'PENDING') statusMap[d.name] = 'PENDING';
+        const filteredMap: Record<string, 'ACCEPTED' | 'REJECTED'> = {};
+        Object.entries(updatedMap).forEach(([k, v]) => {
+          if (v !== 'PENDING') filteredMap[k] = v;
         });
-        localStorage.setItem(`doc_status_${targetAppId}`, JSON.stringify(statusMap));
+        onCompleteVerification(filteredMap, allVerified, rejectionNotes);
       }
     }
 

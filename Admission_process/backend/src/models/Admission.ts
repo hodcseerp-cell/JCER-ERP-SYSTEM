@@ -41,6 +41,7 @@ class Admission extends Model {
   public correctionDeadline!: Date | null;
   public correctionRequestedAt!: Date | null;
   public correctionRequestedById!: string | null;
+  public verifiedDocuments!: Record<string, 'ACCEPTED' | 'REJECTED'> | null;
   
   // Validation Checklist
   public documentsVerified!: boolean;
@@ -79,6 +80,7 @@ class Admission extends Model {
   public cancellationRejectedAt!: Date | null;
   public cancellationRejectedById!: string | null;
   public cancellationAdminRemarks!: string | null;
+  public usn!: string | null;
 
   public reviewedBy!: string | null;  // legacy admin userId
   public reviewedAt!: Date | null;
@@ -157,6 +159,11 @@ Admission.init(
       allowNull: false,
       defaultValue: 'DRAFT',
     },
+    usn: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      unique: true,
+    },
     correctionRequestedSections: {
       type: DataTypes.JSON,
       allowNull: true,
@@ -176,6 +183,11 @@ Admission.init(
     correctionRequestedById: {
       type: DataTypes.UUID,
       allowNull: true,
+    },
+    verifiedDocuments: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: {},
     },
     applicationFeeStatus: {
       type: DataTypes.STRING(50),

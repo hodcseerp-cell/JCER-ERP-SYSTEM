@@ -470,6 +470,42 @@ export const StudentViewPage: React.FC = () => {
     }
   };
 
+  const [zipLoading, setZipLoading] = useState(false);
+  const handleDownloadZip = async () => {
+    if (!id) return;
+    setZipLoading(true);
+    const toastId = toast.loading('Generating documents ZIP…');
+    try {
+      const response = await API.get(`/admin/admissions/${id}/documents/zip`, {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const studentName = student?.user 
+        ? `${student.user.firstName || ''} ${student.user.lastName || ''}`.trim()
+        : 'student';
+      const appNum = student?.applicationNumber || `TEMP-${id}`;
+      
+      link.setAttribute('download', `${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${appNum}_docs.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.dismiss(toastId);
+      toast.success('ZIP downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(toastId);
+      toast.error('Failed to generate ZIP archive.');
+    } finally {
+      setZipLoading(false);
+    }
+  };
+
   const handleOpenCancelModal = () => {
     setCancelStep(1);
     setCancelReason('');
@@ -607,11 +643,11 @@ export const StudentViewPage: React.FC = () => {
                   Edit Profile
                 </button>
               )}
-              {isAdmin && student.applicationStatus === 'ENROLLED' && (
+              {isAdmin && (student.applicationStatus === 'APPROVED' || student.applicationStatus === 'PRINCIPAL_APPROVED' || student.applicationStatus === 'ENROLLED') && (
                 <button 
                   type="button"
                   onClick={handleOpenCancelModal}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md cursor-pointer"
                 >
                   <Ban size={14} /> Cancel Admission
                 </button>
@@ -621,6 +657,13 @@ export const StudentViewPage: React.FC = () => {
                 className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md"
               >
                 <Download size={14} /> Download PDF
+              </button>
+              <button 
+                onClick={handleDownloadZip}
+                disabled={zipLoading}
+                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md cursor-pointer disabled:cursor-not-allowed"
+              >
+                {zipLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Download ZIP
               </button>
             </>
           )}
@@ -644,10 +687,14 @@ export const StudentViewPage: React.FC = () => {
             <div className="flex items-center gap-3">
               <h3 className="text-xl md:text-2xl font-black text-neutral-900 dark:text-white uppercase tracking-wide">
                 {isEditMode && editData
-                  ? `${editData.user?.firstName || ''} ${editData.user?.lastName || ''}`.trim()
-                  : student.user 
-                    ? `${student.user.firstName || ''} ${student.user.lastName || ''}`.trim() 
-                    : 'Student Profile'}
+                  ? editData.studentpersonaldetails
+                    ? `${editData.studentpersonaldetails.firstName} ${editData.studentpersonaldetails.middleName ? editData.studentpersonaldetails.middleName + ' ' : ''}${editData.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim()
+                    : `${editData.user?.firstName || ''} ${editData.user?.lastName || ''}`.trim()
+                  : pd
+                    ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+                    : student.user 
+                      ? `${student.user.firstName || ''} ${student.user.lastName || ''}`.trim() 
+                      : 'Student Profile'}
               </h3>
               <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${STATUS_COLOR_MAP[student.applicationStatus] || STATUS_COLOR_MAP.DRAFT}`}>
                 {STATUS_LABEL_MAP[student.applicationStatus] || student.applicationStatus}

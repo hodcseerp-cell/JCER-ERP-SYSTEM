@@ -306,7 +306,12 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
               const bs = getBranchStyle(branchCode);
               const ss = STATUS_STYLE[app.applicationStatus] || STATUS_STYLE['SUBMITTED'];
               const StatusIcon = ss.icon;
-              const name = app.user ? `${app.user.firstName} ${app.user.lastName}` : '—';
+              const pd = app.studentpersonaldetails;
+              const name = pd
+                ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+                : app.user
+                  ? `${app.user.firstName} ${app.user.lastName}`
+                  : '—';
               const acad = app.studentacademicdetails;
               const initials = (app.user?.firstName?.[0] || '') + (app.user?.lastName?.[0] || '');
 
@@ -460,7 +465,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
               <Section title="Personal Information">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { icon: User,     label: 'Full Name',    value: `${selected.studentpersonaldetails?.firstName || selected.user?.firstName || ''} ${selected.studentpersonaldetails?.lastName || selected.user?.lastName || ''}` },
+                    { icon: User,     label: 'Full Name',    value: selected.studentpersonaldetails ? `${selected.studentpersonaldetails.firstName} ${selected.studentpersonaldetails.middleName ? selected.studentpersonaldetails.middleName + ' ' : ''}${selected.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : selected.user ? `${selected.user.firstName} ${selected.user.lastName}` : '' },
                     { icon: Calendar, label: 'Date of Birth', value: selected.studentpersonaldetails?.dateOfBirth || '—' },
                     { icon: User,     label: 'Gender',       value: selected.studentpersonaldetails?.gender || '—' },
                     { icon: BookOpen, label: 'Category',     value: selected.studentpersonaldetails?.category || '—' },

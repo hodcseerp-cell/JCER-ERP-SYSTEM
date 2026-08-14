@@ -240,6 +240,24 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   }, []);
 
   useEffect(() => {
+    const handleExportEvent = () => {
+      setExportModalOpen(true);
+    };
+    window.addEventListener('trigger-student-export', handleExportEvent);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'export') {
+      setExportModalOpen(true);
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+
+    return () => {
+      window.removeEventListener('trigger-student-export', handleExportEvent);
+    };
+  }, []);
+
+  useEffect(() => {
     fetchStudentsList();
   }, [
     page, status, branchId, admissionType, qualification, gender, category, 
@@ -814,7 +832,12 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                           onClick={() => handleViewStudent(app.id)}
                           className="hover:underline text-left text-neutral-900 hover:text-orange-600 dark:text-white dark:hover:text-orange-400 transition-colors"
                         >
-                          {app.user ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim() : 'N/A'}
+                          {pd
+                            ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+                            : app.user
+                              ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+                              : 'N/A'
+                          }
                         </button>
                       </td>
                       <td className="py-4 px-3 font-extrabold text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
@@ -868,20 +891,9 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                               <Edit size={14} />
                             </button>
                           )}
-                          {!readOnly && (app.applicationStatus === 'ENROLLED' || app.applicationStatus === 'APPROVED') && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenCancelModal(e, app)}
-                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
-                              title="Cancel Admission"
-                            >
-                              <Ban size={14} />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
-
                   );
                 })}
               </tbody>

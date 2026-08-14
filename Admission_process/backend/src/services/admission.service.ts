@@ -10,6 +10,7 @@ import AdmissionDocument from '../models/AdmissionDocument';
 import Department from '../models/Department';
 import User from '../models/User';
 import Student from '../models/Student';
+import UsnRegistry from '../models/UsnRegistry';
 import RejectionReason from '../models/RejectionReason';
 import SystemConfiguration from '../models/SystemConfiguration';
 import AdmissionSequence from '../models/AdmissionSequence';
@@ -250,18 +251,39 @@ function computeStepStatus(admission: any) {
     timeline.correctionRequestedAt = admission.correctionRequestedAt;
   }
   
-  if (admission?.reviewedAt || ['UNDER_REVIEW', 'APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'REJECTED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+  const resubmittedAtTime = admission?.resubmittedAt ? new Date(admission.resubmittedAt).getTime() : 0;
+
+  const isAfterResubmission = (dateVal: any) => {
+    if (!dateVal) return false;
+    if (!resubmittedAtTime) return true;
+    return new Date(dateVal).getTime() >= resubmittedAtTime;
+  };
+
+  if (admission?.reviewedAt && isAfterResubmission(admission.reviewedAt)) {
+    timeline.reviewStartedAt = admission.reviewedAt;
+  } else if (['UNDER_REVIEW', 'APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'REJECTED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
     timeline.reviewStartedAt = admission?.reviewedAt || admission?.updatedAt;
   }
-  if (admission?.verifiedAt || ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+
+  if (admission?.verifiedAt && isAfterResubmission(admission.verifiedAt)) {
+    timeline.documentsVerifiedAt = admission.verifiedAt;
+    timeline.approvedAt = admission.verifiedAt;
+    timeline.forwardedToPrincipalAt = admission.verifiedAt;
+  } else if (['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
     timeline.documentsVerifiedAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
     timeline.approvedAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
     timeline.forwardedToPrincipalAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
   }
-  if (admission?.principalApprovedAt || ['PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+
+  if (admission?.principalApprovedAt && isAfterResubmission(admission.principalApprovedAt)) {
+    timeline.principalApprovedAt = admission.principalApprovedAt;
+  } else if (['PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
     timeline.principalApprovedAt = admission?.principalApprovedAt || admission?.principalReviewedAt || admission?.updatedAt;
   }
-  if (admission?.enrolledAt || ['ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+
+  if (admission?.enrolledAt && isAfterResubmission(admission.enrolledAt)) {
+    timeline.usnAssignedAt = admission.enrolledAt;
+  } else if (['ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
     timeline.usnAssignedAt = admission?.enrolledAt || admission?.principalReviewedAt || admission?.updatedAt;
   }
   if (admission?.applicationStatus === 'REJECTED') {
@@ -339,6 +361,17 @@ class AdmissionService {
     }
   }
 
+  private async markSectionCorrected(admission: Admission, stepName: string): Promise<void> {
+    if (admission.applicationStatus === 'CORRECTION_REQUIRED') {
+      const requested = admission.correctionRequestedSections || [];
+      const normalizedStep = stepName === 'details' ? 'admission' : stepName;
+      if (requested.includes(normalizedStep)) {
+        const nextRequested = requested.filter((s: string) => s !== normalizedStep);
+        await admission.update({ correctionRequestedSections: nextRequested });
+      }
+    }
+  }
+
   /**
    * Get-or-create an Admission record for a user.
    * Called on first dashboard visit after registration.
@@ -378,7 +411,29 @@ class AdmissionService {
   async getMyAdmission(userId: string): Promise<any> {
     const admission = await this.getOrCreate(userId);
     const full = await loadFullAdmission(admission);
-    return serializeAdmission(full);
+    const serialized = serializeAdmission(full);
+
+    // Dynamically sign R2 keys for student's own dashboard preview
+    if (serialized.documents) {
+      const { getSignedUrlSync } = require('./r2.service');
+      const docFields = [
+        'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl',
+        'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl',
+        'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl',
+        'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFeeReceiptUrl', 'admissionFormFeeReceiptUrl'
+      ];
+      for (const dbKey of docFields) {
+        const val = serialized.documents[dbKey];
+        if (val && !val.startsWith('/uploads') && !val.startsWith('uploads/')) {
+          serialized.documents[dbKey] = getSignedUrlSync(val);
+        }
+      }
+    }
+    if (serialized.admissionFeeReceiptUrl && !serialized.admissionFeeReceiptUrl.startsWith('/uploads')) {
+      const { getSignedUrlSync } = require('./r2.service');
+      serialized.admissionFeeReceiptUrl = getSignedUrlSync(serialized.admissionFeeReceiptUrl);
+    }
+    return serialized;
   }
 
   /** Lazy-loads step-specific details for individual form step rendering */
@@ -451,11 +506,27 @@ class AdmissionService {
         return null;
       }
       case 'documents': {
-        const data = await AdmissionDocument.findOne({
+        const doc = await AdmissionDocument.findOne({
           where: { admissionId: admission.id },
           attributes: ['id', 'admissionId', 'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl', 'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl', 'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl', 'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFormFeeReceiptUrl', 'admissionFormFeeUtr', 'admissionFormFeePaymentMode']
         });
-        return data;
+        if (!doc) return null;
+        // Sign R2 object keys into short-lived HTTPS URLs so the frontend <img> can load them
+        const { getSignedUrlSync } = require('./r2.service');
+        const urlFields = [
+          'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl',
+          'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl',
+          'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl',
+          'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFormFeeReceiptUrl',
+        ];
+        const plain = doc.toJSON ? (doc.toJSON() as any) : JSON.parse(JSON.stringify(doc));
+        for (const field of urlFields) {
+          const val = plain[field];
+          if (val && !val.startsWith('/uploads') && !val.startsWith('uploads/') && !val.startsWith('http')) {
+            plain[field] = getSignedUrlSync(val);
+          }
+        }
+        return plain;
       }
       default:
         throw new Error('Invalid step name');
@@ -492,6 +563,23 @@ class AdmissionService {
     const full = await loadFullAdmission(admission);
     const result = serializeAdmission(full);
 
+    // Sign R2 object keys so document previews render correctly in Step 7 review
+    if (result.studentdocuments) {
+      const { getSignedUrlSync } = require('./r2.service');
+      const urlFields = [
+        'photoUrl', 'signatureUrl', 'tenthMarksheetUrl', 'twelfthMarksheetUrl',
+        'diplomaSemester5MarksheetUrl', 'diplomaSemester6MarksheetUrl',
+        'cetScoreCardUrl', 'aadhaarUrl', 'casteCertificateUrl', 'domicileCertificateUrl',
+        'gapCertificateUrl', 'feesPaidReceiptUrl', 'admissionFormFeeReceiptUrl',
+      ];
+      for (const field of urlFields) {
+        const val = result.studentdocuments[field];
+        if (val && !val.startsWith('/uploads') && !val.startsWith('uploads/') && !val.startsWith('http')) {
+          result.studentdocuments[field] = getSignedUrlSync(val);
+        }
+      }
+    }
+
     if (process.env.NODE_ENV !== 'development') {
       await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
     }
@@ -526,6 +614,7 @@ class AdmissionService {
       dcetNumber: payload.dcetNumber || null,
       qualification: payload.qualification || null,
     });
+    await this.markSectionCorrected(admission, 'admission');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -542,6 +631,7 @@ class AdmissionService {
     } else {
       await AdmissionPersonalDetail.create({ admissionId: admission.id, ...cleanPayload });
     }
+    await this.markSectionCorrected(admission, 'personal');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -558,6 +648,7 @@ class AdmissionService {
     } else {
       await AdmissionParentDetail.create({ admissionId: admission.id, ...cleanPayload });
     }
+    await this.markSectionCorrected(admission, 'parent');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -574,6 +665,7 @@ class AdmissionService {
     } else {
       await AdmissionAddress.create({ admissionId: admission.id, ...cleanPayload });
     }
+    await this.markSectionCorrected(admission, 'address');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -635,6 +727,7 @@ class AdmissionService {
     } else {
       await AdmissionAcademicDetail.create({ admissionId: admission.id, ...dbPayload });
     }
+    await this.markSectionCorrected(admission, 'academic');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -674,6 +767,7 @@ class AdmissionService {
       }
     }
 
+    await this.markSectionCorrected(admission, 'documents');
     await this.invalidateCache(userId);
     return admission.id;
   }
@@ -852,7 +946,10 @@ class AdmissionService {
         { '$user.lastName$': { [Op.iLike]: `%${s}%` } },
         { '$user.email$': { [Op.iLike]: `%${s}%` } },
         { '$user.phone$': { [Op.iLike]: `%${s}%` } },
-        { '$user.student.enrollmentNumber$': { [Op.iLike]: `%${s}%` } }
+        { '$user.student.enrollmentNumber$': { [Op.iLike]: `%${s}%` } },
+        { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${s}%` } },
+        { '$studentpersonaldetails.middleName$': { [Op.iLike]: `%${s}%` } },
+        { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } }
       ];
     }
 
@@ -1121,28 +1218,38 @@ class AdmissionService {
         const parent = await AdmissionParentDetail.findOne({ where: { admissionId: id }, transaction });
         const addr = await AdmissionAddress.findOne({ where: { admissionId: id }, transaction });
 
-        let branchCode = 'CS';
-        if (admission.branchId) {
-          const branch = await Department.findByPk(admission.branchId, { transaction });
-          if (branch && branch.code) {
-            branchCode = branch.code.substring(0, 2).toUpperCase();
-          }
+        if (!admission.usn) {
+          throw new Error('A verified USN must be assigned to the application before finalizing enrollment.');
         }
-        const batchYear = new Date().getFullYear();
-        const yearSuffix = String(batchYear).substring(2);
 
-        // Count existing students in this department & batch to generate unique USN
-        const studentCount = await Student.count({
-          where: {
-            departmentId: admission.branchId || '',
-            batchYear,
-          },
-          transaction,
-        });
-        const seqStr = String(studentCount + 1).padStart(3, '0');
-        const enrollmentNumber = `2JR${yearSuffix}${branchCode}${seqStr}`;
-        const rollNumber = `${batchYear}${branchCode}${seqStr}`;
+        const enrollmentNumber = admission.usn;
+        let rollNumber = '';
+        let batchYear = new Date().getFullYear();
+
+        const match = enrollmentNumber.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/);
+        if (match) {
+          batchYear = parseInt('20' + match[1]);
+          const usnDeptCode = match[2];
+          const usnSeq = match[3];
+          rollNumber = `${batchYear}${usnDeptCode}${usnSeq}`;
+        } else {
+          let branchCode = 'CS';
+          if (admission.branchId) {
+            const branch = await Department.findByPk(admission.branchId, { transaction });
+            if (branch && branch.code) {
+              branchCode = branch.code.substring(0, 2).toUpperCase();
+            }
+          }
+          const seqStr = String(enrollmentNumber.slice(-3));
+          rollNumber = `${batchYear}${branchCode}${seqStr}`;
+        }
         generatedUsn = enrollmentNumber;
+
+        // Ensure registry is marked as claimed
+        await UsnRegistry.update(
+          { status: 'CLAIMED' },
+          { where: { usn: enrollmentNumber }, transaction }
+        );
 
         let dobDate: Date | null = null;
         if (personal?.dateOfBirth) {
@@ -1258,6 +1365,19 @@ class AdmissionService {
       await transaction.rollback();
       throw error;
     }
+  }
+
+  async saveDocumentStatuses(
+    id: string,
+    statuses: Record<string, 'ACCEPTED' | 'REJECTED' | 'PENDING'>
+  ): Promise<void> {
+    const admission = await Admission.findByPk(id);
+    if (!admission) throw new Error('Application not found');
+    
+    await admission.update({
+      verifiedDocuments: statuses
+    });
+    await this.invalidateCacheByAdmissionId(id);
   }
 
   /** Student: Upload official ₹500 fee receipt image/PDF */

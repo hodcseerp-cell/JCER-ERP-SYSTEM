@@ -23,14 +23,14 @@ import logger from '../utils/logger.util';
 
 // ── S3 client pointing at Cloudflare R2 ──────────────────────────────────────
 const s3 = new AWS.S3({
-  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,           // e.g. https://<accountId>.r2.cloudflarestorage.com
-  accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
-  secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+  endpoint: process.env.R2_ENDPOINT,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   signatureVersion: 'v4',
-  region: 'auto',
+  region: process.env.R2_REGION || 'auto',
 });
 
-const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME || '';
+const BUCKET = process.env.R2_BUCKET_NAME || '';
 
 // ── Signed-URL TTL (seconds) ──────────────────────────────────────────────────
 const SIGNED_URL_TTL = 5 * 60; // 5 minutes — enough to open the document
@@ -220,4 +220,29 @@ export async function getSignedUrl(
     Key: key,
     Expires: ttl,
   });
+}
+
+/**
+ * Generate a short-lived signed GET URL for a private R2 object synchronously.
+ */
+export function getSignedUrlSync(
+  key: string,
+  ttl: number = SIGNED_URL_TTL,
+): string {
+  if (!key || key.startsWith('/uploads/') || key.startsWith('uploads/')) {
+    return key;
+  }
+  return s3.getSignedUrl('getObject', {
+    Bucket: BUCKET,
+    Key: key,
+    Expires: ttl,
+  });
+}
+
+/**
+ * Fetch file buffer from Cloudflare R2.
+ */
+export async function getFile(key: string): Promise<Buffer> {
+  const data = await s3.getObject({ Bucket: BUCKET, Key: key }).promise();
+  return data.Body as Buffer;
 }

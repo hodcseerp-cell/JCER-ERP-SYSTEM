@@ -320,11 +320,12 @@ export const AdmissionFeesQueuePage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-neutral-100 font-medium">
                 {data.applications.map((app) => {
-                  const studentName = app.user
-                    ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
-                    : app.studentpersonaldetails
-                    ? `${app.studentpersonaldetails.firstName || ''} ${app.studentpersonaldetails.lastName || ''}`.trim()
-                    : 'N/A';
+                  const pd = app.studentpersonaldetails;
+                  const studentName = pd
+                    ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+                    : app.user
+                      ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+                      : 'N/A';
 
                   const uploadedDate = app.feeReceiptUploadedAt || app.updatedAt;
 

@@ -164,7 +164,11 @@ export const CancellationRequestsPage: React.FC = () => {
                       {app.applicationNumber}
                     </td>
                     <td className="p-4 whitespace-nowrap">
-                      {app.user ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim() : 'N/A'}
+                      {app.studentpersonaldetails
+                        ? `${app.studentpersonaldetails.firstName} ${app.studentpersonaldetails.middleName ? app.studentpersonaldetails.middleName + ' ' : ''}${app.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim()
+                        : app.user
+                          ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+                          : 'N/A'}
                     </td>
                     <td className="p-4 whitespace-nowrap">
                       {app.branch?.name || 'N/A'}
@@ -264,7 +268,11 @@ export const CancellationRequestsPage: React.FC = () => {
               <div>
                 <p className="text-[10px] font-black text-neutral-450 uppercase tracking-widest">Student Name</p>
                 <p className="text-neutral-900 dark:text-white font-extrabold mt-0.5">
-                  {selectedApp.user ? `${selectedApp.user.firstName || ''} ${selectedApp.user.lastName || ''}`.trim() : 'N/A'}
+                  {selectedApp.studentpersonaldetails
+                    ? `${selectedApp.studentpersonaldetails.firstName} ${selectedApp.studentpersonaldetails.middleName ? selectedApp.studentpersonaldetails.middleName + ' ' : ''}${selectedApp.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim()
+                    : selectedApp.user
+                      ? `${selectedApp.user.firstName || ''} ${selectedApp.user.lastName || ''}`.trim()
+                      : 'N/A'}
                 </p>
               </div>
               <div>

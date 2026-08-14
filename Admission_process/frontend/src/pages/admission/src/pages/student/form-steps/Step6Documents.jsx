@@ -20,18 +20,28 @@ const formatSize = (bytes) => {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
-// Helper to resolve static file paths from backend origin
+// Helper to resolve static file paths from backend origin.
+// Signed R2 URLs (https://...) are returned as-is.
+// Legacy local /uploads/... paths are resolved against the backend origin.
+// Raw R2 object keys (e.g. "2026-2027/CSE/JCER-0001/Photo.jpg") are NOT
+// valid URLs — return '' so the broken-image icon is shown instead of a
+// mangled URL.
 const resolveDocUrl = (path) => {
     if (!path) return '';
     if (path.startsWith('http') || path.startsWith('blob:')) return path;
-    const base = api.defaults.baseURL || '/api';
-    return `${base.replace('/api', '')}${path}`;
+    if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+        const base = api.defaults.baseURL || '/api';
+        return `${base.replace('/api', '')}/${path.replace(/^\//, '')}`;
+    }
+    // Raw R2 key with no signed URL yet — cannot display
+    return '';
 };
 
-// Helper to parse filename from backend path
+// Helper to parse filename from backend path (strips query-string from signed URLs)
 const getFilenameFromUrl = (url) => {
     if (!url) return '';
-    return url.split('/').pop();
+    const withoutQuery = url.split('?')[0];
+    return withoutQuery.split('/').pop();
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -210,7 +220,6 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         setUtrError('');
     };
     const [dragOver,         setDragOver]        = useState(null);
-    const [previewDoc,       setPreviewDoc]      = useState(null);
     const [submitAttempted,  setSubmitAttempted] = useState(false);
     const fileInputRefs = useRef({});
 
@@ -575,20 +584,60 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         const isOriginalFlagged = (() => {
             if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
             if (!adminRemarks) return false;
-            const remarksLower = adminRemarks.toLowerCase();
-            const keywords = matches[doc.id] || [];
-            return keywords.some(kw => remarksLower.includes(kw));
+            
+            const remarkLabels = {
+                photo: ['passport size photo', 'recent passport photo'],
+                signature: ['candidate e-signature', 'e-signature'],
+                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
+                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
+                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
+                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
+                cetScoreCard: ['entrance score card (cet/dcet)'],
+                aadhaar: ['aadhaar card copy'],
+                feesPaidReceipt: ['college fees receipt'],
+                admissionFormFeeReceipt: ['admission form fee receipt'],
+                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
+                incomeCertificate: ['income / gap year certificate', 'income certificate'],
+                studyCertificate: ['domicile / study certificate', '7 years study certificate']
+            };
+
+            const targetLabels = remarkLabels[doc.id] || [];
+            const lines = adminRemarks.split('\n');
+            
+            return lines.some(line => {
+                const lowerLine = line.toLowerCase();
+                return lowerLine.trim().startsWith('•') && 
+                       targetLabels.some(label => lowerLine.includes(label)) &&
+                       (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
+            });
         })();
 
         const docRemarks = (() => {
             if (!adminRemarks) return null;
             const lines = adminRemarks.split('\n');
-            const keywords = matches[doc.id] || [];
-            if (keywords.length === 0) return null;
+            
+            const remarkLabels = {
+                photo: ['passport size photo', 'recent passport photo'],
+                signature: ['candidate e-signature', 'e-signature'],
+                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
+                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
+                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
+                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
+                cetScoreCard: ['entrance score card (cet/dcet)'],
+                aadhaar: ['aadhaar card copy'],
+                feesPaidReceipt: ['college fees receipt'],
+                admissionFormFeeReceipt: ['admission form fee receipt'],
+                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
+                incomeCertificate: ['income / gap year certificate', 'income certificate'],
+                studyCertificate: ['domicile / study certificate', '7 years study certificate']
+            };
 
+            const targetLabels = remarkLabels[doc.id] || [];
             const lineIdx = lines.findIndex(line => {
                 const lowerLine = line.toLowerCase();
-                return line.trim().startsWith('•') && keywords.some(kw => lowerLine.includes(kw));
+                return lowerLine.trim().startsWith('•') && 
+                       targetLabels.some(label => lowerLine.includes(label)) &&
+                       (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
             });
 
             if (lineIdx === -1) return null;
@@ -721,11 +770,11 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                             <img
                                 src={previewUrl}
                                 alt={`${doc.label} preview`}
-                                className="w-full h-28 object-contain"
+                                className="w-full h-28 object-cover"
                             />
                             <button
                                 type="button"
-                                onClick={() => setPreviewDoc({ docId: doc.id, url: previewUrl })}
+                                onClick={() => window.open(previewUrl, '_blank')}
                                 className="absolute top-1.5 right-1.5 bg-black/50 hover:bg-black/70 text-white rounded-md px-1.5 py-1 text-[10px] flex items-center gap-1 transition-colors"
                                 aria-label={`View full size preview of ${doc.label}`}
                             >
@@ -864,10 +913,10 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                 {showPreview ? (
                     <div className="w-full flex flex-col items-center">
                         <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2 w-full max-w-[200px]">
-                            <img src={previewUrl} alt="Preview" className="w-full h-24 object-contain" />
+                            <img src={previewUrl} alt="Preview" className="w-full h-24 object-cover" />
                             <button
                                 type="button"
-                                onClick={() => setPreviewDoc({ docId, url: previewUrl })}
+                                onClick={() => window.open(previewUrl, '_blank')}
                                 className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-md px-1.5 py-0.5 text-[9px] flex items-center gap-1 transition-colors"
                             >
                                 <Eye size={9} /> View
@@ -928,36 +977,8 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         );
     };
 
-    // ─── Render ───────────────────────────────────────────────────────────────
     return (
-        <>
-            {/* Lightbox full-size preview */}
-            {previewDoc && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-fade-in"
-                    onClick={() => setPreviewDoc(null)}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Document full preview"
-                >
-                    <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-                        <button
-                            type="button"
-                            onClick={() => setPreviewDoc(null)}
-                            className="absolute -top-9 right-0 text-white/80 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                        >
-                            <XCircle size={15} /> Close preview
-                        </button>
-                        <img
-                            src={previewDoc.url}
-                            alt="Full document preview"
-                            className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
-                        />
-                    </div>
-                </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in flex flex-col" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in flex flex-col" noValidate>
 
                 {/* Step header */}
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1126,7 +1147,6 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                     </button>
                 </div>
             </form>
-        </>
     );
 };
 

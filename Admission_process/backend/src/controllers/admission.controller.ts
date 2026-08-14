@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Op } from 'sequelize';
 import path from 'path';
 import fs from 'fs';
 import admissionService from '../services/admission.service';
@@ -22,6 +23,42 @@ import UsnRegistry from '../models/UsnRegistry';
 import Notification from '../models/Notification';
 import * as r2 from '../services/r2.service';
 import sharp from 'sharp';
+import { StreamingZip } from '../utils/zip.util';
+import { buildR2Key, buildR2Folder, sanitizeStudentName } from '../utils/r2Key.util';
+
+export const MAPPED_DOC_NAMES: Record<string, string> = {
+  photo: 'Photo',
+  signature: 'Signature',
+  tenthMarksheet: 'SSLC',
+  twelfthMarksheet: 'PUC',
+  diplomaSemester5Marksheet: 'DiplomaSem5',
+  diplomaSemester6Marksheet: 'DiplomaSem6',
+  cetScoreCard: 'EntranceScoreCard',
+  aadhaar: 'Aadhaar',
+  casteCertificate: 'Caste',
+  domicileCertificate: 'StudyCertificate',
+  gapCertificate: 'Income',
+  feesPaidReceipt: 'CollegeFeesReceipt',
+  admissionFeeReceipt: 'AdmissionFeesReceipt',
+  admissionFormFeeReceipt: 'AdmissionFormFeesReceipt',
+};
+
+async function deleteOldFile(oldPath: string | null | undefined): Promise<void> {
+  if (!oldPath) return;
+  if (oldPath.startsWith('/uploads/') || oldPath.startsWith('uploads/')) {
+    const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
+    try {
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+    } catch (err) {
+      logger.warn(`Could not delete old local file: ${absolutePath}`, err);
+    }
+  } else {
+    // Delete from R2
+    await r2.deleteFile(oldPath);
+  }
+}
 
 const TARGET_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_DIMENSION = 2000;
@@ -264,19 +301,41 @@ export const saveStep6 = async (
 
     const studentId = req.user!.id;
 
-    // Fetch current document record to get old local paths for cleanup
-    const admission = await Admission.findOne({ where: { userId: studentId } });
-    const existingDocs = admission
-      ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
-      : null;
+    // Fetch admission + branch + user name for R2 key construction
+    const admission = await Admission.findOne({
+      where: { userId: studentId },
+      include: [{ model: Department, as: 'branch' }]
+    });
+    if (!admission) {
+      return res.status(404).json({ success: false, message: 'No admission application found.' });
+    }
+    const existingDocs = await AdmissionDocument.findOne({ where: { admissionId: admission.id } });
+
+    // Resolve student display name (User first+last, fallback to PersonalDetail)
+    const userRecord = await User.findByPk(studentId, { attributes: ['firstName', 'lastName'] });
+    const studentName = userRecord
+      ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim()
+      : 'Student';
 
     const fileUrls: Record<string, string> = {};
     if (hasFiles && files) {
       for (const field of Object.keys(files)) {
         const file = files[field][0];
-        // Compress the image locally before committing
+        // Compress the image locally before uploading to R2
         await compressLocalImage(file.path, file.mimetype);
-        fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
+
+        // Build the Cloudflare R2 key using central utility
+        const r2Key = buildR2Key({
+          academicYear:      admission.academicYear || '2026-2027',
+          branchCode:        admission.branch?.code || 'GEN',
+          studentName,
+          applicationNumber: admission.applicationNumber || `TEMP-${studentId}`,
+          mappedDocName:     MAPPED_DOC_NAMES[file.fieldname] || file.fieldname,
+          ext:               path.extname(file.originalname).toLowerCase() || '.jpg',
+        });
+
+        await r2.uploadFromDisk(file.path, r2Key, file.mimetype);
+        fileUrls[`${file.fieldname}Url`] = r2Key;
       }
     }
 
@@ -291,24 +350,23 @@ export const saveStep6 = async (
     const admissionId = await admissionService.saveStep6(studentId, updateData);
     securityEvents.documentUpload(req, studentId, admissionId, Object.keys(fileUrls));
 
-    // Delete old local files after DB update succeeds
+    // Delete old files after DB update succeeds
     if (existingDocs) {
       for (const dbKeyField of Object.keys(fileUrls)) {
         const oldPath = existingDocs.get(dbKeyField as any) as string | null;
         if (oldPath && oldPath !== fileUrls[dbKeyField]) {
-          const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
-          try {
-            if (fs.existsSync(absolutePath)) {
-              fs.unlinkSync(absolutePath);
-            }
-          } catch (err) {
-            logger.warn(`Could not delete old local file: ${absolutePath}`, err);
-          }
+          await deleteOldFile(oldPath);
         }
       }
     }
 
-    return res.json({ success: true, message: 'Documents uploaded.', data: fileUrls });
+    // Return signed URLs to frontend so it can render previews immediately
+    const responseUrls: Record<string, string> = {};
+    for (const k of Object.keys(fileUrls)) {
+      responseUrls[k] = r2.getSignedUrlSync(fileUrls[k]);
+    }
+
+    return res.json({ success: true, message: 'Documents uploaded.', data: responseUrls });
   } catch (err) {
     return next(err);
   }
@@ -333,7 +391,7 @@ export const removeDocument = async (
     const dbKeyField = `${field}Url`;
     const studentId = req.user!.id;
 
-    // Get old local file path before nullifying
+    // Get old path before nullifying
     const admission = await Admission.findOne({ where: { userId: studentId } });
     const existingDocs = admission
       ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
@@ -343,16 +401,9 @@ export const removeDocument = async (
     // Null out the DB field
     await admissionService.saveStep6(studentId, { [dbKeyField]: null });
 
-    // Delete local file
+    // Delete old file (local or R2)
     if (oldPath) {
-      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
-      try {
-        if (fs.existsSync(absolutePath)) {
-          fs.unlinkSync(absolutePath);
-        }
-      } catch (err) {
-        logger.warn(`Could not delete local file: ${absolutePath}`, err);
-      }
+      await deleteOldFile(oldPath);
     }
 
     return res.json({ success: true, message: 'Document removed.', data: { [dbKeyField]: null } });
@@ -384,8 +435,13 @@ export const getStudentDocument = async (
       return res.status(404).json({ error: 'Document not uploaded.' });
     }
 
-    const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
-    return res.json({ success: true, url: relativePath });
+    if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+      const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+      return res.json({ success: true, url: relativePath });
+    } else {
+      const signedUrl = await r2.getSignedUrl(fileUrl);
+      return res.json({ success: true, url: signedUrl });
+    }
   } catch (err) {
     return next(err);
   }
@@ -659,6 +715,11 @@ export const viewAdmissionDocument = async (
       return res.status(400).json({ error: 'Invalid document field.' });
     }
 
+    const admission = await Admission.findByPk(id);
+    if (!admission) {
+      return res.status(404).json({ error: 'No admission application found.' });
+    }
+
     const documents = await AdmissionDocument.findOne({ where: { admissionId: id } });
     if (!documents) {
       return res.status(404).json({ error: 'No documents found for this application.' });
@@ -671,8 +732,13 @@ export const viewAdmissionDocument = async (
 
     securityEvents.documentDownload(req, req.user!.id, id, field);
 
-    const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
-    return res.json({ success: true, url: relativePath });
+    if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+      const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
+      return res.json({ success: true, url: relativePath });
+    } else {
+      const signedUrl = await r2.getSignedUrl(fileUrl);
+      return res.json({ success: true, url: signedUrl });
+    }
   } catch (err) {
     return next(err);
   }
@@ -811,6 +877,35 @@ export const verifyAdmissionChecklist = async (
   }
 };
 
+export const saveDocumentStatuses = async (
+  req: AuthRequest,
+  res: Response
+): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const { statuses } = req.body;
+
+    if (!statuses || typeof statuses !== 'object') {
+      return res.status(400).json({ error: 'Invalid document statuses payload.' });
+    }
+
+    await admissionService.saveDocumentStatuses(id, statuses);
+
+    await AuditLog.create({
+      userId: req.user!.id,
+      action: 'ADMIN_UPDATED_DOCUMENT_STATUSES',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      details: { admissionId: id, statuses },
+    });
+
+    return res.json({ success: true, message: 'Document statuses saved successfully.' });
+  } catch (error: any) {
+    console.error('Error saving document statuses:', error);
+    return res.status(500).json({ error: error.message || 'Server error' });
+  }
+};
+
 /** GET /api/admin/stats */
 export const getAdminStats = async (
   _req: AuthRequest, res: Response, next: NextFunction
@@ -901,6 +996,35 @@ export const processCancellationRequest = async (
       admission.cancellationAdminRemarks = remarks || null;
       await admission.save();
 
+      const prevUsn = admission.usn;
+      if (prevUsn) {
+        await UsnRegistry.update(
+          { status: 'AVAILABLE' },
+          { where: { usn: prevUsn } }
+        );
+        admission.usn = null;
+        await admission.save();
+      }
+
+      const student = await Student.findOne({ where: { userId: admission.userId } });
+      if (student) {
+        if (student.usn && student.usn !== prevUsn) {
+          await UsnRegistry.update(
+            { status: 'AVAILABLE' },
+            { where: { usn: student.usn } }
+          );
+        }
+        await student.destroy();
+      }
+
+      const user = await User.findByPk(admission.userId);
+      if (user) {
+        await user.update({
+          role: 'STUDENT',
+          username: user.email
+        });
+      }
+
       await AuditLog.create({
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
@@ -974,6 +1098,35 @@ export const directCancelAdmission = async (
     admission.cancellationAdminRemarks = remarks || null;
     await admission.save();
 
+    const prevUsn = admission.usn;
+    if (prevUsn) {
+      await UsnRegistry.update(
+        { status: 'AVAILABLE' },
+        { where: { usn: prevUsn } }
+      );
+      admission.usn = null;
+      await admission.save();
+    }
+
+    const student = await Student.findOne({ where: { userId: admission.userId } });
+    if (student) {
+      if (student.usn && student.usn !== prevUsn) {
+        await UsnRegistry.update(
+          { status: 'AVAILABLE' },
+          { where: { usn: student.usn } }
+        );
+      }
+      await student.destroy();
+    }
+
+    const user = await User.findByPk(admission.userId);
+    if (user) {
+      await user.update({
+        role: 'STUDENT',
+        username: user.email
+      });
+    }
+
     await AuditLog.create({
       userId: req.user!.id,
       action: 'ADMISSION_STATUS_CHANGE',
@@ -1006,29 +1159,41 @@ export const uploadFeeReceipt = async (
 
     const studentId = req.user!.id;
 
-    // Fetch current receipt path for cleanup after successful DB update
-    const admission = await Admission.findOne({ where: { userId: studentId } });
-    const oldPath = admission ? admission.admissionFeeReceiptUrl : null;
+    // Fetch admission + branch + user for R2 key construction
+    const admission = await Admission.findOne({
+      where: { userId: studentId },
+      include: [{ model: Department, as: 'branch' }]
+    });
+    if (!admission) {
+      return res.status(400).json({ success: false, message: 'No admission application found.' });
+    }
+    const oldPath = admission.admissionFeeReceiptUrl;
 
-    // Compress the image locally
+    const userRecord = await User.findByPk(studentId, { attributes: ['firstName', 'lastName'] });
+    const studentName = userRecord
+      ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim()
+      : 'Student';
+
+    // Compress before upload
     await compressLocalImage(file.path, file.mimetype);
 
-    // Save path in DB
-    const relativeToUploads = path.relative(path.join(process.cwd(), 'uploads'), file.path).replace(/\\/g, '/');
-    const receiptUrl = `/uploads/${relativeToUploads}`;
+    // Upload to R2 using central key utility
+    const ext = path.extname(file.originalname).toLowerCase() || path.extname(file.filename).toLowerCase() || '.jpg';
+    const r2Key = buildR2Key({
+      academicYear:      admission.academicYear || '2026-2027',
+      branchCode:        (admission as any).branch?.code || 'GEN',
+      studentName,
+      applicationNumber: admission.applicationNumber || `TEMP-${studentId}`,
+      mappedDocName:     'AdmissionFeesReceipt',
+      ext,
+    });
+    await r2.uploadFromDisk(file.path, r2Key, file.mimetype);
 
-    const result = await admissionService.uploadFeeReceipt(studentId, receiptUrl);
+    const result = await admissionService.uploadFeeReceipt(studentId, r2Key);
 
-    // Delete old local file
-    if (oldPath && oldPath !== receiptUrl) {
-      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
-      try {
-        if (fs.existsSync(absolutePath)) {
-          fs.unlinkSync(absolutePath);
-        }
-      } catch (err) {
-        logger.warn(`Could not delete old fee receipt: ${absolutePath}`, err);
-      }
+    // Delete old file (local or R2)
+    if (oldPath && oldPath !== r2Key) {
+      await deleteOldFile(oldPath);
     }
 
     return res.json(result);
@@ -1177,40 +1342,58 @@ export const saveAdminDocuments = async (
       return res.status(400).json({ success: false, message: 'Could not resolve student identity.' });
     }
 
-    // Fetch existing doc paths for cleanup
-    const admission = await Admission.findOne({ where: { userId: studentId } });
+    // Fetch admission + branch + user for R2 key construction
+    const admission = await Admission.findOne({
+      where: { userId: studentId },
+      include: [{ model: Department, as: 'branch' }]
+    });
     const existingDocs = admission
       ? await AdmissionDocument.findOne({ where: { admissionId: admission.id } })
       : null;
+
+    const userRecord = await User.findByPk(studentId, { attributes: ['firstName', 'lastName'] });
+    const studentName = userRecord
+      ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim()
+      : 'Student';
 
     const fileUrls: Record<string, string> = {};
     for (const field of Object.keys(files)) {
       const file = files[field][0];
       await compressLocalImage(file.path, file.mimetype);
-      fileUrls[`${file.fieldname}Url`] = `/uploads/admissions/${studentId}/${file.fieldname}/${file.filename}`;
+
+      // Build R2 key using central utility
+      const r2Key = buildR2Key({
+        academicYear:      admission?.academicYear || '2026-2027',
+        branchCode:        (admission as any)?.branch?.code || 'GEN',
+        studentName,
+        applicationNumber: admission?.applicationNumber || `TEMP-${studentId}`,
+        mappedDocName:     MAPPED_DOC_NAMES[file.fieldname] || file.fieldname,
+        ext:               path.extname(file.originalname).toLowerCase() || '.jpg',
+      });
+      await r2.uploadFromDisk(file.path, r2Key, file.mimetype);
+      fileUrls[`${file.fieldname}Url`] = r2Key;
     }
 
     const admissionId = await admissionService.saveStep6(studentId, fileUrls);
     securityEvents.documentUpload(req, studentId, admissionId, Object.keys(fileUrls));
 
-    // Delete old local files
+    // Delete old files (local or R2)
     if (existingDocs) {
       for (const dbKeyField of Object.keys(fileUrls)) {
         const oldPath = existingDocs.get(dbKeyField as any) as string | null;
         if (oldPath && oldPath !== fileUrls[dbKeyField]) {
-          const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
-          try {
-            if (fs.existsSync(absolutePath)) {
-              fs.unlinkSync(absolutePath);
-            }
-          } catch (err) {
-            logger.warn(`Could not delete old local file: ${absolutePath}`, err);
-          }
+          await deleteOldFile(oldPath);
         }
       }
     }
 
-    return res.json({ success: true, message: 'Documents uploaded.', data: fileUrls });
+    // Return signed URLs so the admin document view can immediately preview
+    const responseUrls: Record<string, string> = {};
+    for (const k of Object.keys(fileUrls)) {
+      responseUrls[k] = r2.getSignedUrlSync(fileUrls[k]);
+    }
+
+    return res.json({ success: true, message: 'Documents uploaded.', data: responseUrls });
   } catch (err) {
     return next(err);
   }
@@ -1247,15 +1430,9 @@ export const removeAdminDocument = async (
 
     await admissionService.saveStep6(studentId, { [dbKeyField]: null });
 
+    // Delete old file — works for both local /uploads/... paths and R2 object keys
     if (oldPath) {
-      const absolutePath = path.join(process.cwd(), oldPath.replace(/^\/+/, ''));
-      try {
-        if (fs.existsSync(absolutePath)) {
-          fs.unlinkSync(absolutePath);
-        }
-      } catch (err) {
-        logger.warn(`Could not delete local file: ${absolutePath}`, err);
-      }
+      await deleteOldFile(oldPath);
     }
 
     return res.json({ success: true, message: 'Document removed.', data: { [dbKeyField]: null } });
@@ -1315,7 +1492,7 @@ export const bulkDeleteCancelledAdmissions = async (
     await Student.destroy({ where: { userId: userIds }, transaction });
 
     // Delete Notifications
-    await Notification.destroy({ where: { userId: userIds }, transaction });
+    await Notification.destroy({ where: { targetUserId: userIds }, transaction });
 
     // Delete Admission applications
     await Admission.destroy({ where: { id: admissionIds }, transaction });
@@ -1386,6 +1563,1060 @@ export const bulkDeleteCancelledAdmissions = async (
     });
   } catch (err) {
     await transaction.rollback();
+    return next(err);
+  }
+};
+
+/** DELETE /api/admin/admissions/:id */
+export const deleteAdmissionById = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  const { id } = req.params;
+  const transaction = await db.transaction();
+  try {
+    const admission = await Admission.findByPk(id, { transaction });
+    if (!admission) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Admission application not found.' });
+    }
+
+    // Security check: Only allow deleting REJECTED applications
+    if (admission.applicationStatus !== 'REJECTED') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Only rejected applications can be deleted.' });
+    }
+
+    const userId = admission.userId;
+
+    // Fetch corresponding student profile records if any
+    const student = await Student.findOne({
+      where: { userId },
+      transaction
+    });
+
+    // Perform database deletes in order
+    await AdmissionDocument.destroy({ where: { admissionId: id }, transaction });
+    await AdmissionAcademicDetail.destroy({ where: { admissionId: id }, transaction });
+    await AdmissionAddress.destroy({ where: { admissionId: id }, transaction });
+    await AdmissionParentDetail.destroy({ where: { admissionId: id }, transaction });
+    await AdmissionPersonalDetail.destroy({ where: { admissionId: id }, transaction });
+
+    // Release USN in UsnRegistry if any was claimed
+    const usnsToRelease: string[] = [];
+    if (student && student.usn) usnsToRelease.push(student.usn);
+    if (admission.usn) usnsToRelease.push(admission.usn);
+    if (usnsToRelease.length > 0) {
+      await UsnRegistry.update(
+        { status: 'AVAILABLE' },
+        { where: { usn: usnsToRelease }, transaction }
+      );
+    }
+
+    // Delete Student records
+    await Student.destroy({ where: { userId }, transaction });
+
+    // Delete Notifications
+    await Notification.destroy({ where: { targetUserId: userId }, transaction });
+
+    // Delete Admission application
+    await Admission.destroy({ where: { id }, transaction });
+
+    // Delete associated User account
+    await User.destroy({ where: { id: userId }, transaction });
+
+    // Record Audit Log inside the transaction
+    const adminUser = await User.findByPk(req.user!.id, { transaction });
+    const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Admin';
+
+    await AuditLog.create({
+      userId: req.user!.id,
+      action: 'DELETE_REJECTED_ADMISSION',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      details: {
+        adminId: req.user!.id,
+        adminName,
+        timestamp: new Date(),
+        admissionId: id,
+        applicationNumber: admission.applicationNumber,
+        userId,
+        performedBy: req.user!.id,
+      },
+    }, { transaction });
+
+
+    // Commit database transaction
+    await transaction.commit();
+
+    // File System Cleanup (Post-commit)
+    if (userId) {
+      const baseUploadDir = path.join(process.cwd(), 'uploads', 'admissions');
+      // Validate UUID strictly to prevent path traversal
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(userId)) {
+        const studentFolder = path.join(baseUploadDir, userId);
+        // Verify path belongs to uploads/admissions directory
+        const relativePath = path.relative(baseUploadDir, studentFolder);
+        const isSafe = relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+
+        if (isSafe) {
+          try {
+            if (fs.existsSync(studentFolder)) {
+              fs.rmSync(studentFolder, { recursive: true, force: true });
+              logger.info(`Successfully deleted upload folder for student user ID: ${userId}`);
+            }
+          } catch (fileErr) {
+            logger.error(`Failed to delete upload folder for student user ID ${userId}:`, fileErr);
+          }
+        } else {
+          logger.error(`Security Alert: Blocked path traversal attempt for student user ID: ${userId}`);
+        }
+      } else {
+        logger.error(`Skipping file cleanup for invalid student user UUID: ${userId}`);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Rejected application ${admission.applicationNumber} permanently deleted.`
+    });
+  } catch (err) {
+    await transaction.rollback();
+    return next(err);
+  }
+};
+
+// ─── USN ENTRY & ALLOCATION SYSTEM ───────────────────────────────────────────
+
+/** GET /api/admin/usn/eligible */
+export const listUsnEligibleApplicants = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const {
+      academicYear,
+      branchId,
+      entryType,
+      usnStatus,
+      search,
+      alphabet,
+      sortBy = 'name',
+      sortOrder = 'ASC',
+      page = 1,
+      limit = 25,
+    } = req.query as any;
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 25;
+    const offset = (pageNum - 1) * limitNum;
+
+    // Base query only includes eligible statuses
+    const where: any = {
+      applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] },
+    };
+
+    // Filter by Academic Year
+    if (academicYear && academicYear !== 'ALL') {
+      where.academicYear = academicYear;
+    }
+
+    // Filter by Branch
+    if (branchId && branchId !== 'ALL') {
+      where.branchId = branchId;
+    }
+
+    // Filter by Entry Type (Regular or Lateral)
+    if (entryType && entryType !== 'ALL') {
+      if (entryType === 'LATERAL') {
+        where[Op.or] = [
+          { qualification: 'DIPLOMA' },
+          { admissionType: 'DCET' },
+        ];
+      } else if (entryType === 'REGULAR') {
+        where[Op.and] = [
+          { qualification: { [Op.or]: [{ [Op.ne]: 'DIPLOMA' }, { [Op.eq]: null }] } },
+          { admissionType: { [Op.or]: [{ [Op.ne]: 'DCET' }, { [Op.eq]: null }] } },
+        ];
+      }
+    }
+
+    // Filter by USN Status
+    if (usnStatus && usnStatus !== 'ALL') {
+      if (usnStatus === 'PENDING') {
+        where.usn = null;
+      } else if (usnStatus === 'ASSIGNED') {
+        where.usn = { [Op.ne]: null };
+      }
+    }
+
+    // Universal Search
+    if (search && search.trim() !== '') {
+      const s = search.trim();
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push({
+        [Op.or]: [
+          { applicationNumber: { [Op.iLike]: `%${s}%` } },
+          { usn: { [Op.iLike]: `%${s}%` } },
+          { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${s}%` } },
+          { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } },
+        ],
+      });
+    }
+
+    // Alphabet filter
+    if (alphabet && alphabet !== 'ALL') {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push({
+        '$studentpersonaldetails.firstName$': { [Op.iLike]: `${alphabet}%` },
+      });
+    }
+
+    // Order/Sorting
+    let order: any[] = [];
+    const dir = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    if (sortBy === 'applicationNumber') {
+      order = [['applicationNumber', dir]];
+    } else if (sortBy === 'usn') {
+      order = [['usn', dir]];
+    } else if (sortBy === 'usnStatus') {
+      order = [['usn', dir === 'ASC' ? 'NULLS FIRST' : 'NULLS LAST']];
+    } else {
+      // Default: Normalized Full Name A-Z/Z-A sorting
+      order = [
+        [
+          db.literal('LOWER(TRIM(CONCAT(COALESCE("studentpersonaldetails"."firstName", \'\'), \' \', COALESCE("studentpersonaldetails"."middleName", \'\'), \' \', COALESCE("studentpersonaldetails"."lastName", \'\'))))'),
+          dir
+        ]
+      ];
+    }
+
+    const { count, rows } = await Admission.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'email', 'firstName', 'lastName'] },
+        { model: Department, as: 'branch', attributes: ['id', 'name', 'code'] },
+        { model: AdmissionPersonalDetail, as: 'studentpersonaldetails', attributes: ['firstName', 'middleName', 'lastName'] },
+      ],
+      order,
+      limit: limitNum,
+      offset,
+      distinct: true,
+    });
+
+    return res.json({
+      success: true,
+      total: count,
+      page: pageNum,
+      totalPages: Math.ceil(count / limitNum),
+      applicants: rows,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/admin/usn/summary */
+export const getUsnSummary = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const baseWhere = {
+      applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] },
+    };
+
+    const totalEligible = await Admission.count({ where: baseWhere });
+    const assigned = await Admission.count({
+      where: {
+        ...baseWhere,
+        usn: { [Op.ne]: null },
+      },
+    });
+    const pending = totalEligible - assigned;
+    const completionRate = totalEligible > 0 ? parseFloat(((assigned / totalEligible) * 100).toFixed(1)) : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        totalEligible,
+        assigned,
+        pending,
+        completionRate,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** Shared USN Assignment validation helper */
+const validateUsnAssignment = async (
+  applicationId: string,
+  usn: string | null | undefined
+): Promise<{ error?: string; admission?: Admission; cleanUsn?: string | null }> => {
+  const admission = await Admission.findByPk(applicationId, {
+    include: [
+      { model: Department, as: 'branch' },
+      { model: AdmissionPersonalDetail, as: 'studentpersonaldetails' },
+    ]
+  });
+
+  if (!admission) {
+    return { error: 'Admission application not found.' };
+  }
+
+  if (!['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'].includes(admission.applicationStatus)) {
+    return { error: 'Applicant is not in an eligible status for USN allocation.' };
+  }
+
+  // If USN is empty/null, it is a removal request — always valid
+  if (!usn || usn.trim() === '') {
+    return { admission, cleanUsn: null };
+  }
+
+  const cleanUsn = usn.trim().toUpperCase();
+  const match = cleanUsn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/);
+  if (!match) {
+    return { error: 'Invalid USN format. Must match pattern 2JR + YY + XX + NNN (e.g. 2JR26CS101).' };
+  }
+
+  const usnYearSuffix = match[1];
+  const usnDeptCode = match[2];
+
+  // Validate USN year suffix matches application academic year
+  let expectedYearSuffix = '';
+  if (admission.academicYear) {
+    const startYear = admission.academicYear.split('-')[0].trim();
+    if (startYear.length === 4) {
+      expectedYearSuffix = startYear.substring(2);
+    }
+  }
+  if (expectedYearSuffix && usnYearSuffix !== expectedYearSuffix) {
+    return { error: `USN year '${usnYearSuffix}' does not match academic year '${admission.academicYear}' (expected '${expectedYearSuffix}').` };
+  }
+
+  // Validate department code matches branch code (first 2 letters)
+  if (!admission.branch) {
+    return { error: 'No branch is assigned to this applicant.' };
+  }
+  const branchCodePrefix = admission.branch.code.toUpperCase().substring(0, 2);
+  if (branchCodePrefix !== usnDeptCode) {
+    return { error: `USN department code '${usnDeptCode}' does not match applicant branch '${admission.branch.code}'.` };
+  }
+
+  // Check uniqueness across other admissions
+  const duplicateAdmission = await Admission.findOne({
+    where: { usn: cleanUsn, id: { [Op.ne]: applicationId } }
+  });
+  if (duplicateAdmission) {
+    return { error: `USN ${cleanUsn} is already assigned to another applicant.` };
+  }
+
+  const duplicateStudent = await Student.findOne({
+    where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }
+  });
+  if (duplicateStudent) {
+    return { error: `USN ${cleanUsn} is already assigned to another student.` };
+  }
+
+  return { admission, cleanUsn };
+};
+
+/** POST /api/admin/usn/bulk-assign */
+export const bulkAssignUsns = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  const { assignments, source = 'MANUAL', batchId } = req.body;
+
+  if (!assignments || !Array.isArray(assignments)) {
+    return res.status(400).json({ error: 'Assignments array is required.' });
+  }
+
+  const validationResults: { applicationId: string; error: string }[] = [];
+  const processedAssignments: { admission: Admission; cleanUsn: string | null }[] = [];
+
+  // Check local duplicates in payload
+  const localUsns = new Set<string>();
+  for (const item of assignments) {
+    if (item.usn && item.usn.trim() !== '') {
+      const u = item.usn.trim().toUpperCase();
+      if (localUsns.has(u)) {
+        validationResults.push({ applicationId: item.applicationId, error: `Duplicate USN '${u}' submitted multiple times in the same batch.` });
+      } else {
+        localUsns.add(u);
+      }
+    }
+  }
+
+  for (const item of assignments) {
+    const { applicationId, usn } = item;
+    if (!applicationId) {
+      validationResults.push({ applicationId: '', error: 'Application ID is required for each assignment.' });
+      continue;
+    }
+    try {
+      const { error, admission, cleanUsn } = await validateUsnAssignment(applicationId, usn);
+      if (error) {
+        validationResults.push({ applicationId, error });
+      } else if (admission) {
+        processedAssignments.push({ admission, cleanUsn: cleanUsn ?? null });
+      }
+    } catch (e: any) {
+      validationResults.push({ applicationId, error: e.message || 'System validation error.' });
+    }
+  }
+
+  if (validationResults.length > 0) {
+    return res.status(400).json({ success: false, message: 'Some USN assignments failed validation.', errors: validationResults });
+  }
+
+  // Sort for deterministic locking order to avoid deadlocks
+  processedAssignments.sort((a, b) => {
+    const uA = a.cleanUsn || '';
+    const uB = b.cleanUsn || '';
+    if (uA && uB) return uA.localeCompare(uB);
+    return a.admission.id.localeCompare(b.admission.id);
+  });
+
+  const transaction = await db.transaction();
+  try {
+    const adminUser = await User.findByPk(req.user!.id, { transaction });
+    const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Admin';
+
+    for (const item of processedAssignments) {
+      const { admission, cleanUsn } = item;
+      const prevUsn = admission.usn;
+      if (prevUsn === cleanUsn) continue;
+
+      // Concurrency double-check under transaction lock
+      if (cleanUsn) {
+        const doubleCheck = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
+        const doubleCheckStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
+        if (doubleCheck || doubleCheckStu) {
+          throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
+        }
+      }
+
+      await admission.update({ usn: cleanUsn }, { transaction });
+
+      if (admission.applicationStatus === 'ENROLLED') {
+        const student = await Student.findOne({ where: { userId: admission.userId }, transaction });
+        if (student) {
+          const m = cleanUsn ? cleanUsn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/) : null;
+          let rollNumber = student.rollNumber;
+          let batchYear = student.batchYear;
+          if (m && cleanUsn) {
+            batchYear = parseInt('20' + m[1]);
+            rollNumber = `${batchYear}${m[2]}${m[3]}`;
+          }
+          await student.update({ usn: cleanUsn || null, enrollmentNumber: cleanUsn || null, rollNumber, batchYear }, { transaction });
+        }
+        const user = await User.findByPk(admission.userId, { transaction });
+        if (user) await user.update({ username: cleanUsn ? cleanUsn.toLowerCase() : user.email }, { transaction });
+      }
+
+      await AuditLog.create({
+        userId: req.user!.id,
+        action: cleanUsn ? (prevUsn ? 'USN_UPDATED' : 'USN_ASSIGNED') : 'USN_REMOVED',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: {
+          admissionId: admission.id,
+          applicationNumber: admission.applicationNumber,
+          studentName: admission.studentpersonaldetails ? `${admission.studentpersonaldetails.firstName} ${admission.studentpersonaldetails.middleName ? admission.studentpersonaldetails.middleName + ' ' : ''}${admission.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : 'N/A',
+          previousUsn: prevUsn || null,
+          newUsn: cleanUsn || null,
+          assignedBy: req.user!.id,
+          assignedByName: adminName,
+          source,
+          batchId: batchId || null,
+          timestamp: new Date()
+        }
+      }, { transaction });
+    }
+
+    await transaction.commit();
+    return res.json({ success: true, message: 'All USNs assigned successfully.' });
+  } catch (err) {
+    await transaction.rollback();
+    return next(err);
+  }
+};
+
+/** PATCH /api/admin/usn/:id */
+export const assignSingleUsn = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  const { id } = req.params;
+  const { usn } = req.body;
+
+  try {
+    const { error, admission, cleanUsn } = await validateUsnAssignment(id, usn);
+    if (error) return res.status(400).json({ error });
+    if (!admission) return res.status(404).json({ error: 'Admission application not found.' });
+
+    const transaction = await db.transaction();
+    try {
+      const prevUsn = admission.usn;
+      const adminUser = await User.findByPk(req.user!.id, { transaction });
+      const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Admin';
+
+      if (prevUsn !== cleanUsn) {
+        if (cleanUsn) {
+          const dupAdm = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
+          const dupStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
+          if (dupAdm || dupStu) throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
+        }
+
+        await admission.update({ usn: cleanUsn }, { transaction });
+
+        if (admission.applicationStatus === 'ENROLLED') {
+          const student = await Student.findOne({ where: { userId: admission.userId }, transaction });
+          if (student) {
+            const m = cleanUsn ? cleanUsn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/) : null;
+            let rollNumber = student.rollNumber;
+            let batchYear = student.batchYear;
+            if (m && cleanUsn) {
+              batchYear = parseInt('20' + m[1]);
+              rollNumber = `${batchYear}${m[2]}${m[3]}`;
+            }
+            await student.update({ usn: cleanUsn || null, enrollmentNumber: cleanUsn || null, rollNumber, batchYear }, { transaction });
+          }
+          const user = await User.findByPk(admission.userId, { transaction });
+          if (user) await user.update({ username: cleanUsn ? cleanUsn.toLowerCase() : user.email }, { transaction });
+        }
+
+        await AuditLog.create({
+          userId: req.user!.id,
+          action: cleanUsn ? (prevUsn ? 'USN_UPDATED' : 'USN_ASSIGNED') : 'USN_REMOVED',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          details: {
+            admissionId: admission.id,
+            applicationNumber: admission.applicationNumber,
+            studentName: admission.studentpersonaldetails ? `${admission.studentpersonaldetails.firstName} ${admission.studentpersonaldetails.middleName ? admission.studentpersonaldetails.middleName + ' ' : ''}${admission.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : 'N/A',
+            previousUsn: prevUsn || null,
+            newUsn: cleanUsn || null,
+            assignedBy: req.user!.id,
+            assignedByName: adminName,
+            source: 'MANUAL',
+            timestamp: new Date()
+          }
+        }, { transaction });
+      }
+
+      await transaction.commit();
+      return res.json({ success: true, message: 'USN assigned successfully.' });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
+    }
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** DELETE /api/admin/usn/:id */
+export const removeUsn = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  const { id } = req.params;
+
+  try {
+    const admission = await Admission.findByPk(id, {
+      include: [
+        { model: AdmissionPersonalDetail, as: 'studentpersonaldetails' },
+      ]
+    });
+
+    if (!admission) {
+      return res.status(404).json({ error: 'Admission application not found.' });
+    }
+
+    const prevUsn = admission.usn;
+    if (!prevUsn) {
+      return res.status(400).json({ error: 'No USN is currently assigned to this applicant.' });
+    }
+
+    const transaction = await db.transaction();
+    try {
+      const adminUser = await User.findByPk(req.user!.id, { transaction });
+      const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Admin';
+
+      // Clear the USN from the admission record
+      await admission.update({ usn: null }, { transaction });
+
+      if (admission.applicationStatus === 'ENROLLED') {
+        const student = await Student.findOne({ where: { userId: admission.userId }, transaction });
+        if (student) {
+          await student.update({ usn: null, enrollmentNumber: null }, { transaction });
+        }
+        const user = await User.findByPk(admission.userId, { transaction });
+        if (user) {
+          await user.update({ username: user.email }, { transaction });
+        }
+      }
+
+      await AuditLog.create({
+        userId: req.user!.id,
+        action: 'USN_REMOVED',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        details: {
+          admissionId: admission.id,
+          applicationNumber: admission.applicationNumber,
+          studentName: admission.studentpersonaldetails ? `${admission.studentpersonaldetails.firstName} ${admission.studentpersonaldetails.middleName ? admission.studentpersonaldetails.middleName + ' ' : ''}${admission.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : 'N/A',
+          previousUsn: prevUsn,
+          newUsn: null,
+          assignedBy: req.user!.id,
+          assignedByName: adminName,
+          source: 'MANUAL',
+          timestamp: new Date()
+        }
+      }, { transaction });
+
+      await transaction.commit();
+      return res.json({ success: true, message: 'USN removed successfully.' });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
+    }
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const normalizeApplicationNumber = (value: unknown): string => {
+  return String(value ?? '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+};
+
+/** POST /api/admin/usn/validate-import */
+export const validateImportUsns = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const { rows } = req.body;
+    if (!rows || !Array.isArray(rows)) {
+      return res.status(400).json({ error: 'Rows array is required.' });
+    }
+
+    const results: any[] = [];
+    const localUsns = new Set<string>();
+    const localAppNums = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const appNum = row.applicationNumber ? String(row.applicationNumber).trim() : '';
+      const usnRaw = row.usn ? String(row.usn).trim().toUpperCase() : '';
+
+      if (!appNum) {
+        results.push({ rowNumber: rowNum, applicationNumber: '', usn: usnRaw, valid: false, error: 'Application number is missing.' });
+        continue;
+      }
+
+      const normalizedAppNum = normalizeApplicationNumber(appNum);
+      if (localAppNums.has(normalizedAppNum)) {
+        results.push({ rowNumber: rowNum, applicationNumber: appNum, usn: usnRaw, valid: false, error: 'Duplicate application number in sheet.' });
+        continue;
+      }
+      localAppNums.add(normalizedAppNum);
+
+      if (!usnRaw) {
+        results.push({ rowNumber: rowNum, applicationNumber: appNum, usn: '', valid: false, error: 'USN is missing.' });
+        continue;
+      }
+
+      if (localUsns.has(usnRaw)) {
+        results.push({ rowNumber: rowNum, applicationNumber: appNum, usn: usnRaw, valid: false, error: `Duplicate USN '${usnRaw}' in sheet.` });
+        continue;
+      }
+      localUsns.add(usnRaw);
+
+      // Find Admission by normalized application number
+      const admission = await Admission.findOne({
+        where: db.where(
+          db.fn('LOWER', db.fn('TRIM', db.col('applicationNumber'))),
+          normalizedAppNum.toLowerCase()
+        ),
+        include: [
+          { model: Department, as: 'branch' },
+          { model: AdmissionPersonalDetail, as: 'studentpersonaldetails' },
+        ]
+      });
+
+      if (!admission) {
+        results.push({ rowNumber: rowNum, applicationNumber: appNum, usn: usnRaw, valid: false, error: 'Application number not found.' });
+        continue;
+      }
+
+      const buildErrorResult = (errMsg: string) => ({
+        rowNumber: rowNum,
+        applicationNumber: admission.applicationNumber,
+        usn: usnRaw,
+        valid: false,
+        error: errMsg,
+        applicationId: admission.id
+      });
+
+      if (!['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'].includes(admission.applicationStatus)) {
+        results.push(buildErrorResult(`Applicant status '${admission.applicationStatus}' is not eligible for USN allocation.`));
+        continue;
+      }
+
+      const match = usnRaw.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/);
+      if (!match) {
+        results.push(buildErrorResult('Invalid USN format. Must be 2JR + YY + XX + NNN (e.g. 2JR26CS101).'));
+        continue;
+      }
+
+      const usnYearSuffix = match[1];
+      const usnDeptCode = match[2];
+
+      // Validate year suffix
+      let expectedYearSuffix = '';
+      if (admission.academicYear) {
+        const startYear = admission.academicYear.split('-')[0].trim();
+        if (startYear.length === 4) {
+          expectedYearSuffix = startYear.substring(2);
+        }
+      }
+      if (expectedYearSuffix && usnYearSuffix !== expectedYearSuffix) {
+        results.push(buildErrorResult(`USN year '${usnYearSuffix}' does not match academic year '${admission.academicYear}' (expected '${expectedYearSuffix}').`));
+        continue;
+      }
+
+      if (!admission.branch) {
+        results.push(buildErrorResult('No department/branch assigned to applicant.'));
+        continue;
+      }
+
+      const branchCodePrefix = admission.branch.code.toUpperCase().substring(0, 2);
+      if (branchCodePrefix !== usnDeptCode) {
+        results.push(buildErrorResult(`USN department code '${usnDeptCode}' does not match branch '${admission.branch.code}'.`));
+        continue;
+      }
+
+      // Check uniqueness
+      const duplicateAdmission = await Admission.findOne({
+        where: { usn: usnRaw, id: { [Op.ne]: admission.id } }
+      });
+      if (duplicateAdmission) {
+        results.push(buildErrorResult(`USN is already assigned to application ${duplicateAdmission.applicationNumber}.`));
+        continue;
+      }
+
+      const duplicateStudent = await Student.findOne({
+        where: { usn: usnRaw, userId: { [Op.ne]: admission.userId } }
+      });
+      if (duplicateStudent) {
+        results.push(buildErrorResult('USN is already assigned to another student.'));
+        continue;
+      }
+
+      // Valid
+      results.push({
+        rowNumber: rowNum,
+        applicationNumber: admission.applicationNumber,
+        applicantName: admission.studentpersonaldetails ? `${admission.studentpersonaldetails.firstName} ${admission.studentpersonaldetails.middleName ? admission.studentpersonaldetails.middleName + ' ' : ''}${admission.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : 'N/A',
+        branch: admission.branch.code,
+        entryType: admission.qualification === 'DIPLOMA' || admission.admissionType === 'DCET' ? 'Lateral' : 'Regular',
+        currentUsn: admission.usn || '—',
+        usn: usnRaw,
+        applicationId: admission.id,
+        valid: true
+      });
+    }
+
+    return res.json({ success: true, results });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const exportSingleStudentZip = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { id } = req.params;
+    
+    // Verify admin/principal authorization (already done by route middleware)
+    const admission = await Admission.findByPk(id, {
+      include: [
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] },
+        { model: Department, as: 'branch' },
+        { model: AdmissionDocument, as: 'studentdocuments' }
+      ]
+    });
+
+    if (!admission) {
+      return res.status(404).json({ error: 'Admission application not found.' });
+    }
+
+    const docs = admission.studentdocuments;
+    if (!docs) {
+      return res.status(404).json({ error: 'No documents found for this student.' });
+    }
+
+    const studentName = admission.user 
+      ? `${admission.user.firstName || ''} ${admission.user.lastName || ''}`.trim()
+      : 'Student';
+    const appNum = admission.applicationNumber || `TEMP-${id}`;
+    const safeStudentName = sanitizeStudentName(studentName);
+    const zipFolderName = `${safeStudentName} - ${appNum}`;
+
+    // Set streaming headers
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${appNum}_docs.zip"`);
+
+    const zip = new StreamingZip(res);
+    let documentCount = 0;
+
+    for (const field of Object.keys(DOCUMENT_FIELD_MAP)) {
+      const dbKey = DOCUMENT_FIELD_MAP[field];
+      const fileUrl = docs.get(dbKey as any) as string | null;
+      if (fileUrl) {
+        let fileBuffer: Buffer | null = null;
+        try {
+          if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+            const absolutePath = path.join(process.cwd(), fileUrl.replace(/^\/+/, ''));
+            if (fs.existsSync(absolutePath)) {
+              fileBuffer = fs.readFileSync(absolutePath);
+            }
+          } else {
+            // Cloudflare R2
+            fileBuffer = await r2.getFile(fileUrl);
+          }
+
+          if (fileBuffer) {
+            const ext = path.extname(fileUrl).toLowerCase() || '.jpg';
+            const mappedName = MAPPED_DOC_NAMES[field] || field;
+            const entryPath = `${zipFolderName}/${mappedName}${ext}`;
+            await zip.addFile(entryPath, fileBuffer);
+            documentCount++;
+          }
+        } catch (err) {
+          logger.error(`Error loading document ${fileUrl} for zip:`, err);
+        }
+      }
+    }
+
+    await zip.finalize();
+
+    // Log individual zip download
+    await AuditLog.create({
+      userId: req.user!.id,
+      action: 'INDIVIDUAL_ZIP_DOWNLOAD',
+      ipAddress: req.ip || null,
+      userAgent: req.headers['user-agent'] || null,
+      details: { admissionId: id, studentName, documentCount }
+    });
+
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const previewBulkExport = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { academicYear, branchId } = req.query;
+    if (!academicYear) {
+      return res.status(400).json({ error: 'Academic Year is required.' });
+    }
+
+    const where: any = {
+      academicYear,
+      applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] }
+    };
+    if (branchId && branchId !== 'ALL') {
+      where.branchId = branchId;
+    }
+
+    const admissions = await Admission.findAll({
+      where,
+      include: [
+        { model: AdmissionDocument, as: 'studentdocuments' }
+      ]
+    });
+
+    let studentCount = admissions.length;
+    let documentCount = 0;
+
+    for (const adm of admissions) {
+      if (adm.studentdocuments) {
+        for (const field of Object.keys(DOCUMENT_FIELD_MAP)) {
+          const dbKey = DOCUMENT_FIELD_MAP[field];
+          if (adm.studentdocuments.get(dbKey as any)) {
+            documentCount++;
+          }
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      studentCount,
+      documentCount
+    });
+
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const bulkExportDocuments = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { academicYear, branchId } = req.query;
+    if (!academicYear) {
+      return res.status(400).json({ error: 'Academic Year is required.' });
+    }
+
+    // Set execution timeout to 10 minutes to prevent request timeout problems
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+
+    const where: any = {
+      academicYear,
+      applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'] }
+    };
+    if (branchId && branchId !== 'ALL') {
+      where.branchId = branchId;
+    }
+
+    const admissions = await Admission.findAll({
+      where,
+      include: [
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] },
+        { model: Department, as: 'branch' },
+        { model: AdmissionDocument, as: 'studentdocuments' }
+      ]
+    });
+
+    if (!admissions || admissions.length === 0) {
+      return res.status(404).json({ error: 'No finalized students found matching the filters.' });
+    }
+
+    const zipFileName = `VTU_Documents_${academicYear}_${branchId}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+
+    const zip = new StreamingZip(res);
+    let totalDocumentsAdded = 0;
+    
+    // Structure of EXPORT_SUMMARY.txt:
+    // Student Name | Application Number | Department | Missing Documents
+    let summaryText = `JCER ERP - ADMISSION DOCUMENTS EXPORT SUMMARY\n`;
+    summaryText += `Academic Year: ${academicYear}\n`;
+    summaryText += `Department/Branch Filter: ${branchId}\n`;
+    summaryText += `Total Eligible Finalized Students: ${admissions.length}\n`;
+    summaryText += `Export Date: ${new Date().toLocaleString('en-IN')}\n`;
+    summaryText += `======================================================================\n\n`;
+    summaryText += `STUDENTS LOG AND DOCUMENT COVERAGE:\n\n`;
+
+    for (const adm of admissions) {
+      const studentName = adm.user 
+        ? `${adm.user.firstName || ''} ${adm.user.lastName || ''}`.trim()
+        : 'Student';
+      const appNum = adm.applicationNumber || `TEMP-${adm.id}`;
+      const branchCode = adm.branch?.code || 'GEN';
+      const safeStudentName = sanitizeStudentName(studentName);
+      const folderName = `${safeStudentName} - ${appNum}`;
+      
+      const missingDocsList: string[] = [];
+      const docs = adm.studentdocuments;
+
+      summaryText += `• Student: ${studentName}\n`;
+      summaryText += `  Application Number: ${appNum}\n`;
+      summaryText += `  Branch: ${branchCode}\n`;
+
+      if (!docs) {
+        missingDocsList.push('All Documents (No record found)');
+        summaryText += `  Status: No documents uploaded.\n\n`;
+      } else {
+        const addedForStudent: string[] = [];
+        for (const field of Object.keys(DOCUMENT_FIELD_MAP)) {
+          const dbKey = DOCUMENT_FIELD_MAP[field];
+          const fileUrl = docs.get(dbKey as any) as string | null;
+
+          if (fileUrl) {
+            let fileBuffer: Buffer | null = null;
+            try {
+              if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
+                const absolutePath = path.join(process.cwd(), fileUrl.replace(/^\/+/, ''));
+                if (fs.existsSync(absolutePath)) {
+                  fileBuffer = fs.readFileSync(absolutePath);
+                }
+              } else {
+                fileBuffer = await r2.getFile(fileUrl);
+              }
+
+              if (fileBuffer) {
+                const ext = path.extname(fileUrl).toLowerCase() || '.jpg';
+                const mappedName = MAPPED_DOC_NAMES[field] || field;
+                
+                // Structured ZIP path: [Academic Year]/[Branch]/[Student Name - Application Number]/[Docs]
+                const entryPath = `${academicYear}/${branchCode}/${folderName}/${mappedName}${ext}`;
+                await zip.addFile(entryPath, fileBuffer);
+                totalDocumentsAdded++;
+                addedForStudent.push(mappedName);
+              } else {
+                missingDocsList.push(field);
+              }
+            } catch (err) {
+              logger.error(`Error loading document ${fileUrl} for bulk ZIP:`, err);
+              missingDocsList.push(field);
+            }
+          } else {
+            missingDocsList.push(field);
+          }
+        }
+
+        summaryText += `  Added Documents: ${addedForStudent.join(', ') || 'None'}\n`;
+        if (missingDocsList.length > 0) {
+          summaryText += `  Missing Documents: ${missingDocsList.join(', ')}\n`;
+        }
+        summaryText += `\n`;
+      }
+    }
+
+    // Add EXPORT_SUMMARY.txt to ZIP
+    const summaryBuffer = Buffer.from(summaryText, 'utf-8');
+    await zip.addFile('EXPORT_SUMMARY.txt', summaryBuffer);
+
+    await zip.finalize();
+
+    // Log bulk ZIP download
+    await AuditLog.create({
+      userId: req.user!.id,
+      action: 'BULK_DOCUMENT_EXPORT',
+      ipAddress: req.ip || null,
+      userAgent: req.headers['user-agent'] || null,
+      details: { academicYear, branchId, studentCount: admissions.length, documentCount: totalDocumentsAdded }
+    });
+
+  } catch (err) {
     return next(err);
   }
 };

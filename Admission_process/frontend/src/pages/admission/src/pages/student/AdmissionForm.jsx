@@ -267,6 +267,19 @@ const AdmissionForm = () => {
         }
     }, [statusLoading]);
 
+    // Redirect to dashboard if application needs correction and no specific step is requested
+    useEffect(() => {
+        if (statusLoading || !stepStatus) return;
+
+        const isCorrection = stepStatus.applicationStatus === 'CORRECTION_REQUIRED' || stepStatus.applicationStatus === 'REJECTED';
+        if (isCorrection) {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('step')) {
+                navigate('/admission/dashboard');
+            }
+        }
+    }, [statusLoading, stepStatus, navigate]);
+
     // Fetch step-specific data lazily on step transition
     useEffect(() => {
         const isEditable = !statusLoading && stepStatus && 
@@ -276,6 +289,13 @@ const AdmissionForm = () => {
             fetchStepData(currentStep);
         }
     }, [currentStep, statusLoading, stepStatus?.applicationStatus]);
+
+    // Force a fresh sync of full details when entering Step 7 (Review)
+    useEffect(() => {
+        if (currentStep === 7) {
+            syncApplicationState();
+        }
+    }, [currentStep]);
 
     // Set initial step based on server status — only runs if URL had no ?step param
     useEffect(() => {
@@ -396,7 +416,7 @@ const AdmissionForm = () => {
         // Fire status refresh in the background — do NOT await it so the UI moves instantly
         refetchStatus();
 
-        if (currentStep === 1) {
+        if (currentStep === 1 || nextStep === 7) {
             await syncApplicationState();
         }
 
@@ -722,7 +742,7 @@ const AdmissionForm = () => {
             case 4: return <Step4Address {...stepProps} readOnly={getIsStepReadOnly(4)} />;
             case 5: return <Step5Academic {...stepProps} readOnly={getIsStepReadOnly(5)} />;
             case 6: return <Step6Documents onNext={handleNext} onPrev={handlePrev} data={formData} onUploadSuccess={refreshFormData} applicationStatus={stepStatus?.applicationStatus} adminRemarks={stepStatus?.adminRemarks} readOnly={getIsStepReadOnly(6)} />;
-            case 7: return <Step7Review data={formData} onPrev={handlePrev} applicationStatus={stepStatus?.applicationStatus} adminRemarks={stepStatus?.adminRemarks} />;
+            case 7: return <Step7Review details={fullDetails} onPrev={handlePrev} applicationStatus={stepStatus?.applicationStatus} adminRemarks={stepStatus?.adminRemarks} />;
             default: return null;
         }
     };

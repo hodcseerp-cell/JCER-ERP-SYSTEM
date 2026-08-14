@@ -4,7 +4,7 @@ import admissionService, { AdmissionApplication, AdmissionListResult } from '../
 import { 
   Search, Filter, ChevronLeft, ChevronRight, Eye, CheckCircle2, Clock, XCircle, FileText, 
   RefreshCw, CheckSquare, Square, Download, Mail, Send, Award, ShieldAlert, ShieldCheck, 
-  SlidersHorizontal, ArrowRight, UserCheck, Copy, X, Lock
+  SlidersHorizontal, ArrowRight, UserCheck, Copy, X, Lock, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -191,6 +191,26 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
     } catch (e: any) {
       console.error(e);
       toast.error(e.response?.data?.error || 'Failed to execute bulk action');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const confirmMessage = `Are you sure you want to permanently delete these ${selectedIds.length} selected rejected applications? This action is irreversible and will delete all student records, document uploads, and their user accounts.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setBulkLoading(true);
+    try {
+      await Promise.all(
+        selectedIds.map(id => API.delete(`/admin/admissions/${id}`))
+      );
+      toast.success(`Successfully deleted ${selectedIds.length} rejected applications.`);
+      await handleRefresh();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Failed to execute bulk delete');
     } finally {
       setBulkLoading(false);
     }
@@ -416,6 +436,15 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                   className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
                 >
                   <ShieldCheck size={12} /> Finalize Admission
+                </button>
+              )}
+              {status === 'REJECTED' && (
+                <button 
+                  disabled={bulkLoading} 
+                  onClick={handleBulkDelete}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
+                >
+                  <Trash2 size={12} /> Bulk Delete
                 </button>
               )}
               <button 

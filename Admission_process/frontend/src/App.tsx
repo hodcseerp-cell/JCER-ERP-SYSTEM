@@ -41,6 +41,9 @@ import PrincipalManagementPage from './pages/admin/users/PrincipalManagementPage
 import StudentsDashboardPage from './pages/admin/admissions/StudentsDashboardPage';
 import CancellationRequestsPage from './pages/admin/admissions/CancellationRequestsPage';
 import { StudentViewPage } from './pages/admin/admissions/StudentViewPage';
+import AdminUsnAllocationPage from './pages/admin/admissions/AdminUsnAllocationPage';
+import { AdminStudentDocumentsPage } from './pages/admin/admissions/AdminStudentDocumentsPage';
+import { BulkDocumentExportPage } from './pages/admin/admissions/BulkDocumentExportPage';
 
 import AdminNotificationsPage from './pages/admin/communications/AdminNotificationsPage';
 import AdminAnnouncementsPage from './pages/admin/communications/AdminAnnouncementsPage';
@@ -207,9 +210,12 @@ export const App: React.FC = () => (
               <Route path="admissions/enrolled"    element={<AdmissionQueuePage defaultStatus="ENROLLED" />} />
               <Route path="admissions/approved"    element={<AdmissionQueuePage defaultStatus="ENROLLED" />} />
               <Route path="admissions/cancellations" element={<CancellationRequestsPage />} />
+              <Route path="admissions/usn"         element={<AdminUsnAllocationPage />} />
               <Route path="admissions/history"     element={<AdmissionQueuePage defaultStatus="ALL" />} />
               <Route path="admissions/review/:id"  element={<AdmissionReviewPage />} />
               <Route path="admissions/workspace/:id" element={<DocumentVerificationWorkspace />} />
+              <Route path="documents/:applicationId" element={<AdminStudentDocumentsPage />} />
+              <Route path="documents/bulk" element={<BulkDocumentExportPage />} />
 
               <Route path="students"         element={<StudentsDashboardPage />} />
               <Route path="students/view/:id" element={<StudentViewPage />} />

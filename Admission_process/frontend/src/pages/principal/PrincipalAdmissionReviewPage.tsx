@@ -244,7 +244,11 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
   const addr = app.studentaddress;
   const acad = app.studentacademicdetails;
 
-  const studentName = pd ? `${pd.firstName || ''} ${pd.middleName || ''} ${pd.lastName || ''}`.trim() : (app.user ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim() : 'Guest Student');
+  const studentName = pd
+    ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+    : app.user
+      ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+      : 'Guest Student';
 
   const displayReviewedBy = (app.reviewedBy && !app.reviewedBy.includes('-') && app.reviewedBy.length < 35)
     ? app.reviewedBy

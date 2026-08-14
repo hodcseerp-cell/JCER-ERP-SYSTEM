@@ -33,11 +33,14 @@ import {
   CreditCard,
   AlertTriangle,
   CheckCircle2,
-  FileText
+  FileText,
+  GraduationCap,
+  Archive
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
 
 import { filterMenuItems } from '../../utils/feature.util';
+import GlobalSearchModal from '../admin/GlobalSearchModal';
 
 interface MenuItem {
   name: string;
@@ -51,6 +54,94 @@ interface MenuGroup {
   title: string;
   items: MenuItem[];
 }
+
+const NotificationIcon = ({ name, className }: { name: string; className?: string }) => {
+  const cn = className || "w-4 h-4";
+  switch (name) {
+    case 'FileText': return <FileText className={cn} />;
+    case 'RefreshCw': return <RefreshCw className={cn} />;
+    case 'AlertTriangle': return <AlertTriangle className={cn} />;
+    case 'CheckCircle': return <CheckCircle2 className={cn} />;
+    case 'Users': return <Users className={cn} />;
+    case 'XCircle': return <XCircle className={cn} />;
+    default: return <ClipboardList className={cn} />;
+  }
+};
+
+const getNotificationDetails = (app: any) => {
+  const name = app.studentpersonaldetails?.firstName 
+    ? [app.studentpersonaldetails.firstName, app.studentpersonaldetails.lastName].filter(Boolean).join(' ')
+    : [app.user?.firstName, app.user?.lastName].filter(Boolean).join(' ') || 'Candidate';
+  
+  const appNo = app.applicationNumber;
+
+  switch (app.applicationStatus) {
+    case 'SUBMITTED':
+      return {
+        title: 'New Application Submitted',
+        message: `${name} has submitted application ${appNo}`,
+        colorClass: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
+        iconName: 'FileText'
+      };
+    case 'RESUBMITTED':
+      return {
+        title: 'Corrections Resubmitted',
+        message: `${name} resubmitted application ${appNo}`,
+        colorClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400',
+        iconName: 'RefreshCw'
+      };
+    case 'CORRECTION_REQUIRED':
+      return {
+        title: 'Correction Requested',
+        message: `Corrections requested for ${name} (${appNo})`,
+        colorClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
+        iconName: 'AlertTriangle'
+      };
+    case 'APPROVED':
+      return {
+        title: 'Application Verified',
+        message: `Admission verified for ${name} (${appNo})`,
+        colorClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
+        iconName: 'CheckCircle'
+      };
+    case 'PRINCIPAL_APPROVED':
+      return {
+        title: 'Approved by Principal',
+        message: `Admission approved by Principal for ${name} (${appNo})`,
+        colorClass: 'bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
+        iconName: 'CheckCircle'
+      };
+    case 'CANCELLATION_REQUESTED':
+      return {
+        title: 'Cancellation Requested',
+        message: `Cancellation requested for ${name} (${appNo})`,
+        colorClass: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-450',
+        iconName: 'AlertTriangle'
+      };
+    case 'ENROLLED':
+      return {
+        title: 'Student Enrolled',
+        message: `${name} (${appNo}) is enrolled in ERP`,
+        colorClass: 'bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400',
+        iconName: 'Users'
+      };
+    case 'REJECTED':
+    case 'CANCELLED':
+      return {
+        title: 'Application Cancelled',
+        message: `Application ${appNo} for ${name} cancelled`,
+        colorClass: 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
+        iconName: 'XCircle'
+      };
+    default:
+      return {
+        title: 'Status Updated',
+        message: `Application ${appNo} updated to ${app.applicationStatus}`,
+        colorClass: 'bg-neutral-50 text-neutral-600 dark:bg-neutral-800/40 dark:text-neutral-300',
+        iconName: 'Clock'
+      };
+  }
+};
 
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -74,6 +165,20 @@ export const AdminLayout: React.FC = () => {
   });
 
   const [academicYear, setAcademicYear] = useState<string>('');
+  const [showSearch, setShowSearch] = useState(false);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearch(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     API.get('/system/config')
@@ -95,6 +200,75 @@ export const AdminLayout: React.FC = () => {
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  
+  const [recentApplications, setRecentApplications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+
+  const fetchRecentNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const res = await admissionService.listApplications({
+        limit: 5,
+        sortBy: 'updatedAt',
+        sortOrder: 'DESC'
+      });
+      if (res && res.applications) {
+        setRecentApplications(res.applications);
+        const count = res.applications.filter((app: any) => 
+          ['SUBMITTED', 'RESUBMITTED', 'PRINCIPAL_APPROVED', 'CANCELLATION_REQUESTED'].includes(app.applicationStatus)
+        ).length;
+        setUnreadCount(count);
+      }
+    } catch (e) {
+      console.error('Failed to fetch recent notifications:', e);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentNotifications();
+    const handleUpdate = () => {
+      fetchRecentNotifications();
+    };
+    window.addEventListener('admissions-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('admissions-updated', handleUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    if (notificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [notificationsOpen]);
+
+  const formatTimeAgo = (dateStr: string) => {
+    if (!dateStr) return '';
+    const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
+    
+    let interval = Math.floor(seconds / 31536000);
+    if (interval >= 1) return `${interval}y ago`;
+    interval = Math.floor(seconds / 2592000);
+    if (interval >= 1) return `${interval}mo ago`;
+    interval = Math.floor(seconds / 86400);
+    if (interval >= 1) return `${interval}d ago`;
+    interval = Math.floor(seconds / 3600);
+    if (interval >= 1) return `${interval}h ago`;
+    interval = Math.floor(seconds / 60);
+    if (interval >= 1) return `${interval}m ago`;
+    return 'just now';
+  };
   
   const [pendingCount, setPendingCount] = useState(0);
   const [resubmittedCount, setResubmittedCount] = useState(0);
@@ -170,6 +344,7 @@ export const AdminLayout: React.FC = () => {
         { name: 'Verified',             path: '/admin/admissions/verified',      icon: FileCheck2,      badge: verifiedCount               > 0 ? verifiedCount               : undefined },
         { name: 'Approved',             path: '/admin/admissions/approved',      icon: CheckCircle2 },
         { name: 'Cancellation',         path: '/admin/admissions/cancellations', icon: XCircle,         badge: cancellationRequestsCount   > 0 ? cancellationRequestsCount   : undefined },
+        { name: 'USN Allocation',       path: '/admin/admissions/usn',           icon: GraduationCap },
         { name: 'History',              path: '/admin/admissions/history',       icon: CalendarDays },
       ],
     },
@@ -183,6 +358,7 @@ export const AdminLayout: React.FC = () => {
       title: 'REPORTS & AUDIT',
       items: [
         { name: 'Reports', path: '/admin/reports', icon: FileText },
+        { name: 'Bulk Document Export', path: '/admin/documents/bulk', icon: Archive },
         { name: 'Activity Logs', path: '/admin/settings/logs', icon: CalendarDays },
       ],
     },
@@ -211,9 +387,11 @@ export const AdminLayout: React.FC = () => {
     '/admin/admissions/enrolled':     'Enrolled Students',
     '/admin/admissions/approved':     'Enrolled Students',
     '/admin/admissions/cancellations':'Cancellation Requests',
+    '/admin/admissions/usn':          'USN Allocation & Entry',
     '/admin/admissions/history':      'Admission History',
     '/admin/students': 'Student Management',
     '/admin/reports': 'Report Generator',
+    '/admin/documents/bulk': 'Bulk Document Export',
     '/admin/notifications': 'Notifications',
     '/admin/announcements': 'Announcements',
     '/admin/settings/system': 'System Settings',
@@ -223,6 +401,9 @@ export const AdminLayout: React.FC = () => {
   const getPageTitle = () => {
     if (location.pathname.startsWith('/admin/admissions/review/')) {
       return 'Admission Review Workspace';
+    }
+    if (location.pathname.startsWith('/admin/documents/') && !location.pathname.endsWith('/bulk')) {
+      return 'Student Document Center';
     }
     return pageTitles[location.pathname] || 'Admin Portal';
   };
@@ -350,13 +531,100 @@ export const AdminLayout: React.FC = () => {
 
           {/* Right Controls */}
           <div className="flex items-center space-x-2.5 flex-shrink-0">
-            <button className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] cursor-pointer">
+            <button 
+              onClick={() => setShowSearch(true)}
+              className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] cursor-pointer"
+            >
               <Search className="w-4 h-4" />
             </button>
-            <button className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] relative cursor-pointer">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
-            </button>
+            <div className="relative" ref={notificationsRef}>
+              <button 
+                onClick={() => setNotificationsOpen(prev => !prev)}
+                className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] relative cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-extrabold text-[8px] leading-none shrink-0 min-w-4 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div className="notifications-dropdown absolute right-0 mt-2 w-80 sm:w-96 border border-neutral-200/50 dark:border-neutral-800/40 bg-white dark:bg-neutral-900 rounded-2xl py-2 shadow-xl z-50 animate-fade-in">
+                  <div className="px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800/30 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-800 dark:text-neutral-200">
+                      Notifications
+                    </span>
+                    {unreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold">
+                        {unreadCount} pending
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-[360px] overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800/20 scrollbar-thin">
+                    {notificationsLoading && recentApplications.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-neutral-400 flex flex-col items-center justify-center gap-2">
+                        <RefreshCw className="w-5 h-5 animate-spin text-neutral-300" />
+                        <span>Fetching notifications...</span>
+                      </div>
+                    ) : recentApplications.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-neutral-400 font-medium">
+                        All caught up! No recent activity.
+                      </div>
+                    ) : (
+                      recentApplications.map((app) => {
+                        const details = getNotificationDetails(app);
+                        return (
+                          <div
+                            key={app.id}
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              if (app.applicationStatus === 'ENROLLED') {
+                                navigate(`/admin/students/view/${app.id}`);
+                              } else if (app.applicationStatus === 'CANCELLATION_REQUESTED') {
+                                navigate('/admin/admissions/cancellations');
+                              } else {
+                                navigate(`/admin/admissions/review/${app.id}`);
+                              }
+                            }}
+                            className="p-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-950/20 cursor-pointer flex gap-3 transition-colors select-none text-left"
+                          >
+                            <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center ${details.colorClass}`}>
+                              <NotificationIcon name={details.iconName} className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <p className="text-xs font-extrabold text-neutral-850 dark:text-neutral-100">
+                                {details.title}
+                              </p>
+                              <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed font-medium">
+                                {details.message}
+                              </p>
+                            </div>
+                            <span className="text-[9px] text-neutral-400 dark:text-neutral-500 font-bold shrink-0 self-start mt-0.5 font-mono">
+                              {formatTimeAgo(app.updatedAt)}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="px-4 py-2 border-t border-neutral-100 dark:border-neutral-800/30 text-center shrink-0">
+                    <button
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        navigate('/admin/admissions/queue');
+                      }}
+                      className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors uppercase tracking-wider"
+                    >
+                      View All Applications
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Profile Dropdown */}
             <div className="relative" ref={profileMenuRef}>
@@ -397,6 +665,7 @@ export const AdminLayout: React.FC = () => {
         <main className="flex-1 flex flex-col relative">
           <Outlet />
         </main>
+        <GlobalSearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
       </div>
     </div>
   );

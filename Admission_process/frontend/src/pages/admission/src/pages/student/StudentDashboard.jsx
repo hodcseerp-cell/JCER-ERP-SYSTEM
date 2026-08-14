@@ -449,9 +449,12 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
 
     const resolveDocUrl = (path) => {
         if (!path) return '';
-        if (path.startsWith('http')) return path;
-        const base = api.defaults.baseURL || '/api';
-        return `${base.replace(/\/api$/, '')}/${path.replace(/^\//, '')}`;
+        if (path.startsWith('http') || path.startsWith('blob:')) return path;
+        if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+            const base = api.defaults.baseURL || '/api';
+            return `${base.replace(/\/api$/, '')}/${path.replace(/^\//, '')}`;
+        }
+        return ''; // raw R2 key — backend must sign before sending
     };
 
     const handleFileChange = (e) => {

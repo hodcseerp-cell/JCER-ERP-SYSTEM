@@ -53,6 +53,7 @@ export interface AdmissionApplication {
   verifiedAt?: string | null;
   correctionRequestedSections?: string[] | null;
   correctionRemarks?: string | null;
+  verifiedDocuments?: Record<string, 'ACCEPTED' | 'REJECTED'> | null;
   correctionDeadline?: string | null;
   correctionRequestedAt?: string | null;
   correctionRequestedById?: string | null;
@@ -297,6 +298,12 @@ const admissionService = {
     window.dispatchEvent(new CustomEvent('admissions-updated'));
   },
 
+  /** PUT /api/admin/admissions/:id/documents/status */
+  saveDocumentStatuses: async (id: string, statuses: Record<string, 'ACCEPTED' | 'REJECTED' | 'PENDING'>): Promise<void> => {
+    await API.put(`/admin/admissions/${id}/documents/status`, { statuses });
+    window.dispatchEvent(new CustomEvent('admissions-updated'));
+  },
+
   /** POST /api/admin/admissions/:id/fee-verify */
   verifyFeeReceipt: async (id: string, payload: { approve: boolean; remarks?: string; rejectionReason?: string }): Promise<void> => {
     await API.post(`/admin/admissions/${id}/fee-verify`, payload);
@@ -336,6 +343,70 @@ const admissionService = {
   directCancel: async (id: string, reason: string, remarks?: string): Promise<void> => {
     await API.post(`/admin/admissions/${id}/cancellation-direct`, { reason, remarks });
     window.dispatchEvent(new CustomEvent('admissions-updated'));
+  },
+
+  /** GET /api/admin/usn/eligible */
+  async listUsnEligible(filters: {
+    academicYear?: string;
+    branchId?: string;
+    entryType?: string;
+    usnStatus?: string;
+    search?: string;
+    alphabet?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    total: number;
+    page: number;
+    totalPages: number;
+    applicants: any[];
+  }> {
+    const res = await API.get('/admin/usn/eligible', { params: filters });
+    return res.data;
+  },
+
+  /** GET /api/admin/usn/summary */
+  async getUsnSummary(): Promise<{
+    totalEligible: number;
+    assigned: number;
+    pending: number;
+    completionRate: number;
+  }> {
+    const res = await API.get('/admin/usn/summary');
+    return res.data.data;
+  },
+
+  /** POST /api/admin/usn/bulk-assign */
+  async bulkAssignUsns(assignments: { applicationId: string; usn: string | null }[]): Promise<any> {
+    const res = await API.post('/admin/usn/bulk-assign', { assignments });
+    window.dispatchEvent(new CustomEvent('admissions-updated'));
+    return res.data;
+  },
+
+  /** PATCH /api/admin/usn/:id */
+  async assignSingleUsn(id: string, usn: string | null): Promise<any> {
+    const res = await API.patch(`/admin/usn/${id}`, { usn });
+    window.dispatchEvent(new CustomEvent('admissions-updated'));
+    return res.data;
+  },
+
+  /** DELETE /api/admin/usn/:id */
+  async removeUsn(id: string): Promise<any> {
+    const res = await API.delete(`/admin/usn/${id}`);
+    window.dispatchEvent(new CustomEvent('admissions-updated'));
+    return res.data;
+  },
+
+  /** POST /api/admin/usn/validate-import */
+  async validateImportUsns(rows: { applicationNumber: string; usn: string }[]): Promise<{
+    success: boolean;
+    results: any[];
+  }> {
+    const res = await API.post('/admin/usn/validate-import', { rows });
+    return res.data;
   },
 };
 

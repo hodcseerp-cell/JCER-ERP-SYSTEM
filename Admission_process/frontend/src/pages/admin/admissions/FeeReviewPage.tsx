@@ -68,11 +68,12 @@ export const FeeReviewPage: React.FC = () => {
     );
   }
 
-  const studentName = app.user
-    ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
-    : app.studentpersonaldetails
-    ? `${app.studentpersonaldetails.firstName || ''} ${app.studentpersonaldetails.lastName || ''}`.trim()
-    : 'N/A';
+  const pd = app.studentpersonaldetails;
+  const studentName = pd
+    ? `${pd.firstName} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName}`.replace(/\s+/g, ' ').trim()
+    : app.user
+      ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
+      : 'N/A';
 
   const receiptUrl = app.admissionFeeReceiptUrl || app.studentdocuments?.admissionFeeReceiptUrl;
   const approvedDate = app.reviewedAt || app.updatedAt;

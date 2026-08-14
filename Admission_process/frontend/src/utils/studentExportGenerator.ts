@@ -71,6 +71,11 @@ export function mapSummaryExportData(applications: AdmissionApplication[]) {
       'Admission Date': formatDate(app.createdAt),
       'Approved Date': formatDate(app.reviewedAt || app.approvedByAdminAt),
       'Confirmation Date': formatDate(app.enrolledAt),
+      'Documents': {
+        t: 's',
+        v: 'View Documents',
+        f: `=HYPERLINK("${import.meta.env.VITE_APP_URL || 'http://localhost:5173'}/admin/documents/${app.id}", "View Documents")`
+      }
     };
   });
 }
@@ -165,6 +170,11 @@ export function mapCompleteExportData(applications: AdmissionApplication[]) {
       'Created Date': formatDate(app.createdAt),
       'Updated Date': formatDate(app.updatedAt),
       'Last Modified By': app.reviewedBy || 'Administrator',
+      'Documents': {
+        t: 's',
+        v: 'View Documents',
+        f: `=HYPERLINK("${import.meta.env.VITE_APP_URL || 'http://localhost:5173'}/admin/documents/${app.id}", "View Documents")`
+      }
     };
   });
 }
@@ -220,7 +230,8 @@ function exportToExcel(
   const colWidths = keys.map((key) => {
     let maxLen = key.length;
     data.forEach((row) => {
-      const val = row[key] ? String(row[key]) : '';
+      const cellVal = row[key];
+      const val = cellVal && typeof cellVal === 'object' && 'v' in cellVal ? String(cellVal.v) : (cellVal ? String(cellVal) : '');
       if (val.length > maxLen) maxLen = val.length;
     });
     return { wch: Math.min(Math.max(maxLen + 3, 12), 50) };

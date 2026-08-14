@@ -55,7 +55,19 @@ const adminAdmissionRouter = express.Router();
 adminAdmissionRouter.use(authMiddleware);
 adminAdmissionRouter.use(authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PRINCIPAL'));
 
+adminAdmissionRouter.get('/usn/eligible', admissionController.listUsnEligibleApplicants);
+adminAdmissionRouter.get('/usn/summary', admissionController.getUsnSummary);
+adminAdmissionRouter.post('/usn/bulk-assign', admissionController.bulkAssignUsns);
+adminAdmissionRouter.post('/usn/validate-import', admissionController.validateImportUsns);
+adminAdmissionRouter.patch('/usn/:id', admissionController.assignSingleUsn);
+adminAdmissionRouter.delete('/usn/:id', admissionController.removeUsn);
+
+adminAdmissionRouter.get('/documents/export/preview', admissionController.previewBulkExport);
+adminAdmissionRouter.get('/documents/export', admissionController.bulkExportDocuments);
+adminAdmissionRouter.get('/admissions/:id/documents/zip', admissionController.exportSingleStudentZip);
+
 adminAdmissionRouter.delete('/admissions/bulk-delete-cancelled', authorizeRoles('ADMIN', 'SUPER_ADMIN'), admissionController.bulkDeleteCancelledAdmissions);
+adminAdmissionRouter.delete('/admissions/:id', authorizeRoles('ADMIN', 'SUPER_ADMIN'), admissionController.deleteAdmissionById);
 adminAdmissionRouter.get('/admissions', admissionController.listAdmissions);
 adminAdmissionRouter.get('/admissions/:id/documents/:field', admissionController.viewAdmissionDocument);
 adminAdmissionRouter.get('/admissions/:id', admissionController.getAdmissionById);
@@ -64,6 +76,7 @@ adminAdmissionRouter.post('/admissions/:id/documents', resolveStudentUserId, upl
 adminAdmissionRouter.delete('/admissions/:id/documents/:field', resolveStudentUserId, admissionController.removeAdminDocument);
 adminAdmissionRouter.put('/admissions/:id/status', admissionController.updateAdmissionStatus);
 adminAdmissionRouter.put('/admissions/:id/verify', admissionController.verifyAdmissionChecklist);
+adminAdmissionRouter.put('/admissions/:id/documents/status', admissionController.saveDocumentStatuses);
 adminAdmissionRouter.post('/admissions/:id/fee-verify', admissionController.verifyFeeReceipt);
 adminAdmissionRouter.post('/admissions/:id/cancellation-process', admissionController.processCancellationRequest);
 adminAdmissionRouter.post('/admissions/:id/cancellation-direct', admissionController.directCancelAdmission);

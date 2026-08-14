@@ -247,7 +247,7 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
 
                         <div className="flex items-center gap-4 sm:gap-5 bg-white/5 backdrop-blur-sm p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-white/10">
                             <div className="relative group shrink-0">
-                                <div className="w-20 h-26 sm:w-18 sm:h-22 rounded-lg border-2 border-white/20 overflow-hidden bg-white/10 flex items-center justify-center transition-all duration-500 group-hover:border-primary-400 shadow-xl">
+                                <div className="w-24 h-32 sm:w-28 sm:h-36 rounded-xl border-2 border-white/20 overflow-hidden bg-white/10 flex items-center justify-center transition-all duration-500 group-hover:border-primary-400 shadow-xl">
                                     {docs.photoUrl ? (
                                         <img
                                             src={getPhotoUrl(docs.photoUrl)}
@@ -255,11 +255,11 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
                                             className="w-full h-full object-cover"
                                         />
                                     ) : (
-                                        <User size={28} className="text-white/40" />
+                                        <User size={36} className="text-white/40" />
                                     )}
                                 </div>
-                                <div className="absolute -bottom-1 -right-1 bg-primary-500 text-white p-1 sm:p-1.5 rounded-full shadow-lg">
-                                    <Camera size={10} />
+                                <div className="absolute -bottom-1.5 -right-1.5 bg-primary-500 text-white p-1.5 rounded-full shadow-lg">
+                                    <Camera size={12} />
                                 </div>
                             </div>
                             <div className="text-left md:text-right min-w-0">

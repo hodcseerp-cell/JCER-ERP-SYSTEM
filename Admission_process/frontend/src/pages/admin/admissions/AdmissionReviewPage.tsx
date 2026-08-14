@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import admissionService, { AdmissionApplication } from '../../../services/admission.service';
 import API from '../../../services/api';
-import { ArrowLeft, User, Users, GraduationCap, CheckCircle2, XCircle, FileText, MapPin, ExternalLink, ShieldCheck, Maximize2, Image, Layers, Clock, Send, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Users, GraduationCap, CheckCircle2, XCircle, FileText, MapPin, ExternalLink, ShieldCheck, Maximize2, Image, Layers, Clock, Send, X, AlertTriangle, Loader2, Trash2, Ban, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAcademicYear } from '../../../utils/date.util';
 import { DocumentVerificationWorkspace } from './DocumentVerificationWorkspace';
@@ -288,6 +288,54 @@ export const AdmissionReviewPage: React.FC = () => {
     }
   };
 
+  const handleDeleteApplication = async () => {
+    if (!app) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete the rejected application for ${
+        app.studentpersonaldetails?.firstName || 'this student'
+      }? This action is irreversible and will delete all student records, document uploads, and their user account.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setUpdating(true);
+      const res = await API.delete(`/admin/admissions/${app.id}`);
+      if (res.data.success) {
+        toast.success('Rejected application permanently deleted.');
+        navigate('/admin/admissions/rejected');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to delete application.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Direct cancel admission states
+  const [cancelDirectModalOpen, setCancelDirectModalOpen] = useState(false);
+  const [cancelDirectStep, setCancelDirectStep] = useState(1);
+  const [cancelDirectReason, setCancelDirectReason] = useState('');
+  const [cancelDirectRemarks, setCancelDirectRemarks] = useState('');
+  const [cancelDirectSubmitting, setCancelDirectSubmitting] = useState(false);
+
+  const handleDirectCancelSubmit = async () => {
+    if (!app || !cancelDirectReason) return;
+    setCancelDirectSubmitting(true);
+    try {
+      await admissionService.directCancel(app.id, cancelDirectReason, cancelDirectRemarks);
+      toast.success('Admission cancelled successfully.');
+      setCancelDirectModalOpen(false);
+      setCancelDirectReason('');
+      setCancelDirectRemarks('');
+      setCancelDirectStep(1);
+      fetchApplication(app.id);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to cancel admission');
+    } finally {
+      setCancelDirectSubmitting(false);
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -306,6 +354,8 @@ export const AdmissionReviewPage: React.FC = () => {
   const [selectedCorrectionSections, setSelectedCorrectionSections] = useState<string[]>([]);
   const [correctionRemarks, setCorrectionRemarks] = useState('');
   const [correctionDeadline, setCorrectionDeadline] = useState('');
+
+  const isInitialLoadRef = React.useRef(true);
 
   const isEditable = app 
     ? (app.applicationStatus !== 'REJECTED' && 
@@ -427,64 +477,124 @@ export const AdmissionReviewPage: React.FC = () => {
       const data = await admissionService.getApplication(appId);
       setApp(data);
 
-      // Restore saved document statuses from localStorage if present
+      // Restore saved document statuses from localStorage, or fall back to database verifiedDocuments
       let savedStatuses: Record<string, 'ACCEPTED' | 'REJECTED'> = {};
       const savedStatusesStr = localStorage.getItem(`doc_status_${appId}`);
       if (savedStatusesStr) {
         try {
           savedStatuses = JSON.parse(savedStatusesStr);
-
-          // Reset status of corrected documents to PENDING if status is RESUBMITTED
-          if (data.applicationStatus === 'RESUBMITTED') {
-            const remarksLower = (data.correctionRemarks || '').toLowerCase();
-            const matches: Record<string, string[]> = {
-              'Passport Size Photo': ['passport', 'photo'],
-              'Candidate E-Signature': ['signature'],
-              'SSLC / 10th Marks Card': ['sslc', '10th', 'tenth'],
-              'PUC / 12th Marks Card': ['puc', '12th', 'twelfth'],
-              'Diploma 5th Semester Marks Card': ['diploma 5th', 'semester 5', 'sem 5'],
-              'Diploma 6th Semester Marks Card': ['diploma 6th', 'semester 6', 'sem 6'],
-              'Entrance Score Card (CET/DCET)': ['cet', 'dcet', 'entrance'],
-              'Fees Paid Receipt': ['fees paid', 'receipt', 'fees verified'],
-              'Caste Certificate (Optional)': ['caste'],
-              'Income / Gap Year Certificate': ['income', 'gap'],
-              'Domicile / Study Certificate': ['study', 'domicile']
-            };
-
-            let modified = false;
-            Object.keys(savedStatuses).forEach(label => {
-              const keywords = matches[label] || [];
-              const isDocCorrected = keywords.some(kw => remarksLower.includes(kw)) || remarksLower.includes(label.toLowerCase());
-              if (isDocCorrected && savedStatuses[label] === 'REJECTED') {
-                delete savedStatuses[label];
-                modified = true;
-              }
-            });
-            if (modified) {
-              localStorage.setItem(`doc_status_${appId}`, JSON.stringify(savedStatuses));
-            }
-          }
-
-          setDocStatus(savedStatuses);
         } catch (e) {
           console.error('Error parsing saved document statuses from localStorage', e);
         }
+      } else if (data.verifiedDocuments) {
+        savedStatuses = { ...data.verifiedDocuments };
       }
 
-      const restoredReasonCode = data.applicationStatus === 'SUBMITTED' || data.applicationStatus === 'UNDER_REVIEW' || data.applicationStatus === 'RESUBMITTED'
-        ? ''
-        : (data.rejectionReasonCode || '');
+      // Reset status of corrected documents to PENDING if status is RESUBMITTED
+      if (data.applicationStatus === 'RESUBMITTED') {
+        const remarksLower = (data.correctionRemarks || '').toLowerCase();
+        const matches: Record<string, string[]> = {
+          'Passport Size Photo': ['passport', 'photo'],
+          'Candidate E-Signature': ['signature'],
+          'SSLC / 10th Marks Card': ['sslc', '10th', 'tenth'],
+          'PUC / 12th Marks Card': ['puc', '12th', 'twelfth'],
+          'Diploma 5th Semester Marks Card': ['diploma 5th', 'semester 5', 'sem 5'],
+          'Diploma 6th Semester Marks Card': ['diploma 6th', 'semester 6', 'sem 6'],
+          'Entrance Score Card (CET/DCET)': ['cet', 'dcet', 'entrance'],
+          'Fees Paid Receipt': ['fees paid', 'receipt', 'fees verified'],
+          'Caste Certificate (Optional)': ['caste'],
+          'Income / Gap Year Certificate': ['income', 'gap'],
+          'Domicile / Study Certificate': ['study', 'domicile']
+        };
+
+        let modified = false;
+        Object.keys(savedStatuses).forEach(label => {
+          const keywords = matches[label] || [];
+          const isDocCorrected = keywords.some(kw => remarksLower.includes(kw)) || remarksLower.includes(label.toLowerCase());
+          if (isDocCorrected && savedStatuses[label] === 'REJECTED') {
+            delete savedStatuses[label];
+            modified = true;
+          }
+        });
+        if (modified) {
+          localStorage.setItem(`doc_status_${appId}`, JSON.stringify(savedStatuses));
+          admissionService.saveDocumentStatuses(appId, savedStatuses).catch(err => {
+            console.error("Failed to save doc statuses to database on reset:", err);
+          });
+        }
+      }
+
+      setDocStatus(savedStatuses);
+
+      const savedReasonCode = localStorage.getItem(`rejection_reason_${appId}`);
+      const restoredReasonCode = savedReasonCode !== null 
+        ? savedReasonCode 
+        : (data.applicationStatus === 'SUBMITTED' || data.applicationStatus === 'UNDER_REVIEW' || data.applicationStatus === 'RESUBMITTED'
+          ? ''
+          : (data.rejectionReasonCode || ''));
       setRejectionReasonCode(restoredReasonCode);
 
       // Auto-build remarks from all sources: reason + rejected docs + missing fields
       const autoRemarks = buildRemarks(data, savedStatuses, restoredReasonCode);
       // Use saved adminRemarks if they exist for non-pending apps, else auto-generate
       const isPendingReview = data.applicationStatus === 'SUBMITTED' || data.applicationStatus === 'UNDER_REVIEW' || data.applicationStatus === 'RESUBMITTED';
-      setRemarks(isPendingReview ? autoRemarks : (data.adminRemarks || autoRemarks));
+      
+      const savedRemarks = localStorage.getItem(`admin_remarks_${appId}`);
+      let finalRemarks = savedRemarks !== null ? savedRemarks : (isPendingReview ? autoRemarks : (data.adminRemarks || autoRemarks));
+
+      // Sync finalRemarks with the savedStatuses (doc status):
+      let lines = finalRemarks.split('\n').map(line => line.trim());
+
+      const allDocLabels = [
+        'Passport Size Photo',
+        'Candidate E-Signature',
+        'SSLC / 10th Marks Card',
+        'PUC / 12th Marks Card',
+        'Diploma 5th Semester Marks Card',
+        'Diploma 6th Semester Marks Card',
+        'Entrance Score Card (CET/DCET)',
+        'Aadhaar Card copy',
+        'College Fees Receipt',
+        'Admission Form Fee Receipt',
+        'Caste Certificate (Optional)',
+        'Domicile / Study Certificate',
+        'Income / Gap Year Certificate'
+      ];
+
+      allDocLabels.forEach(label => {
+        const targetText = `• ${label} needs correction/re-upload`;
+        const index = lines.findIndex(l => 
+          l.toLowerCase() === targetText.toLowerCase() || 
+          l.toLowerCase().includes(`${label.toLowerCase()} needs correction/re-upload`)
+        );
+        const status = savedStatuses[label];
+        if (status === 'REJECTED') {
+          if (index === -1) {
+            // Find a header like "Documents requiring correction:" or push
+            const headerIndex = lines.findIndex(l => l.toLowerCase().includes('documents requiring correction'));
+            if (headerIndex !== -1) {
+              lines.splice(headerIndex + 1, 0, targetText);
+            } else {
+              lines.push(targetText);
+            }
+          }
+        } else {
+          if (index !== -1) {
+            lines.splice(index, 1);
+          }
+        }
+      });
+
+      finalRemarks = lines.filter(line => line.length > 0).join('\n');
+      setRemarks(finalRemarks);
 
       setDocumentsVerified(data.documentsVerified || false);
       setEligibilityVerified(data.eligibilityVerified || false);
-      setVerificationRemarks(data.verificationRemarks || '');
+      
+      const savedVerificationRemarks = localStorage.getItem(`verification_remarks_${appId}`);
+      setVerificationRemarks(savedVerificationRemarks !== null ? savedVerificationRemarks : (data.verificationRemarks || ''));
+
+      isInitialLoadRef.current = true;
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to load application');
       navigate('/admin/admissions/queue');
@@ -497,10 +607,106 @@ export const AdmissionReviewPage: React.FC = () => {
   // ─── Auto-rebuild remarks whenever doc status or reason code changes ──────
   useEffect(() => {
     if (!app) return;
-    const auto = buildRemarks(app, docStatus, rejectionReasonCode);
-    if (auto) setRemarks(auto);
+    
+    // Prevent run on initial mount to keep the restored localStorage remarks
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    setRemarks(prev => {
+      // Re-generate reason remarks message
+      const reasonRemarksMap: Record<string, string> = {
+        'DOC_NOT_VERIFIED': 'Documents verification failed during admin review.',
+        'INCOMPLETE_DOCUMENTS': 'Some mandatory documents were not uploaded or are missing.',
+        'FEES_NOT_PAID': 'Application fees have not been paid or verified.',
+        'ELIGIBILITY_FAILED': 'Candidate does not meet the minimum eligibility criteria.',
+        'INVALID_CERTIFICATES': 'Uploaded certificates are invalid, expired, or mismatched.',
+        'DUPLICATE_APPLICATION': 'A duplicate admission application was found for this candidate.',
+        'AADHAAR_MISMATCH': 'Aadhaar card details do not match the personal profile.',
+        'USN_CONFLICT': 'USN already exists or is assigned to another student.',
+      };
+
+      let lines = prev.split('\n').map(line => line.trim());
+
+      // 1. Update the reason remark message:
+      // Remove any existing reason remarks from the lines
+      Object.values(reasonRemarksMap).forEach(msg => {
+        lines = lines.filter(line => !line.includes(msg));
+      });
+      // Add the new reason remark at the top
+      const newReasonMsg = reasonRemarksMap[rejectionReasonCode];
+      if (newReasonMsg) {
+        lines.unshift(newReasonMsg);
+      }
+
+      // 2. Update document remarks:
+      // Find all document labels and their accepted/rejected status
+      const allDocLabels = [
+        'Passport Size Photo',
+        'Candidate E-Signature',
+        'SSLC / 10th Marks Card',
+        'PUC / 12th Marks Card',
+        'Diploma 5th Semester Marks Card',
+        'Diploma 6th Semester Marks Card',
+        'Entrance Score Card (CET/DCET)',
+        'Aadhaar Card copy',
+        'College Fees Receipt',
+        'Admission Form Fee Receipt',
+        'Caste Certificate (Optional)',
+        'Domicile / Study Certificate',
+        'Income / Gap Year Certificate'
+      ];
+
+      allDocLabels.forEach(label => {
+        const targetText = `• ${label} needs correction/re-upload`;
+        const index = lines.findIndex(l => 
+          l.toLowerCase() === targetText.toLowerCase() || 
+          l.toLowerCase().includes(`${label.toLowerCase()} needs correction/re-upload`)
+        );
+        const status = docStatus[label];
+        if (status === 'REJECTED') {
+          if (index === -1) {
+            // Find a header like "Documents requiring correction:" or push
+            const headerIndex = lines.findIndex(l => l.toLowerCase().includes('documents requiring correction'));
+            if (headerIndex !== -1) {
+              lines.splice(headerIndex + 1, 0, targetText);
+            } else {
+              lines.push(targetText);
+            }
+          }
+        } else {
+          if (index !== -1) {
+            lines.splice(index, 1);
+          }
+        }
+      });
+
+      return lines.filter(line => line.length > 0).join('\n');
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docStatus, rejectionReasonCode]);
+
+  // Save remarks to localStorage whenever they change
+  useEffect(() => {
+    if (!loading && id && remarks !== undefined && remarks !== null) {
+      localStorage.setItem(`admin_remarks_${id}`, remarks);
+    }
+  }, [remarks, id, loading]);
+
+  // Save verificationRemarks to localStorage whenever they change
+  useEffect(() => {
+    if (!loading && id && verificationRemarks !== undefined && verificationRemarks !== null) {
+      localStorage.setItem(`verification_remarks_${id}`, verificationRemarks);
+    }
+  }, [verificationRemarks, id, loading]);
+
+  // Save rejectionReasonCode to localStorage whenever they change
+  useEffect(() => {
+    if (!loading && id && rejectionReasonCode !== undefined && rejectionReasonCode !== null) {
+      localStorage.setItem(`rejection_reason_${id}`, rejectionReasonCode);
+    }
+  }, [rejectionReasonCode, id, loading]);
 
   const handleToggleDocStatus = (label: string, status: 'ACCEPTED' | 'REJECTED') => {
     const updatedStatus = { ...docStatus, [label]: status };
@@ -673,6 +879,12 @@ export const AdmissionReviewPage: React.FC = () => {
 
       await admissionService.updateStatus(app.id, status, remarks, label, rejectionReasonCode, correctionSections);
 
+      // Clear draft localStorage items
+      localStorage.removeItem(`doc_status_${app.id}`);
+      localStorage.removeItem(`admin_remarks_${app.id}`);
+      localStorage.removeItem(`verification_remarks_${app.id}`);
+      localStorage.removeItem(`rejection_reason_${app.id}`);
+
       if (status === 'APPROVED') {
         toast.success('Application approved successfully. Student can now pay ₹500 Admission Processing Fee.');
         navigate('/admin/admissions/queue');
@@ -777,24 +989,49 @@ export const AdmissionReviewPage: React.FC = () => {
           className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl hover:bg-neutral-50 transition-colors shadow-sm text-sm font-semibold text-neutral-600 dark:text-neutral-300">
           <ArrowLeft size={16} /> Back to Admissions Queue
         </button>
-        <span className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg ${
-          app.applicationStatus === 'RESUBMITTED' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/20 border border-amber-300' :
-          app.applicationStatus === 'CORRECTION_REQUIRED' ? 'bg-rose-100 text-rose-700' :
-          app.applicationStatus === 'APPROVED' ? 'bg-indigo-100 text-indigo-700' :
-          app.applicationStatus === 'ENROLLED' ? 'bg-emerald-100 text-emerald-700' :
-          app.applicationStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700' :
-          app.applicationStatus === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-700' :
-          'bg-amber-100 text-amber-700'}`}>
-          Status: {
-            app.applicationStatus === 'RESUBMITTED' ? 'RESUBMITTED' :
-            app.applicationStatus === 'CORRECTION_REQUIRED' ? 'CORRECTION REQUIRED' :
-            app.applicationStatus === 'APPROVED' ? 'VERIFIED' :
-            app.applicationStatus === 'ENROLLED' ? 'APPROVED' :
-            app.applicationStatus === 'UNDER_REVIEW' ? 'IN PROGRESS' :
-            app.applicationStatus === 'SUBMITTED' ? 'PENDING REVIEW' :
-            app.applicationStatus
-          }
-        </span>
+        <div className="flex items-center gap-3">
+          {(app.applicationStatus === 'APPROVED' || app.applicationStatus === 'PRINCIPAL_APPROVED' || app.applicationStatus === 'ENROLLED') && (
+            <button
+              disabled={updating}
+              onClick={() => {
+                setCancelDirectReason('');
+                setCancelDirectRemarks('');
+                setCancelDirectStep(1);
+                setCancelDirectModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-colors shadow-sm text-sm font-extrabold cursor-pointer disabled:opacity-50 animate-fade-in"
+            >
+              <Ban size={16} /> Cancel Admission
+            </button>
+          )}
+          {app.applicationStatus === 'REJECTED' && (
+            <button
+              disabled={updating}
+              onClick={handleDeleteApplication}
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-colors shadow-sm text-sm font-extrabold cursor-pointer disabled:opacity-50"
+            >
+              <Trash2 size={16} /> Delete Application
+            </button>
+          )}
+          <span className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg ${
+            app.applicationStatus === 'RESUBMITTED' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/20 border border-amber-300' :
+            app.applicationStatus === 'CORRECTION_REQUIRED' ? 'bg-rose-100 text-rose-700' :
+            app.applicationStatus === 'APPROVED' ? 'bg-indigo-100 text-indigo-700' :
+            app.applicationStatus === 'ENROLLED' ? 'bg-emerald-100 text-emerald-700' :
+            app.applicationStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700' :
+            app.applicationStatus === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-700' :
+            'bg-amber-100 text-amber-700'}`}>
+            Status: {
+              app.applicationStatus === 'RESUBMITTED' ? 'RESUBMITTED' :
+              app.applicationStatus === 'CORRECTION_REQUIRED' ? 'CORRECTION REQUIRED' :
+              app.applicationStatus === 'APPROVED' ? 'VERIFIED' :
+              app.applicationStatus === 'ENROLLED' ? 'APPROVED' :
+              app.applicationStatus === 'UNDER_REVIEW' ? 'IN PROGRESS' :
+              app.applicationStatus === 'SUBMITTED' ? 'PENDING REVIEW' :
+              app.applicationStatus
+            }
+          </span>
+        </div>
       </div>
 
       {/* Resubmitted Banner */}
@@ -1221,6 +1458,26 @@ export const AdmissionReviewPage: React.FC = () => {
                         console.log("Document card clicked: Review Documents");
                         if (app?.id) {
                           console.log("Navigating to Review Workspace for appId:", app.id);
+                          const getWorkspaceDocId = (f: string) => {
+                            const mapping: Record<string, string> = {
+                              'photo': 'photo',
+                              'signature': 'signature',
+                              'tenthMarksheet': 'tenth',
+                              'twelfthMarksheet': 'twelfth',
+                              'diplomaSemester5Marksheet': 'diplomaSemester5',
+                              'diplomaSemester6Marksheet': 'diplomaSemester6',
+                              'cetScoreCard': 'cet',
+                              'aadhaar': 'aadhaar',
+                              'feesPaidReceipt': 'feesPaidReceipt',
+                              'admissionFormFeeReceipt': 'admissionFormFeeReceipt',
+                              'domicileCertificate': 'domicile',
+                              'casteCertificate': 'caste',
+                              'gapCertificate': 'gap'
+                            };
+                            return mapping[f] || f;
+                          };
+                          const workspaceId = getWorkspaceDocId(field);
+                          localStorage.setItem(`workspace_doc_id_${app.id}`, workspaceId);
                           navigate(`/admin/admissions/workspace/${app.id}`);
                         }
                         setIsWorkspaceOpen(true);
@@ -1520,6 +1777,9 @@ export const AdmissionReviewPage: React.FC = () => {
           setDocumentsVerified(allVerified);
           if (app.id) {
             localStorage.setItem(`doc_status_${app.id}`, JSON.stringify(updatedDocStatuses));
+            admissionService.saveDocumentStatuses(app.id, updatedDocStatuses).catch(err => {
+              console.error("Failed to save doc statuses to database on complete:", err);
+            });
           }
 
           // Check if any documents were rejected
@@ -1554,6 +1814,207 @@ export const AdmissionReviewPage: React.FC = () => {
           }
         }}
       />
+
+      {/* ─── DIRECT CANCEL ADMISSION MODAL ─── */}
+      {cancelDirectModalOpen && app && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in duration-200">
+            
+            {cancelDirectStep === 1 ? (
+              <>
+                {/* Modal Title */}
+                <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
+                  <h3 className="text-base font-black text-neutral-900 dark:text-white uppercase tracking-wide flex items-center gap-2">
+                    <Ban className="text-rose-600" size={20} /> Cancel Admission
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      setCancelDirectModalOpen(false);
+                      setCancelDirectReason('');
+                      setCancelDirectRemarks('');
+                      setCancelDirectStep(1);
+                    }}
+                    className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg text-neutral-400"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Display Student Details */}
+                <div className="bg-neutral-50 dark:bg-neutral-950 border border-neutral-200/80 dark:border-neutral-800 rounded-xl p-4 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Student Name</p>
+                    <p className="font-extrabold text-neutral-900 dark:text-white mt-0.5">
+                      {pd ? `${pd.firstName || ''} ${pd.lastName || ''}`.trim() : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Admission Number</p>
+                    <p className="font-extrabold text-neutral-900 dark:text-white mt-0.5">{app.applicationNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Branch</p>
+                    <p className="font-bold text-neutral-800 dark:text-neutral-200 mt-0.5">{app.branch?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Admission Type</p>
+                    <p className="font-bold text-neutral-800 dark:text-neutral-200 mt-0.5">{app.admissionType || 'N/A'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-wider">Current Status</p>
+                    <span className="inline-block mt-1 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/40">
+                      Admission Confirmed
+                    </span>
+                  </div>
+                </div>
+
+                {/* Reason & Remarks Form */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
+                      Reason <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={cancelDirectReason}
+                      onChange={(e) => setCancelDirectReason(e.target.value)}
+                      className="w-full text-xs font-semibold bg-neutral-50 dark:bg-neutral-950 border border-neutral-200/80 dark:border-neutral-800 rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 focus:bg-white dark:focus:bg-neutral-950 dark:text-white transition-colors"
+                    >
+                      <option value="">Select a reason</option>
+                      <option value="Student Joined Another College">Student Joined Another College</option>
+                      <option value="Student Did Not Report">Student Did Not Report</option>
+                      <option value="Fee Not Paid">Fee Not Paid</option>
+                      <option value="Documents Not Submitted">Documents Not Submitted</option>
+                      <option value="Duplicate Admission">Duplicate Admission</option>
+                      <option value="Requested Offline">Requested Offline</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
+                      Remarks
+                    </label>
+                    <textarea
+                      value={cancelDirectRemarks}
+                      onChange={(e) => setCancelDirectRemarks(e.target.value)}
+                      rows={3}
+                      placeholder="Optional administrative notes..."
+                      className="w-full text-xs font-semibold p-4 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200/80 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-violet-500 focus:bg-white dark:focus:bg-neutral-950 dark:text-white transition-all resize-none"
+                    />
+                  </div>
+
+                  {/* Information Box */}
+                  <div className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 rounded-xl p-4 space-y-2 text-xs">
+                    <p className="font-extrabold text-amber-900 dark:text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                      This action will ONLY change the student's admission status to: <strong>Admission Cancelled</strong>
+                    </p>
+                    <p className="font-bold text-amber-800 dark:text-amber-350 text-[11px]">The following WILL NOT be deleted:</p>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] font-bold text-amber-900 dark:text-amber-300">
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Student Profile</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Personal Details</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Academic Details</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Uploaded Documents</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Admission History</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-emerald-600 shrink-0" /> Timeline</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelDirectModalOpen(false);
+                      setCancelDirectReason('');
+                      setCancelDirectRemarks('');
+                      setCancelDirectStep(1);
+                    }}
+                    className="px-4 py-2 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-350 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!cancelDirectReason}
+                    onClick={() => setCancelDirectStep(2)}
+                    className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors shadow-md shadow-rose-600/10 flex items-center gap-1.5"
+                  >
+                    Proceed <ArrowRight size={14} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Step 2: Final Confirmation Modal */}
+                <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
+                  <h3 className="text-base font-black text-rose-600 dark:text-rose-400 uppercase tracking-wide flex items-center gap-2">
+                    <AlertTriangle size={20} className="text-rose-600" /> Final Confirmation
+                  </h3>
+                  <button 
+                    onClick={() => setCancelDirectStep(1)}
+                    className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg text-neutral-400"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                  <p className="text-sm font-extrabold text-neutral-900 dark:text-white">
+                    Are you sure you want to cancel this student's admission?
+                  </p>
+
+                  <div className="bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/40 rounded-xl p-4 space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Student</p>
+                      <p className="font-extrabold text-neutral-900 dark:text-white text-xs mt-0.5">
+                        {app.applicationNumber} — {pd ? `${pd.firstName || ''} ${pd.lastName || ''}`.trim() : 'N/A'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-rose-100 dark:border-rose-900/30">
+                      <div>
+                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Current Status</p>
+                        <p className="font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">Admission Confirmed</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-wider">New Status</p>
+                        <p className="font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">Admission Cancelled</p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] font-bold text-rose-700 dark:text-rose-350 italic pt-1">
+                      ℹ This action does NOT delete the student.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2 Buttons */}
+                <div className="flex justify-end gap-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                  <button
+                    type="button"
+                    disabled={cancelDirectSubmitting}
+                    onClick={() => setCancelDirectStep(1)}
+                    className="px-4 py-2 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-350 transition-colors disabled:opacity-50"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelDirectSubmitting}
+                    onClick={handleDirectCancelSubmit}
+                    className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors shadow-md shadow-rose-600/10 flex items-center gap-1.5"
+                  >
+                    {cancelDirectSubmitting ? 'Cancelling...' : 'Yes, Cancel Admission'}
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
     </CorrectionContext.Provider>
   );
 };
