@@ -618,7 +618,8 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
                             </div>
                             <button
                                 onClick={() => navigate('/admission/provisional')}
-                                className="px-5 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-bold rounded-xl text-xs uppercase tracking-wide transition-all shadow-md active:translate-y-0.5 cursor-pointer shrink-0"
+                                className="px-5 py-2.5 bg-white !text-blue-700 hover:bg-blue-50 font-bold rounded-xl text-xs uppercase tracking-wide transition-all shadow-md active:translate-y-0.5 cursor-pointer shrink-0"
+                                style={{ color: '#1d4ed8' }}
                             >
                                 View Status / Edit
                             </button>
@@ -631,7 +632,8 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
                             {isProvisionalOpen ? (
                                 <button
                                     onClick={() => navigate('/admission/provisional')}
-                                    className="px-6 py-3 bg-white text-blue-700 hover:bg-blue-50 font-extrabold rounded-xl text-sm uppercase tracking-wide transition-all shadow-md active:translate-y-0.5 cursor-pointer shrink-0"
+                                    className="px-6 py-3 bg-white !text-blue-700 hover:bg-blue-50 font-extrabold rounded-xl text-sm uppercase tracking-wide transition-all shadow-md active:translate-y-0.5 cursor-pointer shrink-0"
+                                    style={{ color: '#1d4ed8' }}
                                 >
                                     Apply Now
                                 </button>
