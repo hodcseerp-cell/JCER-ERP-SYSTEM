@@ -16,116 +16,208 @@ export interface CommonEmailParams {
   footerText?: string;
 }
 
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 /**
- * Generate ONE unified, production-grade, JCER-branded HTML email.
- * Reuses the existing public logo asset with horizontal alignment.
+ * Generate ONE unified, production-grade, JCER-branded responsive HTML email.
+ * Optimized for Gmail Mobile & Desktop, Apple Mail, Outlook, and Dark Mode compatibility.
  */
 export function getJcerCommonEmailHtml(params: CommonEmailParams): string {
-  const logoUrl = process.env.PUBLIC_LOGO_URL || 'https://resulting-pensions-migration-regularly.trycloudflare.com/logo.png';
+  const DEFAULT_LOGO_URL = 'https://jcer.in/wp-content/uploads/2020/09/jcer-logo.png';
+  const logoUrl = process.env.EMAIL_LOGO_URL || process.env.PUBLIC_LOGO_URL || DEFAULT_LOGO_URL;
   const currentYear = new Date().getFullYear();
   const academicYearStr = `${currentYear}–${currentYear + 1}`;
 
+  const safeRecipientName = escapeHtml(params.recipientName || 'User');
+  const safeSubject = escapeHtml(params.subject || 'JCER ERP Notification');
+
   const detailsRows = params.details && params.details.length > 0
     ? `
-      <div style="margin: 24px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px;">
-        <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em;">Application Details</h4>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          ${params.details.map(d => `
-            <tr>
-              <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 40%; font-size: 12px;">${d.label}:</td>
-              <td style="padding: 6px 0; color: #0f172a; font-weight: 700; font-size: 13px;">${d.value}</td>
-            </tr>
-          `).join('')}
-        </table>
-      </div>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; border-collapse: separate;">
+        <tr>
+          <td style="padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+            <div style="font-size: 12px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0;">
+              Application Details
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 14px 18px 6px 18px;">
+            ${params.details.map((d, index) => `
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 12px; ${index < params.details!.length - 1 ? 'border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;' : ''}">
+                <tr>
+                  <td style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 3px;">
+                    ${escapeHtml(d.label)}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size: 13px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; word-break: break-word; line-height: 1.4;">
+                    ${escapeHtml(d.value)}
+                  </td>
+                </tr>
+              </table>
+            `).join('')}
+          </td>
+        </tr>
+      </table>
     `
     : '';
 
   const otpBlock = params.otpCode
     ? `
-      <div style="background: linear-gradient(135deg, #e0e7ff 0%, #e0f2fe 100%); border: 2px dashed #6366f1; border-radius: 16px; padding: 24px; text-align: center; margin: 24px 0;">
-        <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #4338ca; margin: 0;">${params.otpCode}</div>
-        ${params.otpExpiryMinutes ? `<div style="font-size: 12px; font-weight: 700; color: #4f46e5; margin-top: 8px;">⏱ Valid for ${params.otpExpiryMinutes} minutes</div>` : ''}
-      </div>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0;">
+        <tr>
+          <td align="center" style="background-color: #f0f7ff; border: 2px dashed #4f46e5; border-radius: 14px; padding: 22px 16px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #4338ca; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+              One-Time Verification Code (OTP)
+            </div>
+            <div class="otp-text" style="font-family: 'Courier New', Courier, monospace; font-size: 34px; font-weight: 900; letter-spacing: 10px; color: #3730a3 !important; margin: 0; line-height: 1.2;">
+              ${escapeHtml(params.otpCode)}
+            </div>
+            ${params.otpExpiryMinutes ? `
+              <div style="font-size: 12px; font-weight: 700; color: #4f46e5; margin-top: 10px;">
+                ⏱ Valid for ${params.otpExpiryMinutes} minutes
+              </div>
+            ` : ''}
+          </td>
+        </tr>
+      </table>
     `
     : '';
 
   const securityBlock = params.securityNote
     ? `
-      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px; border-radius: 6px; font-size: 12px; color: #991b1b; margin-bottom: 20px; font-weight: 500;">
-        🔒 <strong>Security Guidance:</strong> ${params.securityNote}
-      </div>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
+        <tr>
+          <td style="background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 6px; padding: 12px 14px; font-size: 12px; color: #991b1b; line-height: 1.5; font-weight: 500;">
+            🔒 <strong>Security Guidance:</strong> ${escapeHtml(params.securityNote)}
+          </td>
+        </tr>
+      </table>
     `
     : '';
 
   const actionBlock = params.actionMessage
     ? `
-      <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px 16px; font-size: 13px; color: #166534; font-weight: 600; margin-bottom: 20px;">
-        💡 ${params.actionMessage}
-      </div>
-    `
-    : '';
-
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${params.subject}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; color: #0f172a; margin: 0; padding: 0; line-height: 1.6; }
-    .container { max-width: 600px; margin: 30px auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); border: 1px solid #e2e8f0; }
-    .header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #ffffff; padding: 28px 32px; }
-    .header-table { width: 100%; border-collapse: collapse; }
-    .logo-td { width: 64px; vertical-align: middle; }
-    .logo-img { width: 56px; height: 56px; border-radius: 50%; background-color: #ffffff; padding: 2px; display: block; object-fit: contain; }
-    .title-td { padding-left: 16px; vertical-align: middle; }
-    .college-name { margin: 0; font-size: 18px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em; line-height: 1.2; }
-    .portal-subtitle { margin: 4px 0 0 0; font-size: 12px; color: #a5b4fc; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .badge { display: inline-block; margin-top: 8px; padding: 3px 10px; background-color: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 9999px; font-size: 11px; color: #c7d2fe; font-weight: 700; }
-    .body-content { padding: 32px 32px 24px 32px; }
-    .greeting { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 12px; }
-    .main-text { font-size: 14px; color: #334155; margin-bottom: 20px; line-height: 1.6; }
-    .footer { background-color: #f8fafc; padding: 20px 32px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; }
-    .footer p { margin: 3px 0; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <table class="header-table">
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
         <tr>
-          <td class="logo-td">
-            <img src="${logoUrl}" alt="JCER Logo" class="logo-img" />
-          </td>
-          <td class="title-td">
-            <h1 class="college-name">Jain College of Engineering & Research</h1>
-            <p class="portal-subtitle">Official ERP Notification</p>
-            <div class="badge">${params.badgeTitle || `Academic Year ${academicYearStr}`}</div>
+          <td style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #166534; font-weight: 600; line-height: 1.5;">
+            💡 ${escapeHtml(params.actionMessage)}
           </td>
         </tr>
       </table>
-    </div>
+    `
+    : '';
 
-    <div class="body-content">
-      <div class="greeting">Dear ${params.recipientName},</div>
-      <div class="main-text">${params.mainMessage}</div>
-      ${otpBlock}
-      ${securityBlock}
-      ${detailsRows}
-      ${actionBlock}
-    </div>
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>${safeSubject}</title>
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; display: block; }
+    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f1f5f9; }
+    
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; max-width: 100% !important; }
+      .fluid-padding { padding-left: 16px !important; padding-right: 16px !important; }
+      .header-title { font-size: 17px !important; line-height: 1.3 !important; }
+      .otp-text { font-size: 26px !important; letter-spacing: 6px !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: Arial, Helvetica, sans-serif;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; table-layout: fixed;">
+    <tr>
+      <td align="center" style="padding: 20px 8px;">
+        
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); border-collapse: separate;">
+          
+          <!-- HEADER -->
+          <tr>
+            <td style="background: #0f172a; padding: 24px 24px; border-bottom: 3px solid #3b82f6;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td width="64" valign="middle" style="width: 64px; padding-right: 14px;">
+                    <img
+                      src="${logoUrl}"
+                      alt="Jain College of Engineering &amp; Research"
+                      width="56"
+                      height="56"
+                      style="display: block; width: 56px; height: 56px; border: 0; outline: none; border-radius: 50%; background-color: #ffffff; padding: 2px;"
+                    />
+                  </td>
+                  <td valign="middle" style="text-align: left;">
+                    <div class="header-title" style="font-size: 19px; font-weight: 800; color: #ffffff; line-height: 1.25; margin: 0; font-family: Arial, Helvetica, sans-serif; overflow-wrap: break-word; word-break: normal;">
+                      Jain College of Engineering &amp; Research
+                    </div>
+                    <div style="font-size: 11px; font-weight: 700; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px;">
+                      OFFICIAL ERP NOTIFICATION
+                    </div>
+                    <div style="margin-top: 6px;">
+                      <span style="display: inline-block; padding: 3px 10px; background-color: rgba(59, 130, 246, 0.2); border: 1px solid rgba(147, 197, 253, 0.4); border-radius: 12px; font-size: 11px; color: #e0e7ff; font-weight: 700;">
+                        ${escapeHtml(params.badgeTitle || `Academic Year ${academicYearStr}`)}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-    <div class="footer">
-      <p><strong>Jain College of Engineering & Research</strong> — JCER Admission ERP</p>
-      <p>Belagavi, Karnataka | Website: <a href="https://jcer.in" style="color: #4f46e5; text-decoration: none;">jcer.in</a></p>
-      <p style="margin-top: 8px; color: #94a3b8; font-size: 10px;">${params.footerText || 'This is an automated notification. Please do not reply directly to this email.'}</p>
-    </div>
-  </div>
+          <!-- BODY CONTENT -->
+          <tr>
+            <td class="fluid-padding" style="padding: 28px 28px 20px 28px; background-color: #ffffff;">
+              <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 12px; overflow-wrap: break-word; word-break: normal;">
+                Dear ${safeRecipientName},
+              </div>
+              <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px; overflow-wrap: break-word; word-break: normal;">
+                ${params.mainMessage}
+              </div>
+              ${otpBlock}
+              ${securityBlock}
+              ${detailsRows}
+              ${actionBlock}
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <div style="font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+                Jain College of Engineering &amp; Research
+              </div>
+              <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">
+                JCER Admission ERP &mdash; Belagavi, Karnataka
+              </div>
+              <div style="font-size: 12px; color: #475569;">
+                Website: <a href="https://jcer.in" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; font-weight: 700; text-decoration: none;">jcer.in</a>
+              </div>
+              <div style="margin-top: 10px; font-size: 10px; color: #94a3b8; line-height: 1.4;">
+                ${escapeHtml(params.footerText || 'This is an automated notification from JCER ERP. Please do not reply directly to this email.')}
+              </div>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
 </body>
-</html>
-  `.trim();
+</html>`.trim();
 }
 
 class EmailService {
@@ -420,7 +512,7 @@ class EmailService {
       recipientName: data.studentName,
       subject,
       badgeTitle: 'Application Approved',
-      mainMessage: `Congratulations! Your ${typeLabel} application (<strong>${data.applicationNumber}</strong>) has been officially approved by the Admissions Committee.`,
+      mainMessage: `Congratulations! Your ${typeLabel} application (${data.applicationNumber}) has been officially approved by the Admissions Committee.`,
       details,
       actionMessage: 'Please log into your student dashboard for next steps and instructions.',
     });
@@ -454,7 +546,7 @@ class EmailService {
       recipientName: data.studentName,
       subject,
       badgeTitle: 'Application Status Update',
-      mainMessage: `We regret to inform you that your ${typeLabel} application (<strong>${data.applicationNumber}</strong>) could not be approved.`,
+      mainMessage: `We regret to inform you that your ${typeLabel} application (${data.applicationNumber}) could not be approved.`,
       details,
       footerText: 'For further queries regarding this decision, please contact the college admissions office.',
     });
@@ -489,7 +581,7 @@ class EmailService {
       recipientName: data.studentName,
       subject,
       badgeTitle: 'Admission Confirmed 🎉',
-      mainMessage: `🎉 Congratulations <strong>${data.studentName}</strong>! Your ${typeLabel} has been officially confirmed by the Principal. Welcome to Jain College of Engineering & Research!`,
+      mainMessage: `🎉 Congratulations ${data.studentName}! Your ${typeLabel} has been officially confirmed by the Principal. Welcome to Jain College of Engineering & Research!`,
       details,
       actionMessage: 'You can download your official confirmed admission slip from your Student Dashboard.',
     });
@@ -508,7 +600,7 @@ class EmailService {
       recipientName: 'Administrator',
       subject: `Resubmitted: Application #${data.applicationNumber}`,
       badgeTitle: 'Correction Resubmitted',
-      mainMessage: `Candidate <strong>${data.studentName}</strong> has corrected and resubmitted their application (<strong>#${data.applicationNumber}</strong>).`,
+      mainMessage: `Candidate ${data.studentName} has corrected and resubmitted their application (#${data.applicationNumber}).`,
       details: [
         { label: 'Application No', value: data.applicationNumber },
         { label: 'Corrected Sections', value: data.correctedSections.join(', ') },
@@ -524,7 +616,7 @@ class EmailService {
       recipientName: 'Administrator',
       subject: `Fee Receipt Uploaded — ${data.applicationNumber}`,
       badgeTitle: 'Fee Receipt Verification',
-      mainMessage: `Student <strong>${data.studentName}</strong> (${data.applicationNumber}) has uploaded their ₹500 Admission Fee Receipt.`,
+      mainMessage: `Student ${data.studentName} (${data.applicationNumber}) has uploaded their ₹500 Admission Fee Receipt.`,
       details: [
         { label: 'Application No', value: data.applicationNumber },
         { label: 'Student Name', value: data.studentName },
@@ -540,7 +632,7 @@ class EmailService {
       recipientName: 'Principal',
       subject: `Admission Pending Sign-off — ${data.applicationNumber}`,
       badgeTitle: 'Final Sign-off Required',
-      mainMessage: `Application <strong>${data.applicationNumber}</strong> for student <strong>${data.studentName}</strong> has been fully verified.`,
+      mainMessage: `Application ${data.applicationNumber} for student ${data.studentName} has been fully verified.`,
       details: [
         { label: 'Application No', value: data.applicationNumber },
         { label: 'Student Name', value: data.studentName },

@@ -306,7 +306,7 @@ export const LoginPage: React.FC = () => {
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={`e.g. STU-${new Date().getFullYear()}-4831 or email@example.com`}
+                  placeholder={`e.g. email@example.com`}
                   className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-neutral-900 shadow-sm"
                   required
                 />

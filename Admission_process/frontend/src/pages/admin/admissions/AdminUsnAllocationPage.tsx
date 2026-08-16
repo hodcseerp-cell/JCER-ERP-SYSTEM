@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
+// @ts-ignore
+import * as ExcelJS from 'exceljs';
 import { getAcademicYear } from '../../../utils/date.util';
 
 interface USNApplicant {
