@@ -1,7 +1,7 @@
 {
-  "name": "JCER Student Admission Portal",
-  "short_name": "JCER Admission",
-  "description": "Progressive Web App for Jain College of Engineering and Research Student Admission",
+  "name": "JCER ERP",
+  "short_name": "JCER ERP",
+  "description": "Jain College of Engineering and Research — Student ERP Portal",
   "start_url": "/admission/login",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,8 +9,14 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/logo.png",
-      "sizes": "192x192 512x512",
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
