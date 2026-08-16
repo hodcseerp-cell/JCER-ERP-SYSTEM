@@ -129,8 +129,8 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
   // Preview Modal state
   const [previewDoc, setPreviewDoc] = useState<{ url: string; label: string; isPdf: boolean } | null>(null);
 
-  // Send Back Modal state
-  const [sendBackModalOpen, setSendBackModalOpen] = useState(false);
+  // Send Back Card state
+  const [sendBackCardOpen, setSendBackCardOpen] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
   const [customRemarks, setCustomRemarks] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -211,7 +211,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
       if (res.data.success) {
         toast.success('Application returned for correction successfully.');
         window.dispatchEvent(new CustomEvent('admissions-updated'));
-        setSendBackModalOpen(false);
+        setSendBackCardOpen(false);
         navigate('/principal/admissions/pending');
       }
     } catch (err: any) {
@@ -647,13 +647,103 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setSendBackModalOpen(true)}
+                onClick={() => setSendBackCardOpen(prev => !prev)}
                 disabled={submitting}
                 className="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 transition-all hover:scale-[1.01] disabled:opacity-50"
               >
                 <XCircle size={18} />
                 Send Back (Correction)
               </button>
+
+              {/* Inline Send Back Options Card */}
+              {sendBackCardOpen && (
+                <div className="bg-rose-50/60 dark:bg-rose-950/30 border-2 border-rose-200 dark:border-rose-900/50 rounded-2xl p-4 space-y-4 animate-fade-in text-xs mt-3">
+                  <div className="flex items-center justify-between border-b border-rose-200/60 dark:border-rose-900/40 pb-2">
+                    <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-extrabold text-xs">
+                      <AlertTriangle size={16} />
+                      <span>Return Application for Correction</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSendBackCardOpen(false);
+                        setCorrectionReason('');
+                        setCustomRemarks('');
+                      }}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Required Dropdown */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                      Reason for Returning Application <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={correctionReason}
+                      onChange={(e) => setCorrectionReason(e.target.value)}
+                      className="w-full bg-white dark:bg-neutral-800 border border-rose-200 dark:border-neutral-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-rose-500 transition-all text-slate-900 dark:text-white"
+                    >
+                      <option value="">Select a reason...</option>
+                      <option value="Personal Details">Personal Details</option>
+                      <option value="Parent / Guardian Details">Parent / Guardian Details</option>
+                      <option value="Address Details">Address Details</option>
+                      <option value="Academic Details">Academic Details</option>
+                      <option value="Uploaded Documents">Uploaded Documents</option>
+                      <option value="Eligibility Verification">Eligibility Verification</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <p className="text-[10px] text-slate-500 font-medium italic leading-normal">
+                      The selected reason will be shared with the student through the Student Dashboard and Email.
+                    </p>
+                  </div>
+
+                  {/* Custom Remarks (Shown ONLY if 'Other' is selected) */}
+                  {correctionReason === 'Other' && (
+                    <div className="space-y-1.5 animate-fade-in">
+                      <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                        Please specify details <span className="text-rose-500">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={customRemarks}
+                        onChange={(e) => setCustomRemarks(e.target.value)}
+                        placeholder="Specify details about the required correction..."
+                        className="w-full bg-white dark:bg-neutral-800 border border-rose-200 dark:border-neutral-700 rounded-xl p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-rose-500 transition-all text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/40">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSendBackCardOpen(false);
+                        setCorrectionReason('');
+                        setCustomRemarks('');
+                      }}
+                      className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendBackSubmit}
+                      disabled={
+                        submitting ||
+                        !correctionReason ||
+                        (correctionReason === 'Other' && !customRemarks.trim())
+                      }
+                      className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                    >
+                      {submitting ? 'Processing...' : 'Return for Correction'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -688,94 +778,6 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
               ) : (
                 <img src={previewDoc.url} alt={previewDoc.label} className="max-w-full max-h-[70vh] object-contain rounded-xl" />
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SEND BACK (CORRECTION) MODAL ═══ */}
-      {sendBackModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 pt-16 sm:pt-20 overflow-y-auto">
-          <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-2xl w-full p-8 sm:p-8 shadow-2xl border border-slate-200 dark:border-neutral-800 space-y-6 sm:space-y-7 animate-fade-in my-auto sm:my-0">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 pb-4">
-              <div className="flex items-center gap-3 text-rose-600">
-                <div className="size-10 rounded-2xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center">
-                  <AlertTriangle size={22} />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Return Application for Correction</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">Specify reason before notifying student and admin</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSendBackModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Required Dropdown: Reason for Returning Application */}
-            <div className="space-y-2.5">
-              <label className="block text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200">
-                Reason for Returning Application <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={correctionReason}
-                onChange={(e) => setCorrectionReason(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-3 text-xs sm:text-sm font-bold outline-none focus:ring-2 focus:ring-rose-500 transition-all"
-              >
-                <option value="">Select a reason...</option>
-                <option value="Personal Details">Personal Details</option>
-                <option value="Parent / Guardian Details">Parent / Guardian Details</option>
-                <option value="Address Details">Address Details</option>
-                <option value="Academic Details">Academic Details</option>
-                <option value="Uploaded Documents">Uploaded Documents</option>
-                <option value="Eligibility Verification">Eligibility Verification</option>
-                <option value="Other">Other</option>
-              </select>
-              <p className="text-xs text-slate-500 font-medium italic mt-2 leading-relaxed">
-                The selected reason will be shared with the student through the Student Dashboard and Email.
-              </p>
-            </div>
-
-            {/* Custom Remarks Textarea (Shown ONLY if 'Other' is selected) */}
-            {correctionReason === 'Other' && (
-              <div className="space-y-2.5 animate-fade-in">
-                <label className="block text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200">
-                  Please specify the reason for returning this application. <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={4}
-                  value={customRemarks}
-                  onChange={(e) => setCustomRemarks(e.target.value)}
-                  placeholder="Specify details about the required correction..."
-                  className="w-full bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl p-4 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-rose-500 transition-all"
-                />
-              </div>
-            )}
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3.5 pt-4 border-t border-slate-100 dark:border-neutral-800">
-              <button
-                type="button"
-                onClick={() => setSendBackModalOpen(false)}
-                className="py-3 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-300 font-bold rounded-2xl text-xs sm:text-sm transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendBackSubmit}
-                disabled={
-                  submitting ||
-                  !correctionReason ||
-                  (correctionReason === 'Other' && !customRemarks.trim())
-                }
-                className="py-3 px-7 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl text-xs sm:text-sm shadow-lg shadow-rose-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-              >
-                {submitting ? 'Processing...' : 'Return for Correction'}
-              </button>
             </div>
           </div>
         </div>
