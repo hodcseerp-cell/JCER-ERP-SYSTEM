@@ -104,7 +104,8 @@ const DocumentSquareCard: React.FC<{
   onRemove?: () => void;
   uploading?: boolean;
   hasUrl?: boolean;
-}> = ({ field, studentId, label, isEdit, onUpload, onRemove, uploading, hasUrl }) => {
+  docUrl?: string | null;
+}> = ({ field, studentId, label, isEdit, onUpload, onRemove, uploading, hasUrl, docUrl }) => {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -117,39 +118,37 @@ const DocumentSquareCard: React.FC<{
       return;
     }
     let active = true;
+    let blobUrl: string | null = null;
     const fetchDoc = async () => {
       try {
-        setLoading(true);
-        setError(false);
-        // Backend returns { success: true, url: '/uploads/...' }
-        const res = await API.get(`/admin/admissions/${studentId}/documents/${field}`);
+        const token = localStorage.getItem('token') || '';
+        const base = API.defaults.baseURL || '/api';
+        const cleanPath = `/admin/admissions/${studentId}/documents/${field}`;
+        const url = `${base}${cleanPath}`;
+        const finalUrl = token ? `${url}?token=${encodeURIComponent(token)}` : url;
+
+        const response = await API.get(finalUrl, { responseType: 'blob' });
         if (!active) return;
-        const relativeUrl: string = res.data?.url || '';
-        if (!relativeUrl) throw new Error('No URL returned');
-        const isPdfFile = relativeUrl.toLowerCase().endsWith('.pdf');
+
+        blobUrl = URL.createObjectURL(response.data);
+        const isPdfFile = response.data.type === 'application/pdf' || !!(docUrl?.toLowerCase().includes('.pdf'));
         setIsPdf(isPdfFile);
-        if (!isPdfFile) {
-          const baseHost = getBaseHostURL();
-          const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : baseHost + relativeUrl;
-          setImgUrl(fullUrl);
-        } else {
-          // For PDFs store the full URL for download
-          const baseHost = getBaseHostURL();
-          setImgUrl(relativeUrl.startsWith('http') ? relativeUrl : baseHost + relativeUrl);
-        }
-      } catch (err) {
-        console.error('Failed to load document preview:', field, err);
-        if (active) setError(true);
-      } finally {
-        if (active) setLoading(false);
+        setImgUrl(blobUrl);
+        setLoading(false);
+        setError(false);
+      } catch {
+        if (!active) return;
+        setError(true);
+        setLoading(false);
       }
     };
 
     fetchDoc();
     return () => {
       active = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [field, studentId, hasUrl]);
+  }, [field, studentId, hasUrl, docUrl]);
 
   const handleDownload = () => {
     if (!imgUrl) return;
@@ -531,13 +530,14 @@ export const StudentViewPage: React.FC = () => {
   const getPhotoUrl = (photoPath: string | null | undefined) => {
     if (!photoPath) return '';
     if (photoPath.startsWith('http') || photoPath.startsWith('data:')) return photoPath;
-    const cleanPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+    
     const base = API.defaults.baseURL || '/api';
-    const host = base.replace(/\/api\/?$/, '');
-    if (host.startsWith('/')) {
-      return cleanPath;
-    }
-    return `${host}${cleanPath}`;
+    const isAdmin = window.location.pathname.startsWith('/admin');
+    const rolePath = isAdmin ? 'admin' : 'principal';
+    const url = `${base}/${rolePath}/admissions/${id}/documents/photo`;
+    
+    const token = localStorage.getItem('token');
+    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
   };
 
   const getTimelineBadge = (label: string, dateStr?: string | Date | null) => {
@@ -661,7 +661,7 @@ export const StudentViewPage: React.FC = () => {
               <button 
                 onClick={handleDownloadZip}
                 disabled={zipLoading}
-                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md cursor-pointer disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-md cursor-pointer disabled:cursor-not-allowed"
               >
                 {zipLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Download ZIP
               </button>
@@ -1024,6 +1024,7 @@ export const StudentViewPage: React.FC = () => {
                     label={doc.label}
                     isEdit={isEditMode}
                     hasUrl={!!doc.url}
+                    docUrl={doc.url}
                     uploading={uploadingField === doc.field}
                     onUpload={(file) => handleUploadDocument(doc.field, file)}
                     onRemove={() => handleRemoveDocument(doc.field)}

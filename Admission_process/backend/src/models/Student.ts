@@ -19,8 +19,14 @@ class Student extends Model {
   public parentPhone!: string;
   public parentEmail!: string;
   public admissionStatus!: 'PENDING' | 'VALIDATED' | 'APPROVED' | 'REJECTED';
+  public admissionType!: 'FRESH' | 'LATERAL';
+  public initialSemester!: number;
+  public currentAcademicYear!: string;
+  public lastPromotedAt!: Date | null;
+  public lastPromotedBy!: string | null;
   public user!: any;
   public department!: any;
+  public admission?: any;
   public createdAt!: Date;
   public updatedAt!: Date;
 }
@@ -100,6 +106,33 @@ Student.init(
       type: DataTypes.ENUM('PENDING', 'VALIDATED', 'APPROVED', 'REJECTED'),
       defaultValue: 'APPROVED',
     },
+    admissionType: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'FRESH',
+    },
+    initialSemester: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
+    currentAcademicYear: {
+      type: DataTypes.STRING(30),
+      allowNull: false,
+      defaultValue: '2026-2027',
+    },
+    lastPromotedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    lastPromotedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: User,
+        key: 'id',
+      },
+    },
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
@@ -131,9 +164,13 @@ Student.init(
   }
 );
 
+import Admission from './Admission';
+
 // Associations
 Student.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 Student.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
 User.hasOne(Student, { as: 'student', foreignKey: 'userId' });
+Student.hasOne(Admission, { as: 'admission', foreignKey: 'userId', sourceKey: 'userId' });
+Admission.belongsTo(Student, { as: 'student', foreignKey: 'userId', targetKey: 'userId' });
 
 export default Student;

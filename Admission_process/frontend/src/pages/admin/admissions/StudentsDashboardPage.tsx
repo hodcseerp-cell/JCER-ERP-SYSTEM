@@ -38,13 +38,19 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 const getPhotoUrl = (path: string | null | undefined) => {
   if (!path) return '';
   if (path.startsWith('http') || path.startsWith('data:')) return path;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  let cleanPath = path;
+  if (!cleanPath.startsWith('/uploads/') && !cleanPath.startsWith('uploads/')) {
+    cleanPath = cleanPath.startsWith('/') ? `/uploads${cleanPath}` : `/uploads/${cleanPath}`;
+  } else {
+    cleanPath = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  }
+
   const base = API.defaults.baseURL || '/api';
   const host = base.replace(/\/api\/?$/, '');
-  if (host.startsWith('/')) {
-    return cleanPath;
-  }
-  return `${host}${cleanPath}`;
+  const token = localStorage.getItem('token');
+  const url = host.startsWith('/') ? cleanPath : `${host}${cleanPath}`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
 interface StudentsDashboardPageProps {
@@ -78,7 +84,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const [search, setSearch] = useState('');
   const [academicYear, setAcademicYear] = useState('ALL');
   const [branchId, setBranchId] = useState('ALL');
-  const [status, setStatus] = useState('ALL');
+  const [status, setStatus] = useState('ENROLLED');
   const [admissionType, setAdmissionType] = useState('ALL');
   const [qualification, setQualification] = useState('ALL');
   const [gender, setGender] = useState('ALL');
@@ -94,7 +100,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const [pendingSearch, setPendingSearch] = useState('');
   const [pendingAcademicYear, setPendingAcademicYear] = useState('ALL');
   const [pendingBranchId, setPendingBranchId] = useState('ALL');
-  const [pendingStatus, setPendingStatus] = useState('ALL');
+  const [pendingStatus, setPendingStatus] = useState('ENROLLED');
   const [pendingAdmissionType, setPendingAdmissionType] = useState('ALL');
   const [pendingQualification, setPendingQualification] = useState('ALL');
   const [pendingGender, setPendingGender] = useState('ALL');
@@ -418,7 +424,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
           </div>
           <div className="flex items-baseline gap-1 mt-auto">
-            <span className="text-xl font-black leading-none">{stats.total}</span>
+            <span className="text-xl font-black leading-none">{stats.enrolled}</span>
             <span className="text-[9px] font-bold opacity-60">students</span>
           </div>
         </button>
@@ -561,7 +567,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                   >
                     <option value="ALL">All Years</option>
                     {Array.from({ length: 5 }).map((_, i) => {
-                      const y = new Date().getFullYear() + i;
+                      const y = 2026 + i;
                       const opt = `${y}-${y + 1}`;
                       return <option key={opt} value={opt}>{opt}</option>;
                     })}
@@ -801,6 +807,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                   <th className="py-4.5 px-3">App Number</th>
                   <th className="py-4.5 px-3">Student Name</th>
                   <th className="py-4.5 px-3">Branch</th>
+                  <th className="py-4.5 px-3 text-center">Semester</th>
                   <th className="py-4.5 px-3">Type</th>
                   <th className="py-4.5 px-3">Qual</th>
                   <th className="py-4.5 px-3">Mobile Number</th>
@@ -842,6 +849,14 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                       </td>
                       <td className="py-4 px-3 font-extrabold text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
                         {app.branch?.code || 'N/A'}
+                      </td>
+                      <td className="py-4 px-3 text-center whitespace-nowrap">
+                        {app.user?.student?.semester
+                          ? <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 text-[10px] font-black border border-indigo-100 dark:border-indigo-900">
+                              Sem {app.user.student.semester}
+                            </span>
+                          : <span className="text-neutral-400 font-semibold">—</span>
+                        }
                       </td>
                       <td className="py-4 px-3 font-bold whitespace-nowrap">
                         {app.admissionType || 'N/A'}

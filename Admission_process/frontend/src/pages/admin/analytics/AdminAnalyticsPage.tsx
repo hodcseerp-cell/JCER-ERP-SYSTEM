@@ -306,7 +306,7 @@ export const AdminAnalyticsPage: React.FC = () => {
             className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer text-slate-700 dark:text-neutral-300 shadow-xs"
           >
             <option value="2026-2027">2026–2027</option>
-            <option value="2025-2026">2025–2026</option>
+            <option value="2027-2028">2027–2028</option>
           </select>
 
           {/* Period Selector */}

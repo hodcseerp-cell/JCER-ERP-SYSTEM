@@ -169,16 +169,35 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const getBranchStyle = (code?: string | null) => BRANCH_ACCENT[code || ''] || DEFAULT_BRANCH;
-  const getDocUrl = (url?: string | null) => {
+  const getDocUrl = (url?: string | null, appId?: string) => {
     if (!url) return '';
     if (url.startsWith('http') || url.startsWith('data:')) return url;
+
+    if (!url.startsWith('/uploads') && !url.startsWith('uploads/') && appId) {
+      const base = API.defaults.baseURL || '/api';
+      const token = localStorage.getItem('token');
+      let field = 'photo';
+      if (url.toLowerCase().includes('signature')) field = 'signature';
+      else if (url.toLowerCase().includes('tenth') || url.toLowerCase().includes('10th')) field = 'tenthMarksheet';
+      else if (url.toLowerCase().includes('twelfth') || url.toLowerCase().includes('12th')) field = 'twelfthMarksheet';
+      else if (url.toLowerCase().includes('cet')) field = 'cetScoreCard';
+      else if (url.toLowerCase().includes('aadhaar')) field = 'aadhaar';
+      else if (url.toLowerCase().includes('caste')) field = 'casteCertificate';
+      else if (url.toLowerCase().includes('domicile')) field = 'domicileCertificate';
+      else if (url.toLowerCase().includes('gap')) field = 'gapCertificate';
+      else if (url.toLowerCase().includes('feespaid')) field = 'feesPaidReceipt';
+      else if (url.toLowerCase().includes('admissionform')) field = 'admissionFormFeeReceipt';
+      
+      const streamUrl = `${base}/admin/admissions/${appId}/documents/${field}`;
+      return token ? `${streamUrl}?token=${encodeURIComponent(token)}` : streamUrl;
+    }
+
     const cleanPath = url.startsWith('/') ? url : `/${url}`;
     const base = API.defaults.baseURL || '/api';
     const host = base.replace(/\/api\/?$/, '');
-    if (host.startsWith('/')) {
-      return cleanPath;
-    }
-    return `${host}${cleanPath}`;
+    const finalUrl = host.startsWith('/') ? cleanPath : `${host}${cleanPath}`;
+    const token = localStorage.getItem('token');
+    return token ? `${finalUrl}?token=${encodeURIComponent(token)}` : finalUrl;
   };
   const getDocumentList = (app: AdmissionApplication) => {
     const d = app.studentdocuments;
@@ -208,15 +227,11 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
    * Fetch a short-lived signed R2 URL from the backend (auth required),
    * then open the document in a new browser tab.
    */
-  const openDocument = async (admissionId: string, field: string) => {
-    try {
-      const res = await API.get(`/admin/admissions/${admissionId}/documents/${field}`);
-      if (res.data?.url) {
-        window.open(res.data.url, '_blank', 'noopener,noreferrer');
-      }
-    } catch (err) {
-      setToast({ type: 'error', message: 'Could not open document. Please try again.' });
-    }
+  const openDocument = (admissionId: string, field: string) => {
+    const token = localStorage.getItem('token') || '';
+    const base = API.defaults.baseURL || '/api';
+    const url = `${base}/admin/admissions/${admissionId}/documents/${field}?token=${encodeURIComponent(token)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -326,7 +341,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <img
-                          src={app.user?.profileImage || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}
+                          src={getDocUrl(app.studentdocuments?.photoUrl || app.user?.profileImage, app.id) || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}
                           alt={name}
                           className="w-11 h-11 rounded-full object-cover border-2 border-white shadow-sm bg-neutral-100"
                         />
@@ -437,7 +452,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
             >
               <div className="flex items-center space-x-3">
                 <img
-                  src={selected.user?.profileImage || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}
+                  src={getDocUrl(selected.studentdocuments?.photoUrl || selected.user?.profileImage, selected.id) || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}
                   alt="avatar"
                   className="w-10 h-10 rounded-full object-cover border-2 border-white shadow bg-neutral-100"
                 />

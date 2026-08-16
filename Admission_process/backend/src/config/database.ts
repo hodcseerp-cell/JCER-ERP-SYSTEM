@@ -15,8 +15,8 @@ const sequelize = new Sequelize(
     dialect: 'postgres',
     logging: process.env.NODE_ENV === 'development' ? console.log : false,
     pool: {
-      max: 10, // Increased slightly for RLS transactions
-      min: 0,
+      max: 50, // Increased for production concurrency
+      min: 5,
       acquire: 30000,
       idle: 10000,
     },

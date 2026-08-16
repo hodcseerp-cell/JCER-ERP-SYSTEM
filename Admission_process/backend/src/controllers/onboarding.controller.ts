@@ -55,7 +55,7 @@ export const uploadUSNRegistry = async (
 
     if (registriesToCreate.length > 0) {
       await UsnRegistry.bulkCreate(registriesToCreate, { 
-        updateOnDuplicate: ['studentName', 'departmentCode', 'semester', 'status'] 
+        updateOnDuplicate: ['studentName', 'departmentCode', 'semester'] 
       });
     }
 
@@ -240,14 +240,17 @@ export const bulkUploadStudents = async (
             rollNumber,
             batchYear,
             departmentId: s.departmentId,
-            semester: s.semester,
+            semester: s.semester || 1,
             dateOfBirth: s.dateOfBirth,
             address: s.address,
             fatherName: s.fatherName,
             motherName: s.motherName,
             parentPhone: s.parentPhone,
             parentEmail: s.parentEmail,
-            admissionStatus: 'APPROVED'
+            admissionStatus: 'APPROVED',
+            admissionType: s.semester === 3 ? 'LATERAL' : 'FRESH',
+            initialSemester: s.semester === 3 ? 3 : 1,
+            currentAcademicYear: '2026-2027',
           }, { transaction });
 
           // Update registry entry status

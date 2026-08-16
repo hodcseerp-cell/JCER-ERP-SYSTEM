@@ -23,6 +23,8 @@ class Admission extends Model {
   public userId!: string;
   public applicationNumber!: string | null;
   public academicYear!: string | null;
+  public applicationType!: 'FRESH' | 'LATERAL_ENTRY' | 'PROVISIONAL';
+  public entrySemester!: number;
   public admissionType!: AdmissionType | null;
   public branchId!: string | null;
   public qualification!: 'PUC' | 'DIPLOMA' | null;
@@ -128,6 +130,16 @@ Admission.init(
     academicYear: {
       type: DataTypes.STRING(30),
       allowNull: true,
+    },
+    applicationType: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'FRESH',
+    },
+    entrySemester: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
     },
     admissionType: {
       type: DataTypes.ENUM('KCET', 'DCET', 'COMEDK', 'MANAGEMENT'),

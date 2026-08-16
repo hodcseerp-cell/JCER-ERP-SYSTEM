@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AdmissionHeader from '../components/AdmissionHeader';
+import { ArrowLeft } from 'lucide-react';
 
 const AuthLayout = () => {
     const { token, user } = useAuth();
@@ -22,7 +23,16 @@ const AuthLayout = () => {
             <AdmissionHeader />
 
             {/* Scrollable Main Content Area */}
-            <main className="flex-1 overflow-y-auto w-full p-3 sm:p-5 lg:p-6 flex flex-col justify-start items-center">
+            <main className="flex-1 overflow-y-auto w-full p-3 sm:p-5 lg:p-6 flex flex-col justify-start items-center relative">
+                {/* Back to Home Button at top left of content area */}
+                <Link
+                    to="/"
+                    className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs transition-all duration-200 shadow-md cursor-pointer"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Home
+                </Link>
+
                 <div className="w-full max-w-[1050px] grid grid-cols-1 lg:grid-cols-2 items-stretch bg-white rounded-2xl shadow-3xl border border-slate-200 h-auto animate-fade-in text-slate-900 my-auto">
                     
                     {/* Left Side: Visual/Branding Section (HIDDEN ON MOBILE) */}

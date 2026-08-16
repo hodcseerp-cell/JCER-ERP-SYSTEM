@@ -19,6 +19,8 @@ import PwaManager from './components/PwaManager';
 // ─── Common Pages ─────────────────────────────────────────────────────────────
 import LoginPage from './pages/common/LoginPage';
 import LandingPage from './pages/common/LandingPage';
+import { AdmissionTypeSelection } from './pages/common/AdmissionTypeSelection';
+import { ProvisionalAcknowledgement } from './pages/common/ProvisionalAcknowledgement';
 import ModuleUnavailablePage from './pages/common/ModuleUnavailablePage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ import AdmissionAuthLayout from './pages/admission/src/layouts/AuthLayout';
 import AdmissionDashboardLayout from './pages/admission/src/layouts/DashboardLayout';
 import AdmissionStudentDashboard from './pages/admission/src/pages/student/StudentDashboard';
 import AdmissionForm from './pages/admission/src/pages/student/AdmissionForm';
+import { ProvisionalAdmissionForm } from './pages/admission/src/pages/student/ProvisionalAdmissionForm';
 import AdmissionSupportPage from './pages/admission/src/pages/student/SupportPage';
 import './pages/admission/src/index.css';
 
@@ -37,6 +40,7 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdmissionQueuePage from './pages/admin/admissions/AdmissionQueuePage';
 import AdmissionReviewPage from './pages/admin/admissions/AdmissionReviewPage';
 import DocumentVerificationWorkspace from './pages/admin/admissions/DocumentVerificationWorkspace';
+import { AdminProvisionalAdmissionsPage } from './pages/admin/admissions/AdminProvisionalAdmissionsPage';
 import PrincipalManagementPage from './pages/admin/users/PrincipalManagementPage';
 import StudentsDashboardPage from './pages/admin/admissions/StudentsDashboardPage';
 import CancellationRequestsPage from './pages/admin/admissions/CancellationRequestsPage';
@@ -44,6 +48,7 @@ import { StudentViewPage } from './pages/admin/admissions/StudentViewPage';
 import AdminUsnAllocationPage from './pages/admin/admissions/AdminUsnAllocationPage';
 import { AdminStudentDocumentsPage } from './pages/admin/admissions/AdminStudentDocumentsPage';
 import { BulkDocumentExportPage } from './pages/admin/admissions/BulkDocumentExportPage';
+import { AdminPromotionPage } from './pages/admin/admissions/AdminPromotionPage';
 
 import AdminNotificationsPage from './pages/admin/communications/AdminNotificationsPage';
 import AdminAnnouncementsPage from './pages/admin/communications/AdminAnnouncementsPage';
@@ -159,6 +164,8 @@ export const App: React.FC = () => (
           {/* ── Public ── */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/admission/type" element={<AdmissionTypeSelection />} />
+          <Route path="/admission/acknowledgement/:id" element={<ProvisionalAcknowledgement />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
           <Route path="/module-unavailable" element={<ModuleUnavailablePage />} />
 
@@ -190,6 +197,7 @@ export const App: React.FC = () => (
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<AdmissionStudentDashboard />} />
               <Route path="application" element={<AdmissionForm />} />
+              <Route path="provisional" element={<ProvisionalAdmissionForm />} />
               <Route path="support" element={<AdmissionSupportPage />} />
             </Route>
             <Route path="support" element={<Navigate to="/admission/support" replace />} />
@@ -214,6 +222,9 @@ export const App: React.FC = () => (
               <Route path="admissions/history"     element={<AdmissionQueuePage defaultStatus="ALL" />} />
               <Route path="admissions/review/:id"  element={<AdmissionReviewPage />} />
               <Route path="admissions/workspace/:id" element={<DocumentVerificationWorkspace />} />
+              <Route path="admissions/provisional" element={<AdminProvisionalAdmissionsPage />} />
+              <Route path="admissions/provisional/:id" element={<AdminProvisionalAdmissionsPage />} />
+              <Route path="admissions/promotion" element={<AdminPromotionPage />} />
               <Route path="documents/:applicationId" element={<AdminStudentDocumentsPage />} />
               <Route path="documents/bulk" element={<BulkDocumentExportPage />} />
 

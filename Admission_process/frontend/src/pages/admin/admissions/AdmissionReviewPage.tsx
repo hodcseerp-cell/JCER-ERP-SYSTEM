@@ -9,16 +9,35 @@ import { DocumentVerificationWorkspace } from './DocumentVerificationWorkspace';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getDocUrl = (url?: string | null) => {
+const getDocUrl = (url?: string | null, appId?: string) => {
   if (!url) return null;
   if (url.startsWith('http') || url.startsWith('data:')) return url;
+  
+  if (!url.startsWith('/uploads') && !url.startsWith('uploads/') && appId) {
+    const base = API.defaults.baseURL || '/api';
+    const token = localStorage.getItem('token');
+    let field = 'photo';
+    if (url.toLowerCase().includes('signature')) field = 'signature';
+    else if (url.toLowerCase().includes('tenth') || url.toLowerCase().includes('10th')) field = 'tenthMarksheet';
+    else if (url.toLowerCase().includes('twelfth') || url.toLowerCase().includes('12th')) field = 'twelfthMarksheet';
+    else if (url.toLowerCase().includes('cet')) field = 'cetScoreCard';
+    else if (url.toLowerCase().includes('aadhaar')) field = 'aadhaar';
+    else if (url.toLowerCase().includes('caste')) field = 'casteCertificate';
+    else if (url.toLowerCase().includes('domicile')) field = 'domicileCertificate';
+    else if (url.toLowerCase().includes('gap')) field = 'gapCertificate';
+    else if (url.toLowerCase().includes('feespaid')) field = 'feesPaidReceipt';
+    else if (url.toLowerCase().includes('admissionform')) field = 'admissionFormFeeReceipt';
+    
+    const streamUrl = `${base}/admin/admissions/${appId}/documents/${field}`;
+    return token ? `${streamUrl}?token=${encodeURIComponent(token)}` : streamUrl;
+  }
+
   const cleanPath = url.startsWith('/') ? url : `/${url}`;
   const base = API.defaults.baseURL || '/api';
   const host = base.replace(/\/api\/?$/, '');
-  if (host.startsWith('/')) {
-    return cleanPath;
-  }
-  return `${host}${cleanPath}`;
+  const finalUrl = host.startsWith('/') ? cleanPath : `${host}${cleanPath}`;
+  const token = localStorage.getItem('token');
+  return token ? `${finalUrl}?token=${encodeURIComponent(token)}` : finalUrl;
 };
 
 const getMissingFields = (app: AdmissionApplication | null) => {
@@ -970,7 +989,7 @@ export const AdmissionReviewPage: React.FC = () => {
   const q = (app.qualification || '').toUpperCase();
   const showPUC = q === 'PUC' || (!q && app.admissionType === 'KCET');
   const showDiploma = q === 'DIPLOMA' || (!q && app.admissionType === 'DCET');
-  const profilePhotoUrl = getDocUrl(docs?.photoUrl || app.user?.profileImage);
+  const profilePhotoUrl = getDocUrl(docs?.photoUrl || app.user?.profileImage, app.id);
 
   const missingFields = getMissingFields(app);
 

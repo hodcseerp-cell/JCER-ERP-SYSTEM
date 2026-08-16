@@ -1,9 +1,10 @@
 // Trigger reload with correct uppercase drive casing
-import express, { Application, Request, Response, RequestHandler } from 'express';
+import express, { Application, Request, Response, RequestHandler, NextFunction } from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import compression from 'compression';
+import { authMiddleware, AuthenticatedRequest } from './middleware/auth.middleware';
 
 import { corsConfig } from './middleware/corsConfig.middleware';
 import { globalLimiter } from './middleware/rateLimit.middleware';
@@ -18,6 +19,8 @@ import adminOfficeRouter from './routes/admin-office.routes';
 import { getBranches, downloadHandbook } from './controllers/admission.controller';
 import { studentRouter, applicationRouter, adminAdmissionRouter } from './routes/admission.routes';
 import principalRoutes from './routes/principal.routes';
+import provisionalRoutes from './routes/provisional.routes';
+import promotionRoutes from './routes/promotion.routes';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -57,9 +60,35 @@ app.use('/api', globalLimiter);
 // 5. Idempotency Guard (Mutation double-submit protection)
 app.use('/api', idempotencyMiddleware);
 
-// ── Serve uploaded files as static ────────────────────────────────────────────
-// Files are stored at <project_root>/uploads/ and served at /uploads/:filename
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Serve uploaded files securely - require authentication and check ownership
+app.use('/uploads', authMiddleware as any, (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const filePath = req.path;
+  const parts = filePath.split('/');
+
+  // Reject path traversal attempts
+  if (req.originalUrl.includes('..') || req.path.includes('..')) {
+    return res.status(400).json({ error: 'Invalid path traversal detected.' });
+  }
+
+  // Local handbook is public
+  if (parts.includes('handbookPdf')) {
+    return next();
+  }
+
+  // Extract owner student ID from file path
+  // Local upload path format: /admissions/:studentUserId/:documentType/:filename
+  const admissionsIdx = parts.indexOf('admissions');
+  if (admissionsIdx !== -1 && parts[admissionsIdx + 1]) {
+    const studentUserId = parts[admissionsIdx + 1];
+
+    // Enforce student tenant isolation: students can only access their own documents
+    if (req.user!.role === 'STUDENT' && req.user!.id !== studentUserId) {
+      return res.status(403).json({ error: 'Access Denied. You do not own this document.' });
+    }
+  }
+
+  next();
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/api', (_req: Request, res: Response) => {
@@ -136,6 +165,12 @@ v1Router.get('/address/districts', (_req: Request, res: Response) => {
 
 // Student admission endpoints
 v1Router.use('/student', studentRouter);
+
+// Provisional Admission endpoints
+v1Router.use('/provisional', provisionalRoutes);
+
+// Promotion endpoints
+v1Router.use('/admin/promotion', promotionRoutes);
 
 // Application endpoints
 v1Router.use('/application', applicationRouter);

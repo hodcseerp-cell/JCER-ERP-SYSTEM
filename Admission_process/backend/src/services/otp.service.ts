@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { Op } from 'sequelize';
 import Otp, { OtpPurpose } from '../models/Otp';
 import logger from '../utils/logger.util';
@@ -77,8 +78,8 @@ class OtpService {
       }
     );
 
-    // 4. Generate random 6-digit numeric OTP
-    const plainOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    // 4. Generate random 6-digit numeric OTP using cryptographically secure PRNG
+    const plainOtp = crypto.randomInt(100000, 999999).toString();
 
     // 5. Hash OTP with bcrypt
     const salt = await bcrypt.genSalt(10);

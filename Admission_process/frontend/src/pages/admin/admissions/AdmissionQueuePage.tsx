@@ -10,11 +10,22 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import API from '../../../services/api';
 
-const getPhotoUrl = (path: string | null | undefined) => {
+const getPhotoUrl = (path: string | null | undefined, appId?: string) => {
   if (!path) return '';
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
+  
+  if (!path.startsWith('/uploads') && !path.startsWith('uploads/') && appId) {
+    const base = API.defaults.baseURL || '/api';
+    const token = localStorage.getItem('token');
+    const url = `${base}/admin/admissions/${appId}/documents/photo`;
+    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  }
+
   const base = API.defaults.baseURL || '/api';
-  return `${base.replace('/api', '')}${path}`;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${base.replace(/\/api\/?$/, '')}${cleanPath}`;
+  const token = localStorage.getItem('token');
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
 interface AdmissionQueuePageProps {
@@ -240,6 +251,8 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
         return <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><FileText size={10}/> In Progress</span>;
       case 'APPROVED':
         return <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><ShieldCheck size={10}/> Verified</span>;
+      case 'PRINCIPAL_APPROVED':
+        return <span className="px-2 py-1 bg-violet-100 dark:bg-violet-900/20 text-violet-750 dark:text-violet-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><UserCheck size={10}/> Principal Approved</span>;
       case 'ENROLLED':
         return <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><CheckCircle2 size={10}/> Approved</span>;
       case 'REJECTED':
@@ -524,7 +537,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             {app.studentdocuments?.photoUrl || app.user?.profileImage ? (
-                              <img src={getPhotoUrl(app.studentdocuments?.photoUrl || app.user?.profileImage)} alt="profile" className="w-7 h-7 rounded-full object-cover border border-neutral-200 dark:border-neutral-700 bg-neutral-100" />
+                               <img src={getPhotoUrl(app.studentdocuments?.photoUrl || app.user?.profileImage, app.id)} alt="profile" className="w-7 h-7 rounded-full object-cover border border-neutral-200 dark:border-neutral-700 bg-neutral-100" />
                             ) : (
                               <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-black text-[10px] uppercase">
                                 {app.user?.firstName?.[0] || ''}{app.user?.lastName?.[0] || ''}

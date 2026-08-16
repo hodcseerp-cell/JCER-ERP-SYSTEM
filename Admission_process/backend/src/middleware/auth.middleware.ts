@@ -21,12 +21,17 @@ export const authMiddleware = async (
   next: NextFunction
 ): Promise<any> => {
   try {
+    let token = '';
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Access denied. No token provided.');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query && typeof req.query.token === 'string') {
+      token = req.query.token;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      throw new UnauthorizedError('Access denied. No token provided.');
+    }
     
     // 1. Verify token signature and expiry
     let decoded: any;

@@ -292,16 +292,29 @@ export const verifyRegistrationOtp = async (req: Request, res: Response, next: N
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    const { firstName, lastName, email, password, phone } = req.body;
+    const { firstName, lastName, email, password, phone, registrationType } = req.body;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
     }
 
+    let finalRegType: 'FRESH' | 'LATERAL_ENTRY' = 'FRESH';
+    if (registrationType === 'LATERAL_ENTRY') {
+      finalRegType = 'LATERAL_ENTRY';
+    }
+
     // Check if admissions are open
     const config = await SystemConfiguration.findOne();
-    if (config && config.admissionOpen === false) {
-      return res.status(403).json({ error: 'Admissions are currently closed. Please contact the college office for further information.' });
+    if (config) {
+      if (finalRegType === 'FRESH' && config.freshAdmissionOpen === false) {
+        return res.status(403).json({ error: 'Fresh admissions are currently closed.' });
+      }
+      if (finalRegType === 'LATERAL_ENTRY' && config.lateralEntryOpen === false) {
+        return res.status(403).json({ error: 'Lateral entry admissions are currently closed.' });
+      }
+      if (config.admissionOpen === false) {
+        return res.status(403).json({ error: 'Admissions are currently closed. Please contact the college office for further information.' });
+      }
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -339,6 +352,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       phone: phone || null,
       role: 'STUDENT',
       status: 'ACTIVE',
+      registrationType: finalRegType,
     });
 
     // Generate tokens and return login payload

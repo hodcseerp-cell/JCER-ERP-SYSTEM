@@ -10,9 +10,22 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    const { login } = useAuth();
+    const { login, user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+
+    const searchParams = new URLSearchParams(location.search);
+    const isProvisional = searchParams.get('type') === 'provisional';
+
+    useEffect(() => {
+        if (user) {
+            if (isProvisional) {
+                navigate('/admission/provisional', { replace: true });
+            } else {
+                navigate('/admission/dashboard', { replace: true });
+            }
+        }
+    }, [user, isProvisional, navigate]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -40,7 +53,11 @@ const Login = () => {
                 const { token, user } = response.data.data;
                 toast.success('Login successful!');
                 login(token, user);
-                navigate('/admission/dashboard');
+                if (isProvisional) {
+                    navigate('/admission/provisional');
+                } else {
+                    navigate('/admission/dashboard');
+                }
             }
         } catch (error) {
             toast.error(error.response?.data?.error || error.response?.data?.message || 'Login failed. Please try again.');
@@ -52,8 +69,19 @@ const Login = () => {
     return (
         <div className="w-full animate-fade-in max-w-sm mx-auto lg:mx-0">
             <div className="mb-6 sm:mb-8 lg:mb-10 text-center lg:text-left">
-                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Student Login</h2>
-                <p className="text-sm sm:text-base text-slate-500">Please enter your credentials to access the system.</p>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">
+                    {isProvisional ? 'Provisional Admission Login' : 'Student Login'}
+                </h2>
+                <p className="text-sm sm:text-base text-slate-500">
+                    {isProvisional 
+                        ? 'Log in with your existing credentials to continue with Provisional Admission.' 
+                        : 'Please enter your credentials to access the system.'}
+                </p>
+                {isProvisional && (
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs font-semibold text-left">
+                        ℹ️ This portal is only for existing JCER students seeking promotion to 3rd, 5th, or 7th semester.
+                    </div>
+                )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">

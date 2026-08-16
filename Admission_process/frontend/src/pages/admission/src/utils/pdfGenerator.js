@@ -35,10 +35,9 @@ export const downloadAdmissionPDF = async (api, toast, applicationId = null) => 
             const cleanPath = path.startsWith('/') ? path : `/${path}`;
             const base = api.defaults.baseURL || '/api';
             const host = base.replace(/\/api\/?$/, '');
-            if (host.startsWith('/')) {
-                return cleanPath;
-            }
-            return `${host}${cleanPath}`;
+            const finalUrl = host.startsWith('/') ? cleanPath : `${host}${cleanPath}`;
+            const token = localStorage.getItem('token');
+            return token ? `${finalUrl}?token=${encodeURIComponent(token)}` : finalUrl;
         };
         const photoUrl = docs.photoUrl ? getDocUrl(docs.photoUrl) : '';
         const signatureUrl = docs.signatureUrl ? getDocUrl(docs.signatureUrl) : '';

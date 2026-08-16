@@ -390,22 +390,11 @@ export const LandingPage: React.FC = () => {
               {config.admissionOpen ? (
                 <>
                   <button
-                    onClick={() => navigate('/admission/register')}
+                    onClick={() => navigate('/admission/type')}
                     className="btn-apply-gradient px-10 py-4 text-white font-extrabold text-sm rounded-xl shadow-lg tracking-wide cursor-pointer w-full sm:w-auto min-w-[220px] active:translate-y-0"
                   >
                     Apply Now
                   </button>
-
-                  <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: isDark ? '#94A3B8' : '#64748B' }}>
-                    Already Applied?
-                    <button
-                      onClick={() => navigate('/admission/login')}
-                      className="flex items-center font-bold hover:underline cursor-pointer bg-transparent border-none p-0"
-                      style={{ color: isDark ? '#60A5FA' : '#2563EB' }}
-                    >
-                      Login <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
                 </>
               ) : (
                 <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl text-center max-w-md w-full">

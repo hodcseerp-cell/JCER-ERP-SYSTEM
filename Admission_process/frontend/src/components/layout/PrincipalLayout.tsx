@@ -92,7 +92,7 @@ export const PrincipalLayout: React.FC = () => {
     const fetchCount = () => {
       // Principal reviews fee-verified admissions awaiting final enrollment sign-off
       admissionService.getStats().then(stats => {
-        setPendingCount(stats.feeVerified || 0);
+        setPendingCount(stats.approved || 0);
       }).catch(err => console.error('Error loading Principal stats:', err));
     };
 
@@ -306,8 +306,18 @@ export const PrincipalLayout: React.FC = () => {
         </header>
 
         {/* ── SUB PAGE ROUTER CONTENT ── */}
-        <main className="flex-1">
-          <Outlet />
+        <main className="flex-1 relative">
+          <div 
+            className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.015] bg-no-repeat bg-center bg-fixed"
+            style={{ 
+              backgroundImage: 'url(/logo.png)', 
+              backgroundSize: '450px',
+              zIndex: 0
+            }}
+          />
+          <div className="relative z-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

@@ -141,7 +141,7 @@ export const getAdmissionsStats = async (
   try {
     const [pending, enrolled, rejected, total] = await Promise.all([
       Admission.count({ where: { applicationStatus: 'APPROVED' } }),
-      Admission.count({ where: { applicationStatus: 'ENROLLED' } }),
+      Admission.count({ where: { applicationStatus: { [Op.in]: ['PRINCIPAL_APPROVED', 'ENROLLED'] } } }),
       Admission.count({ where: { applicationStatus: 'REJECTED' } }),
       Admission.count({ where: { applicationStatus: { [Op.ne]: 'DRAFT' } } }),
     ]);
@@ -167,7 +167,7 @@ export const listAdmissions = async (
     const where: any = {};
     if (status && status !== 'ALL') {
       if (status === 'ENROLLED') {
-        where.applicationStatus = 'ENROLLED';
+        where.applicationStatus = { [Op.in]: ['PRINCIPAL_APPROVED', 'ENROLLED'] };
       } else if (status === 'PRINCIPAL_APPROVED') {
         where.applicationStatus = 'PRINCIPAL_APPROVED';
       } else if (status === 'REJECTED') {
@@ -259,7 +259,7 @@ export const getPendingAdmissions = async (
 
     const list = await Admission.findAll({
       where: { 
-        applicationStatus: 'APPROVED'
+        applicationStatus: { [Op.in]: ['FEE_VERIFIED', 'APPROVED'] }
       },
       include: [
         { model: User, as: 'user', attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'profileImage'] },
@@ -311,7 +311,7 @@ export const decideAdmission = async (
       return res.status(400).json({ error: 'Invalid decision type.' });
     }
 
-    const targetStatus = decision === 'APPROVED' ? 'PRINCIPAL_APPROVED' : 'REJECTED';
+    const targetStatus = decision === 'APPROVED' ? 'ENROLLED' : 'REJECTED';
 
     const enrollmentNumber = await admissionService.updateStatus(
       id,
@@ -355,7 +355,7 @@ export const decideAdmission = async (
     // Audit Log recording Principal Name, Date & Time, Selected Reason, Optional Remarks
     await AuditLog.create({
       userId: req.user!.id,
-      action: `PRINCIPAL_${targetStatus === 'PRINCIPAL_APPROVED' ? 'APPROVED' : 'REJECTED'}_ADMISSION`,
+      action: `PRINCIPAL_${targetStatus === 'ENROLLED' ? 'APPROVED' : 'REJECTED'}_ADMISSION`,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
       details: {
@@ -371,7 +371,7 @@ export const decideAdmission = async (
 
     return res.json({
       success: true,
-      message: `Admission application has been ${targetStatus === 'PRINCIPAL_APPROVED' ? 'approved' : 'returned for correction'} successfully.`,
+      message: `Admission application has been ${targetStatus === 'ENROLLED' ? 'approved' : 'returned for correction'} successfully.`,
       data: {
         enrollmentNumber,
         credentialsSent: true,

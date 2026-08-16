@@ -5,7 +5,7 @@ import { loginStart, loginSuccess, loginFailure } from '../../store/authSlice';
 import authService from '../../services/auth.service';
 import { RootState } from '../../store';
 import Toast from '../../components/common/Toast';
-import { Lock, Mail, ArrowRight, Loader2, X } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Loader2, X, ArrowLeft } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +31,7 @@ export const LoginPage: React.FC = () => {
     }
   }, [location, navigate]);
 
-  const from = (location.state as any)?.from?.pathname || '/student/dashboard';
+  const from = (location.state as any)?.from?.pathname || '/admission/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +47,7 @@ export const LoginPage: React.FC = () => {
       dispatch(loginSuccess({ user, token }));
       
       const dashboardRoutes: Record<string, string> = {
-        STUDENT: '/student/dashboard',
+        STUDENT: '/admission/dashboard',
         TEACHER: '/teacher/dashboard',
         HOD: '/hod/dashboard',
         ADMIN: '/admin/dashboard',
@@ -110,6 +110,15 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 relative font-sans text-neutral-900 selection:bg-indigo-500/30 overflow-x-hidden">
       
+      {/* Back to Home Button at top left */}
+      <button
+        onClick={() => navigate('/')}
+        className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white font-medium text-sm transition-all duration-200 shadow-lg cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Home
+      </button>
+
       {/* Background Image Container with slight blur */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 blur-[3px] scale-105" 

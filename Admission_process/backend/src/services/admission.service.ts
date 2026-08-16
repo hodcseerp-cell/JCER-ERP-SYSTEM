@@ -393,11 +393,16 @@ class AdmissionService {
     if (!admission) {
       const config = await SystemConfiguration.findOne();
       const currentAcademicYear = config?.admissionCycle || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+      const user = await User.findByPk(userId);
+      const isLateral = user?.registrationType === 'LATERAL_ENTRY';
+
       admission = await Admission.create({
         userId,
         applicationNumber: null,
         academicYear: currentAcademicYear,
         applicationStatus: 'DRAFT',
+        applicationType: isLateral ? 'LATERAL_ENTRY' : 'FRESH',
+        entrySemester: isLateral ? 3 : 1,
       });
     } else if (!admission.academicYear) {
       const config = await SystemConfiguration.findOne();
@@ -624,12 +629,22 @@ class AdmissionService {
   async saveStep2(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'personal');
-    const { id, admissionId, ...cleanPayload } = payload;
+    
+    const allowedFields = Object.keys(AdmissionPersonalDetail.rawAttributes).filter(
+      (key) => !['id', 'admissionId', 'createdAt', 'updatedAt'].includes(key)
+    );
+    const filteredPayload: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (payload[key] !== undefined) {
+        filteredPayload[key] = payload[key];
+      }
+    }
+
     const existing = await AdmissionPersonalDetail.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(cleanPayload);
+      await existing.update(filteredPayload);
     } else {
-      await AdmissionPersonalDetail.create({ admissionId: admission.id, ...cleanPayload });
+      await AdmissionPersonalDetail.create({ admissionId: admission.id, ...filteredPayload });
     }
     await this.markSectionCorrected(admission, 'personal');
     await this.invalidateCache(userId);
@@ -641,12 +656,22 @@ class AdmissionService {
   async saveStep3(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'parent');
-    const { id, admissionId, ...cleanPayload } = payload;
+    
+    const allowedFields = Object.keys(AdmissionParentDetail.rawAttributes).filter(
+      (key) => !['id', 'admissionId', 'createdAt', 'updatedAt'].includes(key)
+    );
+    const filteredPayload: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (payload[key] !== undefined) {
+        filteredPayload[key] = payload[key];
+      }
+    }
+
     const existing = await AdmissionParentDetail.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(cleanPayload);
+      await existing.update(filteredPayload);
     } else {
-      await AdmissionParentDetail.create({ admissionId: admission.id, ...cleanPayload });
+      await AdmissionParentDetail.create({ admissionId: admission.id, ...filteredPayload });
     }
     await this.markSectionCorrected(admission, 'parent');
     await this.invalidateCache(userId);
@@ -658,12 +683,22 @@ class AdmissionService {
   async saveStep4(userId: string, payload: Record<string, any>): Promise<string> {
     const admission = await this.getOrCreate(userId);
     this.checkEditable(admission, 'address');
-    const { id, admissionId, ...cleanPayload } = payload;
+    
+    const allowedFields = Object.keys(AdmissionAddress.rawAttributes).filter(
+      (key) => !['id', 'admissionId', 'createdAt', 'updatedAt'].includes(key)
+    );
+    const filteredPayload: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (payload[key] !== undefined) {
+        filteredPayload[key] = payload[key];
+      }
+    }
+
     const existing = await AdmissionAddress.findOne({ where: { admissionId: admission.id } });
     if (existing) {
-      await existing.update(cleanPayload);
+      await existing.update(filteredPayload);
     } else {
-      await AdmissionAddress.create({ admissionId: admission.id, ...cleanPayload });
+      await AdmissionAddress.create({ admissionId: admission.id, ...filteredPayload });
     }
     await this.markSectionCorrected(admission, 'address');
     await this.invalidateCache(userId);
@@ -893,8 +928,8 @@ class AdmissionService {
         where.rejectionReason = null;
         where.rejectionReasonCode = null;
       } else if (status === 'APPROVED') {
-        // Verified tab: verified by Admin, but not yet signed off by Principal
-        where.applicationStatus = 'APPROVED';
+        // Verified tab: verified by Admin, or signed off by Principal
+        where.applicationStatus = { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED'] };
       } else if (status === 'ENROLLED') {
         // Enrolled tab: approved by Principal
         where.applicationStatus = 'ENROLLED';
@@ -971,7 +1006,7 @@ class AdmissionService {
         required: false,
         attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'profileImage'],
         include: [
-          { model: Student, as: 'student', attributes: ['id', 'enrollmentNumber', 'rollNumber'], required: false }
+          { model: Student, as: 'student', attributes: ['id', 'enrollmentNumber', 'rollNumber', 'semester'], required: false }
         ]
       },
       { model: Department, as: 'branch', required: false },
@@ -1082,15 +1117,15 @@ class AdmissionService {
         'UNDER_REVIEW': ['CORRECTION_REQUIRED', 'APPROVED', 'REJECTED'],
         'CORRECTION_REQUIRED': ['RESUBMITTED'],
         'RESUBMITTED': ['UNDER_REVIEW', 'APPROVED', 'REJECTED', 'CORRECTION_REQUIRED'],
-        'APPROVED': ['PRINCIPAL_APPROVED', 'REJECTED', 'CORRECTION_REQUIRED'],
-        'PRINCIPAL_APPROVED': ['ENROLLED', 'REJECTED', 'CORRECTION_REQUIRED'],
-        'ENROLLED': [],
-        'REJECTED': ['REJECTED'],
-        // Legacy rescue: apps stuck in old fee flow can be moved to APPROVED or REJECTED
-        'FEE_RECEIPT_UPLOADED': ['APPROVED', 'REJECTED'],
-        'FEE_VERIFIED': ['APPROVED', 'ENROLLED', 'REJECTED'],
-        'CANCELLATION_REQUESTED': ['CANCELLED', 'APPROVED'],
+        'APPROVED': ['PRINCIPAL_APPROVED', 'ENROLLED', 'REJECTED', 'CORRECTION_REQUIRED', 'CANCELLATION_REQUESTED'],
+        'PRINCIPAL_APPROVED': ['ENROLLED', 'REJECTED', 'CORRECTION_REQUIRED', 'CANCELLATION_REQUESTED'],
+        'ENROLLED': ['CANCELLATION_REQUESTED'],
+        'CANCELLATION_REQUESTED': ['CANCELLED', 'APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'],
         'CANCELLED': [],
+        'REJECTED': [],
+        // Legacy compatibility routes:
+        'FEE_RECEIPT_UPLOADED': ['APPROVED', 'REJECTED', 'UNDER_REVIEW'],
+        'FEE_VERIFIED': ['PRINCIPAL_APPROVED', 'APPROVED', 'REJECTED'],
       };
 
       const allowedNext = allowedTransitions[currentStatus] || [];
@@ -1187,6 +1222,20 @@ class AdmissionService {
           throw new Error('Only the Principal or SuperAdmin can approve applications.');
         }
 
+        // ENFORCE CHECKLIST (Admin Document & Eligibility Validation)
+        if (!admission.documentsVerified) {
+          throw new Error('Mandatory documents must be verified before Principal approval.');
+        }
+        if (!admission.feesVerified) {
+          throw new Error('College fee payment verification must be completed before Principal approval.');
+        }
+        if (!admission.eligibilityVerified) {
+          throw new Error('Applicant eligibility verification must be completed before Principal approval.');
+        }
+        if (admission.applicationStatus === 'CORRECTION_REQUIRED') {
+          throw new Error('All pending corrections must be resolved before Principal approval.');
+        }
+
         await admission.update({
           applicationStatus: 'PRINCIPAL_APPROVED',
           principalReviewedBy: adminUserId,
@@ -1218,38 +1267,37 @@ class AdmissionService {
         const parent = await AdmissionParentDetail.findOne({ where: { admissionId: id }, transaction });
         const addr = await AdmissionAddress.findOne({ where: { admissionId: id }, transaction });
 
-        if (!admission.usn) {
-          throw new Error('A verified USN must be assigned to the application before finalizing enrollment.');
-        }
-
-        const enrollmentNumber = admission.usn;
+        const enrollmentNumber = (admission.usn || admission.applicationNumber) as string;
         let rollNumber = '';
         let batchYear = new Date().getFullYear();
 
-        const match = enrollmentNumber.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/);
-        if (match) {
-          batchYear = parseInt('20' + match[1]);
-          const usnDeptCode = match[2];
-          const usnSeq = match[3];
-          rollNumber = `${batchYear}${usnDeptCode}${usnSeq}`;
-        } else {
-          let branchCode = 'CS';
-          if (admission.branchId) {
-            const branch = await Department.findByPk(admission.branchId, { transaction });
-            if (branch && branch.code) {
-              branchCode = branch.code.substring(0, 2).toUpperCase();
+        if (admission.usn) {
+          const match = admission.usn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/);
+          if (match) {
+            batchYear = parseInt('20' + match[1]);
+            const usnDeptCode = match[2];
+            const usnSeq = match[3];
+            rollNumber = `${batchYear}${usnDeptCode}${usnSeq}`;
+          } else {
+            let branchCode = 'CS';
+            if (admission.branchId) {
+              const branch = await Department.findByPk(admission.branchId, { transaction });
+              if (branch && branch.code) {
+                branchCode = branch.code.substring(0, 2).toUpperCase();
+              }
             }
+            const seqStr = String(admission.usn.slice(-3));
+            rollNumber = `${batchYear}${branchCode}${seqStr}`;
           }
-          const seqStr = String(enrollmentNumber.slice(-3));
-          rollNumber = `${batchYear}${branchCode}${seqStr}`;
-        }
-        generatedUsn = enrollmentNumber;
 
-        // Ensure registry is marked as claimed
-        await UsnRegistry.update(
-          { status: 'CLAIMED' },
-          { where: { usn: enrollmentNumber }, transaction }
-        );
+          // Ensure registry is marked as claimed
+          await UsnRegistry.update(
+            { status: 'CLAIMED' },
+            { where: { usn: admission.usn }, transaction }
+          );
+        }
+
+        generatedUsn = enrollmentNumber;
 
         let dobDate: Date | null = null;
         if (personal?.dateOfBirth) {
@@ -1269,12 +1317,12 @@ class AdmissionService {
         if (!existingStudent) {
           await Student.create({
             userId: admission.userId,
-            usn: enrollmentNumber,
+            usn: admission.usn || null,
             enrollmentNumber,
             rollNumber,
             batchYear,
             departmentId: admission.branchId!,
-            semester: admission.admissionType === 'DCET' ? 3 : 1,
+            semester: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 3 : 1,
             dateOfBirth: dobDate,
             address: addr ? [addr.currentAddressLine1, addr.currentCity, addr.currentState, addr.currentPincode].filter(Boolean).join(', ') : '',
             fatherName: parent?.fatherName || '',
@@ -1282,6 +1330,9 @@ class AdmissionService {
             parentPhone: parent?.fatherPhone || '',
             parentEmail: parent?.fatherEmail || '',
             admissionStatus: 'APPROVED',
+            admissionType: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 'LATERAL' : 'FRESH',
+            initialSemester: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 3 : 1,
+            currentAcademicYear: admission.academicYear || '2026-2027',
           }, { transaction });
         } else {
           generatedUsn = existingStudent.enrollmentNumber;
@@ -1350,10 +1401,14 @@ class AdmissionService {
       const admission = await Admission.findByPk(id, { transaction, lock: true });
       if (!admission) throw new Error('Application not found');
       
+      const documentsVerified = payload.documentsVerified ?? admission.documentsVerified;
+      const eligibilityVerified = payload.eligibilityVerified ?? admission.eligibilityVerified;
+      const feesVerified = payload.feesVerified ?? (documentsVerified ? true : admission.feesVerified);
+
       await admission.update({
-        documentsVerified: payload.documentsVerified ?? admission.documentsVerified,
-        feesVerified: payload.feesVerified ?? admission.feesVerified,
-        eligibilityVerified: payload.eligibilityVerified ?? admission.eligibilityVerified,
+        documentsVerified,
+        feesVerified,
+        eligibilityVerified,
         verificationRemarks: payload.verificationRemarks !== undefined ? payload.verificationRemarks : admission.verificationRemarks,
         verifiedByAdminId: adminUserId,
         verifiedAt: new Date(),
@@ -1521,7 +1576,7 @@ class AdmissionService {
           applicationStatus: 'UNDER_REVIEW'
         }
       }),
-      Admission.count({ where: { applicationStatus: 'APPROVED' } }),
+      Admission.count({ where: { applicationStatus: { [Op.in]: ['APPROVED', 'PRINCIPAL_APPROVED'] } } }),
       Promise.resolve(0), // FEE_VERIFIED count
       Admission.count({ where: { applicationStatus: 'REJECTED' } }),
       Admission.count({ where: { applicationStatus: 'ENROLLED' } }),

@@ -24,7 +24,7 @@ export const corsConfig = cors({
       return callback(null, true);
     }
 
-    const isExplicitlyAllowed = allAllowedOrigins.includes(origin) || allAllowedOrigins.includes('*');
+    const isExplicitlyAllowed = allAllowedOrigins.includes(origin);
     const isCloudflarePages = origin.endsWith('.pages.dev') || origin.includes('pages.dev');
     const isTunnel =
       origin.endsWith('.trycloudflare.com') ||
@@ -33,12 +33,15 @@ export const corsConfig = cors({
       origin.endsWith('.ngrok.io');
     const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
 
-    if (isExplicitlyAllowed || isCloudflarePages || isTunnel || isLocalhost) {
+    if (isExplicitlyAllowed || isCloudflarePages) {
       return callback(null, true);
     }
 
-    // Default fallback to allow origin dynamically so browser receives proper CORS headers
-    return callback(null, true);
+    if (process.env.NODE_ENV !== 'production' && (isTunnel || isLocalhost)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

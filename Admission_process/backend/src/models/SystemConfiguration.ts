@@ -13,6 +13,12 @@ class SystemConfiguration extends Model {
   public handbookUrl!: string | null;
   public version!: string;
   public features!: any; // JSON object for feature flags
+  public freshAdmissionOpen!: boolean;
+  public lateralEntryOpen!: boolean;
+  public provisionalAdmissionOpen!: boolean;
+  public provisionalAdmission3Open!: boolean;
+  public provisionalAdmission5Open!: boolean;
+  public provisionalAdmission7Open!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -68,6 +74,36 @@ SystemConfiguration.init(
       type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: '1.0.0',
+    },
+    freshAdmissionOpen: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    lateralEntryOpen: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    provisionalAdmissionOpen: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    provisionalAdmission3Open: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    provisionalAdmission5Open: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    provisionalAdmission7Open: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     features: {
       type: DataTypes.JSON,

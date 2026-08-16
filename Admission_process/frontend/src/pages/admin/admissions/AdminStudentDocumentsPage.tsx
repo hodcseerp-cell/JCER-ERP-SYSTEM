@@ -90,49 +90,25 @@ export const AdminStudentDocumentsPage: React.FC = () => {
     }
   };
 
-  const handleAction = async (field: string, label: string, actionType: 'view' | 'download') => {
-    setFetchingDocField(field);
-    try {
-      const res = await API.get(`/admin/admissions/${applicationId}/documents/${field}`);
-      const relativeUrl = res.data?.url || '';
-      if (!relativeUrl) {
-        toast.error('Document URL not found.');
-        return;
-      }
+  const handleAction = (field: string, label: string, actionType: 'view' | 'download', rawUrl?: string | null) => {
+    const token = localStorage.getItem('token') || '';
+    const base = API.defaults.baseURL || '/api';
+    const cleanPath = `/admin/admissions/${applicationId}/documents/${field}`;
+    const url = `${base}${cleanPath}`;
+    const fullUrl = token ? `${url}?token=${encodeURIComponent(token)}` : url;
+    const isPdfFile = !!(rawUrl?.toLowerCase().includes('.pdf'));
 
-      const isPdfFile = relativeUrl.toLowerCase().endsWith('.pdf');
-      const baseHost = getBaseHostURL();
-      const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : baseHost + relativeUrl;
-
-      if (actionType === 'view') {
-        setViewingDoc({ label, url: fullUrl, isPdf: isPdfFile });
-      } else {
-        if (fullUrl.startsWith('http')) {
-          const fetchRes = await fetch(fullUrl);
-          const blob = await fetchRes.blob();
-          const blobUrl = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.setAttribute('download', `${label.replace(/\s+/g, '_')}${isPdfFile ? '.pdf' : '.jpg'}`);
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.URL.revokeObjectURL(blobUrl);
-        } else {
-          const link = document.createElement('a');
-          link.href = fullUrl;
-          link.setAttribute('download', `${label.replace(/\s+/g, '_')}${isPdfFile ? '.pdf' : '.jpg'}`);
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        }
-        toast.success(`${label} download started.`);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to access document.');
-    } finally {
-      setFetchingDocField(null);
+    if (actionType === 'view') {
+      setViewingDoc({ label, url: fullUrl, isPdf: isPdfFile });
+    } else {
+      const link = document.createElement('a');
+      link.href = fullUrl;
+      link.setAttribute('download', `${label.replace(/\s+/g, '_')}${isPdfFile ? '.pdf' : '.jpg'}`);
+      link.setAttribute('target', '_blank');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success(`${label} download started.`);
     }
   };
 
@@ -265,7 +241,7 @@ export const AdminStudentDocumentsPage: React.FC = () => {
                       {hasUrl ? (
                         <div className="inline-flex items-center gap-2">
                           <button
-                            onClick={() => handleAction(doc.field, doc.label, 'view')}
+                            onClick={() => handleAction(doc.field, doc.label, 'view', rawVal)}
                             disabled={fetchingDocField === doc.field}
                             className="p-2 text-neutral-600 dark:text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-100/50 disabled:opacity-40"
                             title="View Document"
@@ -273,7 +249,7 @@ export const AdminStudentDocumentsPage: React.FC = () => {
                             {fetchingDocField === doc.field ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                           </button>
                           <button
-                            onClick={() => handleAction(doc.field, doc.label, 'download')}
+                            onClick={() => handleAction(doc.field, doc.label, 'download', rawVal)}
                             disabled={fetchingDocField === doc.field}
                             className="p-2 text-neutral-600 dark:text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-xl transition-all cursor-pointer border border-transparent hover:border-indigo-100/50 disabled:opacity-40"
                             title="Download Document"

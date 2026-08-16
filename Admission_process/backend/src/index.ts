@@ -286,11 +286,126 @@ async function startServer() {
         console.warn('Pre-cast migration for admissions correction workflow columns skipped:', e.message);
       }
 
+      // Provisional Admission and system settings column alterations
+      try {
+        await sequelize.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'freshAdmissionOpen'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "freshAdmissionOpen" BOOLEAN DEFAULT true;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'lateralEntryOpen'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "lateralEntryOpen" BOOLEAN DEFAULT true;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmissionOpen'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmissionOpen" BOOLEAN DEFAULT true;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission3Open'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission3Open" BOOLEAN DEFAULT false;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission5Open'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission5Open" BOOLEAN DEFAULT false;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission7Open'
+            ) THEN
+              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission7Open" BOOLEAN DEFAULT false;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'users' AND column_name = 'registrationType'
+            ) THEN
+              ALTER TABLE "users" ADD COLUMN "registrationType" VARCHAR(20) DEFAULT 'FRESH';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admissions' AND column_name = 'applicationType'
+            ) THEN
+              ALTER TABLE "admissions" ADD COLUMN "applicationType" VARCHAR(20) DEFAULT 'FRESH';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admissions' AND column_name = 'entrySemester'
+            ) THEN
+              ALTER TABLE "admissions" ADD COLUMN "entrySemester" INTEGER DEFAULT 1;
+            END IF;
+          END
+          $$;
+        `);
+      } catch (err: any) {
+        console.warn('Provisional admission database alterations skipped:', err.message);
+      }
+
+      // Academic promotion columns on students table
+      try {
+        await sequelize.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'students' AND column_name = 'admissionType'
+            ) THEN
+              ALTER TABLE "students" ADD COLUMN "admissionType" VARCHAR(20) DEFAULT 'FRESH';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'students' AND column_name = 'initialSemester'
+            ) THEN
+              ALTER TABLE "students" ADD COLUMN "initialSemester" INTEGER DEFAULT 1;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'students' AND column_name = 'currentAcademicYear'
+            ) THEN
+              ALTER TABLE "students" ADD COLUMN "currentAcademicYear" VARCHAR(30) DEFAULT '2026-2027';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'students' AND column_name = 'lastPromotedAt'
+            ) THEN
+              ALTER TABLE "students" ADD COLUMN "lastPromotedAt" TIMESTAMP WITH TIME ZONE;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'students' AND column_name = 'lastPromotedBy'
+            ) THEN
+              ALTER TABLE "students" ADD COLUMN "lastPromotedBy" UUID;
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints
+              WHERE table_name = 'students' AND constraint_name = 'students_lastPromotedBy_fkey'
+            ) THEN
+              ALTER TABLE "students" 
+              ADD CONSTRAINT "students_lastPromotedBy_fkey" 
+              FOREIGN KEY ("lastPromotedBy") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+            END IF;
+          END
+          $$;
+        `);
+      } catch (err: any) {
+        console.warn('Academic promotion database alterations skipped:', err.message);
+      }
+
       console.log('Syncing database schema (development alter)...');
       await sequelize.sync({ alter: true });
     } else {
-      console.log('Syncing database schema...');
-      await sequelize.sync();
+      console.log('✓ Production mode: Skipping database schema sync.');
     }
     
     // Alter PostgreSQL enum values for Principal actions if they are missing
@@ -343,6 +458,18 @@ async function startServer() {
       console.log('Department migration check skipped/failed:', e.message);
     }
 
+    // Automatically update Civil Engineering code from CE to CV if it exists
+    try {
+      await sequelize.query(`
+        UPDATE "departments" 
+        SET "code" = 'CV' 
+        WHERE "code" = 'CE' OR "name" = 'Civil Engineering'
+      `);
+      console.log('✓ Civil Engineering department code updated from CE to CV in database.');
+    } catch (e: any) {
+      console.log('Civil Engineering department migration check skipped/failed:', e.message);
+    }
+
     // Pre-cast: ensure twelfthStream defaults to 'SCIENCE' if null/empty
     try {
       await sequelize.query(`
@@ -377,6 +504,18 @@ async function startServer() {
       }
     }
     
+    // Force load the new Provisional Admission models
+    try {
+      await import('./models/ProvisionalAdmission');
+      await import('./models/ProvisionalAdmissionSemesterRecord');
+      await import('./models/ProvisionalAdmissionDocument');
+      await import('./models/PromotionBatch');
+      await import('./models/StudentPromotionHistory');
+      console.log('✓ Provisional & Promotion models loaded.');
+    } catch (err: any) {
+      console.warn('Failed to load Provisional & Promotion models:', err.message);
+    }
+
     // Auto-seed database if no Admin accounts exist
     try {
       const { default: User } = await import('./models/User');

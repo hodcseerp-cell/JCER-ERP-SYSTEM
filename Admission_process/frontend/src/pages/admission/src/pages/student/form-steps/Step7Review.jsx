@@ -93,8 +93,11 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
     const getPhotoUrl = (path) => {
         if (!path) return '';
         if (path.startsWith('http')) return path;
+        
         const base = api.defaults.baseURL || '/api';
-        return `${base.replace('/api', '')}${path}`;
+        const url = `${base}/student/documents/photo`;
+        const token = localStorage.getItem('token');
+        return token ? `${url}?token=${encodeURIComponent(token)}` : url;
     };
 
     if (loading) {

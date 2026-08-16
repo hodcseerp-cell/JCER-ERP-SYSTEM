@@ -132,14 +132,14 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                 currentTaluk: data.Taluk || '',
                 currentDistrictId: data.DistrictId || null,
                 currentPincode: data.Pincode || data.currentPincode || '',
-                currentState: data.currentState || 'KARNATAKA',
+                currentState: data.currentState || '',
                 sameAsCurrent: sameAsCurrent,
                 permanentAddressLine1: sameAsCurrent ? (data.Address || data.currentAddressLine1 || '') : (data.permanentAddress || data.permanentAddressLine1 || ''),
                 permanentCity: sameAsCurrent ? (data.City || data.currentCity || '') : (data.permanentCity || ''),
                 permanentTaluk: sameAsCurrent ? (data.Taluk || '') : (data.permanentTaluk || ''),
                 permanentDistrictId: sameAsCurrent ? (data.DistrictId || null) : (data.permanentDistrictId || null),
                 permanentPincode: sameAsCurrent ? (data.Pincode || data.currentPincode || '') : (data.permanentPincode || ''),
-                permanentState: sameAsCurrent ? (data.currentState || 'KARNATAKA') : (data.permanentState || 'KARNATAKA')
+                permanentState: sameAsCurrent ? (data.currentState || '') : (data.permanentState || '')
             };
 
             const res = await api.put('/student/address', payload);
@@ -258,7 +258,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
 
                     <div className="space-y-1.5 p-3 rounded-xl">
                         <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                        <input readOnly type="text" name="currentState" className="input-premium h-11 bg-slate-50 border-slate-200 cursor-not-allowed uppercase" value={data.currentState || 'KARNATAKA'} />
+                        <input required type="text" name="currentState" className="input-premium h-11 uppercase" value={data.currentState || ''} onChange={handleChange} placeholder="Enter state" />
                     </div>
                 </div>
             </div>
@@ -341,7 +341,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
 
                         <div className="space-y-1.5 p-3 rounded-xl">
                             <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                            <input readOnly type="text" name="permanentState" className="input-premium h-11 bg-slate-50 border-slate-200 cursor-not-allowed uppercase" value={data.permanentState || 'KARNATAKA'} />
+                            <input required type="text" name="permanentState" className="input-premium h-11 uppercase" value={data.permanentState || ''} onChange={handleChange} placeholder="Enter state" />
                         </div>
                     </div>
                 )}

@@ -435,12 +435,30 @@ export const getStudentDocument = async (
       return res.status(404).json({ error: 'Document not uploaded.' });
     }
 
+    const ext = path.extname(fileUrl).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.gif') contentType = 'image/gif';
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+
     if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
-      const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
-      return res.json({ success: true, url: relativePath });
+      const fullPath = path.join(process.cwd(), fileUrl.replace(/^\/?uploads\/?/, 'uploads'));
+      if (fs.existsSync(fullPath)) {
+        return res.sendFile(fullPath);
+      } else {
+        return res.status(404).json({ error: 'File not found on disk.' });
+      }
     } else {
-      const signedUrl = await r2.getSignedUrl(fileUrl);
-      return res.json({ success: true, url: signedUrl });
+      const buffer = await r2.getFile(fileUrl);
+      return res.send(buffer);
     }
   } catch (err) {
     return next(err);
@@ -732,12 +750,30 @@ export const viewAdmissionDocument = async (
 
     securityEvents.documentDownload(req, req.user!.id, id, field);
 
+    const ext = path.extname(fileUrl).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.gif') contentType = 'image/gif';
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+
     if (fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/')) {
-      const relativePath = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl;
-      return res.json({ success: true, url: relativePath });
+      const fullPath = path.join(process.cwd(), fileUrl.replace(/^\/?uploads\/?/, 'uploads'));
+      if (fs.existsSync(fullPath)) {
+        return res.sendFile(fullPath);
+      } else {
+        return res.status(404).json({ error: 'File not found on disk.' });
+      }
     } else {
-      const signedUrl = await r2.getSignedUrl(fileUrl);
-      return res.json({ success: true, url: signedUrl });
+      const buffer = await r2.getFile(fileUrl);
+      return res.send(buffer);
     }
   } catch (err) {
     return next(err);
@@ -1040,8 +1076,8 @@ export const processCancellationRequest = async (
 
       return res.json({ success: true, message: 'Admission cancellation approved successfully' });
     } else {
-      // Revert back to ENROLLED (Admission Confirmed)
-      admission.applicationStatus = 'ENROLLED';
+      // Revert back to ENROLLED (if USN exists) or PRINCIPAL_APPROVED
+      admission.applicationStatus = admission.usn ? 'ENROLLED' : 'PRINCIPAL_APPROVED';
       admission.cancellationRejectedAt = new Date();
       admission.cancellationRejectedById = req.user!.id;
       admission.cancellationAdminRemarks = remarks || null;
@@ -1900,13 +1936,26 @@ const validateUsnAssignment = async (
     return { error: `USN year '${usnYearSuffix}' does not match academic year '${admission.academicYear}' (expected '${expectedYearSuffix}').` };
   }
 
-  // Validate department code matches branch code (first 2 letters)
+  // Validate department code matches branch code via centralized VTU branch mappings
   if (!admission.branch) {
     return { error: 'No branch is assigned to this applicant.' };
   }
-  const branchCodePrefix = admission.branch.code.toUpperCase().substring(0, 2);
-  if (branchCodePrefix !== usnDeptCode) {
-    return { error: `USN department code '${usnDeptCode}' does not match applicant branch '${admission.branch.code}'.` };
+  const VTU_BRANCH_CODES: Record<string, string> = {
+    'CSE': 'CS',
+    'CSE-AIML': 'CI',
+    'CV': 'CV',
+    'CIVIL': 'CV',
+    'CE': 'CV',
+    'ECE': 'EC',
+    'ME': 'ME',
+    'MECHANICAL': 'ME'
+  };
+  const expectedPrefix = VTU_BRANCH_CODES[admission.branch.code.toUpperCase()];
+  if (!expectedPrefix) {
+    return { error: `Invalid or unsupported branch code: ${admission.branch.code}` };
+  }
+  if (expectedPrefix !== usnDeptCode) {
+    return { error: `USN department code '${usnDeptCode}' does not match applicant branch '${admission.branch.code}' (expected '${expectedPrefix}').` };
   }
 
   // Check uniqueness across other admissions
@@ -1995,13 +2044,39 @@ export const bulkAssignUsns = async (
       const prevUsn = admission.usn;
       if (prevUsn === cleanUsn) continue;
 
-      // Concurrency double-check under transaction lock
+      // 1. Release previous USN if any was assigned
+      if (prevUsn) {
+        const prevRegistry = await UsnRegistry.findOne({
+          where: { usn: prevUsn },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+        if (prevRegistry) {
+          await prevRegistry.update({ status: 'AVAILABLE' }, { transaction });
+        }
+      }
+
+      // 2. Claim and lock new USN
       if (cleanUsn) {
+        const registryEntry = await UsnRegistry.findOne({
+          where: { usn: cleanUsn },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+        if (!registryEntry) {
+          throw new Error(`USN ${cleanUsn} does not exist in the official USN registry.`);
+        }
+        if (registryEntry.status !== 'AVAILABLE') {
+          throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
+        }
+
         const doubleCheck = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
         const doubleCheckStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
         if (doubleCheck || doubleCheckStu) {
           throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
         }
+
+        await registryEntry.update({ status: 'CLAIMED' }, { transaction });
       }
 
       await admission.update({ usn: cleanUsn }, { transaction });
@@ -2071,10 +2146,37 @@ export const assignSingleUsn = async (
       const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Admin';
 
       if (prevUsn !== cleanUsn) {
+        // 1. Release previous USN if any was assigned
+        if (prevUsn) {
+          const prevRegistry = await UsnRegistry.findOne({
+            where: { usn: prevUsn },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (prevRegistry) {
+            await prevRegistry.update({ status: 'AVAILABLE' }, { transaction });
+          }
+        }
+
+        // 2. Claim and validate new USN
         if (cleanUsn) {
+          const registryEntry = await UsnRegistry.findOne({
+            where: { usn: cleanUsn },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (!registryEntry) {
+            throw new Error(`USN ${cleanUsn} does not exist in the official USN registry.`);
+          }
+          if (registryEntry.status !== 'AVAILABLE') {
+            throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
+          }
+
           const dupAdm = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
           const dupStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
           if (dupAdm || dupStu) throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
+
+          await registryEntry.update({ status: 'CLAIMED' }, { transaction });
         }
 
         await admission.update({ usn: cleanUsn }, { transaction });

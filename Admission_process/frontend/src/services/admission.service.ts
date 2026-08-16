@@ -76,6 +76,7 @@ export interface AdmissionApplication {
     profileImage: string | null;
     student?: {
       enrollmentNumber: string;
+      semester?: number | null;
     } | null;
   } | null;
   branch: {

@@ -22,6 +22,7 @@ class User extends Model {
   public profileImage!: string;
   public tokenVersion!: number;
   public mustChangePassword!: boolean;
+  public registrationType!: 'FRESH' | 'LATERAL_ENTRY' | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -123,6 +124,11 @@ User.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    registrationType: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: 'FRESH',
     },
   },
   {

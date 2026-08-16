@@ -336,6 +336,12 @@ export const getSettings = async (
         handbookUrl: config.handbookUrl,
         require2FA: true,
         admissionsPortalOpen: config.admissionOpen,
+        freshAdmissionOpen: config.freshAdmissionOpen,
+        lateralEntryOpen: config.lateralEntryOpen,
+        provisionalAdmissionOpen: config.provisionalAdmissionOpen,
+        provisionalAdmission3Open: config.provisionalAdmission3Open,
+        provisionalAdmission5Open: config.provisionalAdmission5Open,
+        provisionalAdmission7Open: config.provisionalAdmission7Open,
         smtpServer: 'smtp.sendgrid.net',
         smsGateway: '************************'
       }
@@ -357,6 +363,30 @@ export const updateSettings = async (
 
     if (typeof req.body.admissionOpen === 'boolean') {
       config.admissionOpen = req.body.admissionOpen;
+    }
+
+    if (typeof req.body.freshAdmissionOpen === 'boolean') {
+      config.freshAdmissionOpen = req.body.freshAdmissionOpen;
+    }
+
+    if (typeof req.body.lateralEntryOpen === 'boolean') {
+      config.lateralEntryOpen = req.body.lateralEntryOpen;
+    }
+
+    if (typeof req.body.provisionalAdmissionOpen === 'boolean') {
+      config.provisionalAdmissionOpen = req.body.provisionalAdmissionOpen;
+    }
+
+    if (typeof req.body.provisionalAdmission3Open === 'boolean') {
+      config.provisionalAdmission3Open = req.body.provisionalAdmission3Open;
+    }
+
+    if (typeof req.body.provisionalAdmission5Open === 'boolean') {
+      config.provisionalAdmission5Open = req.body.provisionalAdmission5Open;
+    }
+
+    if (typeof req.body.provisionalAdmission7Open === 'boolean') {
+      config.provisionalAdmission7Open = req.body.provisionalAdmission7Open;
     }
 
     if (req.body.admissionCycle || req.body.academicYear) {

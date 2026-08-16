@@ -418,36 +418,34 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
     if (!activeDoc) return;
 
     let active = true;
+    let blobUrl: string | null = null;
     setActiveDocUrl(null);
     setActiveDocLoading(true);
     setActiveDocError(false);
 
     const loadActiveDoc = async () => {
       try {
-        const res = await API.get(`/admin/admissions/${targetAppId}/documents/${activeDoc.field}`);
+        const token = localStorage.getItem('token') || '';
+        const baseUrl = API.defaults.baseURL || '/api';
+        const cleanPath = `/admin/admissions/${targetAppId}/documents/${activeDoc.field}`;
+        const url = `${baseUrl}${cleanPath}`;
+        const finalUrl = token ? `${url}?token=${encodeURIComponent(token)}` : url;
+
+        // Fetch as blob via Axios (handles auth headers + CORS properly)
+        const response = await API.get(finalUrl, { responseType: 'blob' });
         if (!active) return;
 
-        if (res.data?.url) {
-          let finalUrl = res.data.url;
-          if (!finalUrl.startsWith('http') && !finalUrl.startsWith('blob:')) {
-            const baseHost = getBaseHostURL();
-            finalUrl = baseHost + finalUrl;
-          }
-          setActiveDocUrl(finalUrl);
-          const isPdf = finalUrl.toLowerCase().includes('.pdf') || activeDoc.name.toLowerCase().includes('pdf') || activeDoc.url?.toLowerCase().includes('.pdf');
-          setActiveDocIsPdf(!!isPdf);
-        } else {
-          throw new Error('No URL returned from document metadata');
-        }
+        blobUrl = URL.createObjectURL(response.data);
+        const isPdf = response.data.type === 'application/pdf' || !!(activeDoc.url?.toLowerCase().includes('.pdf'));
+        setActiveDocIsPdf(isPdf);
+        setActiveDocUrl(blobUrl);
+        setActiveDocLoading(false);
+        setActiveDocError(false);
       } catch (err) {
-        console.error('Failed to load active document URL:', err);
-        if (active) {
-          setActiveDocError(true);
-        }
-      } finally {
-        if (active) {
-          setActiveDocLoading(false);
-        }
+        if (!active) return;
+        console.error('Failed to load document:', err);
+        setActiveDocError(true);
+        setActiveDocLoading(false);
       }
     };
 
@@ -455,8 +453,9 @@ export const DocumentVerificationWorkspaceContent: React.FC<DocumentVerification
 
     return () => {
       active = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [currentDocumentIndex, docList, targetAppId, effectiveIsOpen]);
+  }, [currentDocumentIndex, docList.length, targetAppId, effectiveIsOpen]);
 
   useEffect(() => {
     if (targetAppId && docList.length > 0) {

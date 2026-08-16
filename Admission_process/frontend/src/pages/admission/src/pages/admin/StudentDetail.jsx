@@ -86,16 +86,12 @@ const StudentDetail = () => {
      * Map from DB key (e.g. 'photoUrl') to the field name used by the backend route (e.g. 'photo').
      * Then fetch a short-lived signed R2 URL and open the document in a new tab.
      */
-    const openDocument = async (dbKey) => {
+    const openDocument = (dbKey) => {
         const field = dbKey.replace(/Url$/, '');
-        try {
-            const res = await api.get(`/admin/admissions/${id}/documents/${field}`);
-            if (res.data?.url) {
-                window.open(res.data.url, '_blank', 'noopener,noreferrer');
-            }
-        } catch (err) {
-            toast.error('Could not open document. Please try again.');
-        }
+        const token = localStorage.getItem('token') || '';
+        const base = api.defaults.baseURL || '/api';
+        const url = `${base}/admin/admissions/${id}/documents/${field}?token=${encodeURIComponent(token)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     if (loading) {

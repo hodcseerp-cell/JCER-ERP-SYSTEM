@@ -18,7 +18,7 @@ export async function seed(exitOnComplete = false) {
       { name: 'Computer Science & Engineering', code: 'CSE' },
       { name: 'Electronics & Communication Engineering', code: 'ECE' },
       { name: 'Mechanical Engineering', code: 'ME' },
-      { name: 'Civil Engineering', code: 'CE' },
+      { name: 'Civil Engineering', code: 'CV' },
       { name: 'Computer Science & Engineering (AIML)', code: 'CSE-AIML' },
     ], { returning: true });
     const [cse] = depts;

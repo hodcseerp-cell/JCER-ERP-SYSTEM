@@ -21,6 +21,12 @@ const AdminSystemSettingsPage: React.FC = () => {
   const [academicYear, setAcademicYear] = useState<string>(getAcademicYear());
   const [closingDate, setClosingDate] = useState<string>('2026-08-31T23:59');
   const [handbookUrl, setHandbookUrl] = useState<string | null>(null);
+  const [freshAdmissionOpen, setFreshAdmissionOpen] = useState<boolean>(true);
+  const [lateralEntryOpen, setLateralEntryOpen] = useState<boolean>(true);
+  const [provisionalAdmissionOpen, setProvisionalAdmissionOpen] = useState<boolean>(true);
+  const [provisionalAdmission3Open, setProvisionalAdmission3Open] = useState<boolean>(false);
+  const [provisionalAdmission5Open, setProvisionalAdmission5Open] = useState<boolean>(false);
+  const [provisionalAdmission7Open, setProvisionalAdmission7Open] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [updatingToggle, setUpdatingToggle] = useState<boolean>(false);
   const [updatingYear, setUpdatingYear] = useState<boolean>(false);
@@ -37,6 +43,12 @@ const AdminSystemSettingsPage: React.FC = () => {
       const res = await API.get('/admin/settings');
       if (res.data?.success && res.data?.data) {
         setAdmissionOpen(res.data.data.admissionOpen ?? true);
+        setFreshAdmissionOpen(res.data.data.freshAdmissionOpen ?? true);
+        setLateralEntryOpen(res.data.data.lateralEntryOpen ?? true);
+        setProvisionalAdmissionOpen(res.data.data.provisionalAdmissionOpen ?? true);
+        setProvisionalAdmission3Open(res.data.data.provisionalAdmission3Open ?? false);
+        setProvisionalAdmission5Open(res.data.data.provisionalAdmission5Open ?? false);
+        setProvisionalAdmission7Open(res.data.data.provisionalAdmission7Open ?? false);
         if (res.data.data.admissionCycle) {
           setAcademicYear(res.data.data.admissionCycle);
         }
@@ -73,6 +85,23 @@ const AdminSystemSettingsPage: React.FC = () => {
       toast.error(err.response?.data?.error || err.message || 'Failed to update admission status');
     } finally {
       setUpdatingToggle(false);
+    }
+  };
+
+  const handleToggleSetting = async (field: string, currentValue: boolean, setter: (val: boolean) => void) => {
+    const newValue = !currentValue;
+    setter(newValue); // Optimistic UI update
+
+    try {
+      const res = await API.put('/admin/settings', { [field]: newValue });
+      if (res.data?.success) {
+        toast.success('Setting updated successfully.');
+      } else {
+        throw new Error(res.data?.error || 'Failed to update setting');
+      }
+    } catch (err: any) {
+      setter(currentValue); // Revert
+      toast.error(err.response?.data?.error || err.message || 'Failed to update setting');
     }
   };
 
@@ -362,6 +391,141 @@ const AdminSystemSettingsPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Admission Track status toggles */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center justify-center">
+              <Settings className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Admission Track Controls</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enable or disable student entry points dynamically for each admission track.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 bg-slate-50/50 dark:bg-slate-900/20 space-y-4">
+          
+          {/* Fresh Admission Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Fresh Admission (1st Sem)</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Allow new students to register for 1st Semester admission.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('freshAdmissionOpen', freshAdmissionOpen, setFreshAdmissionOpen)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                freshAdmissionOpen ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                freshAdmissionOpen ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {/* Lateral Entry Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Lateral Entry Admission (3rd Sem)</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Allow diploma students to register for direct 3rd Semester lateral admission.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('lateralEntryOpen', lateralEntryOpen, setLateralEntryOpen)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                lateralEntryOpen ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                lateralEntryOpen ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {/* Provisional Admission (Global) Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Provisional Admission (Global Toggle)</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Enable or disable provisional admission globally for all eligible semesters.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('provisionalAdmissionOpen', provisionalAdmissionOpen, setProvisionalAdmissionOpen)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                provisionalAdmissionOpen ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                provisionalAdmissionOpen ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {/* Provisional 3 Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Provisional Admission — 3rd Sem</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Enable provisional admission applications for promoting students into 3rd Semester.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('provisionalAdmission3Open', provisionalAdmission3Open, setProvisionalAdmission3Open)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                provisionalAdmission3Open ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                provisionalAdmission3Open ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {/* Provisional 5 Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Provisional Admission — 5th Sem</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Enable provisional admission applications for promoting students into 5th Semester.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('provisionalAdmission5Open', provisionalAdmission5Open, setProvisionalAdmission5Open)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                provisionalAdmission5Open ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                provisionalAdmission5Open ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          {/* Provisional 7 Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80">
+            <div>
+              <span className="text-sm font-bold text-slate-900 dark:text-white">Provisional Admission — 7th Sem</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Enable provisional admission applications for promoting students into 7th Semester.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleToggleSetting('provisionalAdmission7Open', provisionalAdmission7Open, setProvisionalAdmission7Open)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                provisionalAdmission7Open ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                provisionalAdmission7Open ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

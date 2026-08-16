@@ -261,3 +261,20 @@ export const resolveStudentUserId = async (req: any, res: Response, next: NextFu
     next(err);
   }
 };
+
+const provisionalMulterInstance = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10 MB limit
+  },
+}).single('file');
+
+export const uploadProvisionalDocMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  provisionalMulterInstance(req, res, (err: any) => {
+    if (err) {
+      return next(err);
+    }
+    next();
+  });
+};

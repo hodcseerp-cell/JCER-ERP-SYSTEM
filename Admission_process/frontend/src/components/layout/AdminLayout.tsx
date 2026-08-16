@@ -35,7 +35,9 @@ import {
   CheckCircle2,
   FileText,
   GraduationCap,
-  Archive
+  Layers,
+  Archive,
+  ArrowUpCircle
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
 
@@ -345,6 +347,8 @@ export const AdminLayout: React.FC = () => {
         { name: 'Approved',             path: '/admin/admissions/approved',      icon: CheckCircle2 },
         { name: 'Cancellation',         path: '/admin/admissions/cancellations', icon: XCircle,         badge: cancellationRequestsCount   > 0 ? cancellationRequestsCount   : undefined },
         { name: 'USN Allocation',       path: '/admin/admissions/usn',           icon: GraduationCap },
+        { name: 'Promotion',            path: '/admin/admissions/promotion',     icon: ArrowUpCircle },
+        { name: 'Provisional Admission', path: '/admin/admissions/provisional',   icon: Layers },
         { name: 'History',              path: '/admin/admissions/history',       icon: CalendarDays },
       ],
     },
@@ -388,6 +392,8 @@ export const AdminLayout: React.FC = () => {
     '/admin/admissions/approved':     'Enrolled Students',
     '/admin/admissions/cancellations':'Cancellation Requests',
     '/admin/admissions/usn':          'USN Allocation & Entry',
+    '/admin/admissions/provisional':  'Provisional Admissions Workspace',
+    '/admin/admissions/promotion':    'Academic Promotion Workspace',
     '/admin/admissions/history':      'Admission History',
     '/admin/students': 'Student Management',
     '/admin/reports': 'Report Generator',
@@ -407,6 +413,18 @@ export const AdminLayout: React.FC = () => {
     }
     return pageTitles[location.pathname] || 'Admin Portal';
   };
+
+  const isWorkspace = location.pathname.includes('/admissions/workspace/');
+
+  if (isWorkspace) {
+    return (
+      <div className="min-h-screen w-full flex flex-col text-neutral-900 dark:text-neutral-100 transition-colors duration-300 font-sans">
+        <main className="flex-1 flex flex-col relative h-screen w-screen overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden flex text-neutral-900 dark:text-neutral-100 transition-colors duration-300 font-sans pb-6 pr-6">
@@ -663,7 +681,17 @@ export const AdminLayout: React.FC = () => {
 
         {/* ── PAGE CONTENT (OUTLET) ── */}
         <main className="flex-1 flex flex-col relative">
-          <Outlet />
+          <div 
+            className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.015] bg-no-repeat bg-center bg-fixed"
+            style={{ 
+              backgroundImage: 'url(/logo.png)', 
+              backgroundSize: '450px',
+              zIndex: 0
+            }}
+          />
+          <div className="relative z-10 flex-1 flex flex-col">
+            <Outlet />
+          </div>
         </main>
         <GlobalSearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
       </div>

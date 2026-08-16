@@ -102,6 +102,10 @@ const Register = () => {
         }
     }, [formData.password]);
 
+    const searchParams = new URLSearchParams(window.location.search);
+    const registrationTypeParam = searchParams.get('type');
+    const isLateral = registrationTypeParam === 'lateral';
+
     // Handle Form Submit -> Direct Registration
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -135,6 +139,8 @@ const Register = () => {
             return;
         }
 
+        const registrationType = isLateral ? 'LATERAL_ENTRY' : 'FRESH';
+
         setLoading(true);
         try {
             const registerRes = await authService.register({
@@ -143,6 +149,7 @@ const Register = () => {
                 email: formData.email,
                 phone: formData.phone,
                 password: formData.password,
+                registrationType,
             });
 
             if (registerRes.data.success) {
@@ -169,10 +176,14 @@ const Register = () => {
             <div className="mb-3 sm:mb-4 text-center lg:text-left">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-primary-100 text-primary-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-1.5 sm:mb-2">
                     <GraduationCap size={13} />
-                    Admission {admissionCycle || getAcademicYear()}
+                    {isLateral ? 'Lateral Entry' : 'Fresh Admission'} {admissionCycle || getAcademicYear()}
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-0.5">Student Registration</h2>
-                <p className="text-xs text-slate-500">Create your account to begin the admission process</p>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-0.5">
+                    {isLateral ? 'Lateral Entry Registration' : 'Student Registration'}
+                </h2>
+                <p className="text-xs text-slate-500">
+                    {isLateral ? 'Create your account for direct 3rd-semester admission' : 'Create your account to begin the admission process'}
+                </p>
             </div>
 
             {admissionsClosed ? (
