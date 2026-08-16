@@ -252,7 +252,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
       case 'APPROVED':
         return <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><ShieldCheck size={10}/> Verified</span>;
       case 'PRINCIPAL_APPROVED':
-        return <span className="px-2 py-1 bg-violet-100 dark:bg-violet-900/20 text-violet-750 dark:text-violet-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><UserCheck size={10}/> Principal Approved</span>;
+        return <span className="px-2 py-1 bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><UserCheck size={10}/> Principal Approved</span>;
       case 'ENROLLED':
         return <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center justify-center gap-1.5 w-28"><CheckCircle2 size={10}/> Approved</span>;
       case 'REJECTED':
@@ -576,7 +576,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                             {app.applicationStatus === 'ENROLLED' ? (
                               <button 
                                 onClick={() => setCredentialsModalApp(app)}
-                                className="inline-flex items-center justify-center px-2.5 py-1 bg-violet-600 hover:bg-violet-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
+                                className="inline-flex items-center justify-center px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
                               >
                                 <Award size={10} className="mr-1" /> View Credentials
                               </button>
@@ -604,8 +604,8 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                               <div className="flex flex-wrap items-center gap-6">
                                 <div className="flex items-center gap-2">
                                   <Award size={14} className="text-emerald-500" />
-                                  <span className="text-neutral-400">Enrollment (USN):</span>
-                                  <span className="font-black text-emerald-600 dark:text-emerald-400">{app.user?.student?.enrollmentNumber || 'Generated'}</span>
+                                  <span className="text-neutral-400">Application Number:</span>
+                                  <span className="font-black text-emerald-600 dark:text-emerald-400">{app.applicationNumber}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Mail size={14} className="text-neutral-400" />
@@ -703,18 +703,20 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                         <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 font-extrabold block">University Seat Number (USN)</span>
                         <div className="flex items-center justify-between gap-2 mt-0.5">
                           <span className="text-sm font-black text-neutral-900 dark:text-white">
-                            {credentialsModalApp.user?.student?.enrollmentNumber || `APP-${new Date().getFullYear()}-USN`}
+                            {credentialsModalApp.user?.student?.enrollmentNumber || 'Not Assigned / Pending'}
                           </span>
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(credentialsModalApp.user?.student?.enrollmentNumber || '');
-                              toast.success('USN copied to clipboard!');
-                            }}
-                            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 rounded transition-colors"
-                            title="Copy USN"
-                          >
-                            <Copy size={14} />
-                          </button>
+                          {credentialsModalApp.user?.student?.enrollmentNumber && (
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(credentialsModalApp.user?.student?.enrollmentNumber || '');
+                                toast.success('USN copied to clipboard!');
+                              }}
+                              className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 rounded transition-colors"
+                              title="Copy USN"
+                            >
+                              <Copy size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">

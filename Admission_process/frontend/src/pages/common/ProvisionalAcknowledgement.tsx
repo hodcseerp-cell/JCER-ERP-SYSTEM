@@ -182,12 +182,12 @@ export const ProvisionalAcknowledgement = () => {
           <div className="overflow-x-auto w-full border border-slate-200 rounded-xl">
             <table className="w-full text-left text-xs border-collapse min-w-[600px]">
               <thead>
-                <tr className="bg-slate-50 border-b-2 border-slate-300">
-                  <th className="py-2 px-3 font-bold uppercase text-slate-700">Semester</th>
-                  <th className="py-2 px-3 font-bold uppercase text-slate-700">Exam Month/Year</th>
-                  <th className="py-2 px-3 font-bold uppercase text-slate-700">Passed Subjects</th>
-                  <th className="py-2 px-3 font-bold uppercase text-slate-700 text-center">Failed Subjects</th>
-                  <th className="py-2 px-3 font-bold uppercase text-slate-700">Failed Subject Codes</th>
+                <tr className="bg-slate-800 border-b-2 border-slate-900">
+                  <th className="py-2 px-3 font-bold uppercase text-white">Semester</th>
+                  <th className="py-2 px-3 font-bold uppercase text-white">Exam Month/Year</th>
+                  <th className="py-2 px-3 font-bold uppercase text-white">Passed Subjects</th>
+                  <th className="py-2 px-3 font-bold uppercase text-white text-center">Failed Subjects</th>
+                  <th className="py-2 px-3 font-bold uppercase text-white">Failed Subject Codes</th>
                 </tr>
               </thead>
               <tbody>

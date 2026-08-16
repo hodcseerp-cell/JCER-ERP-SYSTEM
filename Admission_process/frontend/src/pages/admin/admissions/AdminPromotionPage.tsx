@@ -257,7 +257,7 @@ export const AdminPromotionPage: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-slate-950 border border-slate-250/60 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-violet-50 dark:bg-violet-950/30 text-violet-650 rounded-xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-violet-50 dark:bg-violet-950/30 text-violet-600 rounded-xl flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
@@ -475,7 +475,7 @@ export const AdminPromotionPage: React.FC = () => {
 
       {/* Bulk Promotion trigger floating bar */}
       {selectedStudentIds.length > 0 && semesterFilter !== 'All' && (
-        <div className="fixed bottom-6 left-6 right-6 md:left-72 bg-white dark:bg-slate-950 border-2 border-blue-600 rounded-2xl p-4 shadow-xl flex items-center justify-between z-40 transition-all">
+        <div className="fixed bottom-6 left-6 right-6 md:left-[316px] bg-white dark:bg-slate-950 border-2 border-blue-600 rounded-2xl p-4 shadow-xl flex items-center justify-between z-50 transition-all">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-black text-xs">
               {selectedStudentIds.length}
@@ -656,7 +656,7 @@ export const AdminPromotionPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowOutcomeModal(false)}
-                className="w-full py-2.5 bg-slate-850 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs uppercase"
+                className="w-full py-2.5 bg-black hover:bg-neutral-900 text-white font-extrabold rounded-xl text-xs uppercase tracking-widest transition-colors"
               >
                 Close Report
               </button>

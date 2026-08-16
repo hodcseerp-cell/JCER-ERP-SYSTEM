@@ -1283,7 +1283,28 @@ class AdmissionService {
             if (admission.branchId) {
               const branch = await Department.findByPk(admission.branchId, { transaction });
               if (branch && branch.code) {
-                branchCode = branch.code.substring(0, 2).toUpperCase();
+                const VTU_MAP: Record<string, string> = {
+                  'CSE': 'CS',
+                  'CSE-AIML': 'CI',
+                  'AIML': 'CI',
+                  'AI&ML': 'CI',
+                  'AI-ML': 'CI',
+                  'CV': 'CV',
+                  'CIVIL': 'CV',
+                  'CE': 'CV',
+                  'ECE': 'EC',
+                  'ME': 'ME',
+                  'MECHANICAL': 'ME',
+                  'ISE': 'IS',
+                  'IS': 'IS',
+                  'CSE-DS': 'CD',
+                  'DS': 'CD',
+                  'CSBS': 'CB',
+                  'EEE': 'EE',
+                  'EE': 'EE'
+                };
+                const normBranch = branch.code.toUpperCase().trim();
+                branchCode = VTU_MAP[normBranch] || normBranch.substring(0, 2);
               }
             }
             const seqStr = String(admission.usn.slice(-3));

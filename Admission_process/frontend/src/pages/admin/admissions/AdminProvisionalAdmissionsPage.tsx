@@ -38,7 +38,8 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');       // Raw input (not yet applied)
+  const [appliedSearch, setAppliedSearch] = useState<string>('');    // Applied search (triggers fetch)
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -55,6 +56,33 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
   // Document verification modal states
   const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
   const [docRemarks, setDocRemarks] = useState<string>('');
+
+  // Document verification remarks auto-copy effect
+  useEffect(() => {
+    if (!reviewData?.documents) return;
+    
+    const getDocName = (doc: any) => {
+      return doc.documentType === 'FEE_RECEIPT' ? 'College Fee Receipt' : `Semester ${doc.semesterNumber} Marks Card`;
+    };
+    
+    const lines: string[] = [];
+    reviewData.documents.forEach((doc: any) => {
+      if (verifyingDocId === doc.id) {
+        if (docRemarks.trim()) {
+          lines.push(`[${getDocName(doc)}]: ${docRemarks}`);
+        }
+      } else if (doc.verificationStatus === 'REJECTED' && doc.verificationRemarks) {
+        lines.push(`[${getDocName(doc)}]: ${doc.verificationRemarks}`);
+      }
+    });
+    
+    setActionRemarks(lines.join('\n'));
+  }, [docRemarks, verifyingDocId, reviewData?.documents]);
+
+  const handleStartRejection = (doc: any) => {
+    setVerifyingDocId(doc.id);
+    setDocRemarks(doc.verificationRemarks || '');
+  };
 
   // Load review details when id is in the URL
   useEffect(() => {
@@ -97,7 +125,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
   useEffect(() => {
     fetchBranches();
     fetchApplications();
-  }, [selectedBranch, selectedSemester, selectedStatus]);
+  }, [selectedBranch, selectedSemester, selectedStatus, appliedSearch]);
 
   const fetchBranches = async () => {
     try {
@@ -117,7 +145,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
       if (selectedBranch) params.branchId = selectedBranch;
       if (selectedSemester) params.semester = Number(selectedSemester);
       if (selectedStatus) params.status = selectedStatus;
-      if (searchQuery) params.search = searchQuery;
+      if (appliedSearch) params.search = appliedSearch;
 
       const res = await API.get('/provisional/admin/list', { params });
       if (res.data?.success) {
@@ -132,7 +160,12 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchApplications();
+    setAppliedSearch(searchQuery); // Commits search into filter state, triggering useEffect
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setAppliedSearch('');
   };
 
   const toggleSelectRow = (id: string) => {
@@ -395,32 +428,54 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                   {reviewData.documents?.map((doc: any) => {
                     const isVerified = doc.verificationStatus === 'VERIFIED';
                     const isRejected = doc.verificationStatus === 'REJECTED';
+                    const isPending = doc.verificationStatus === 'PENDING';
+                    const isAppResubmitted = reviewData?.application?.status === 'RESUBMITTED';
+                    const isCorrected = isPending && doc.verificationRemarks === 'CORRECTED';
+                    
+                    const statusText = isAppResubmitted && isVerified ? 'APPROVED (PREV)' : 
+                                     isAppResubmitted && isCorrected ? 'CORRECTED BY STUDENT' : 
+                                     doc.verificationStatus;
+                    
+                    const badgeClass = isAppResubmitted && isVerified 
+                      ? 'bg-emerald-100 text-emerald-805 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/60 font-black' 
+                      : isAppResubmitted && isCorrected
+                        ? 'bg-amber-100 text-amber-850 border-amber-250 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/60 font-black animate-pulse'
+                        : isVerified
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : isRejected
+                            ? 'bg-rose-100 text-rose-805 border-rose-200'
+                            : 'bg-amber-100 text-amber-805 border-amber-200';
+
+                    const rowBgClass = isAppResubmitted && isCorrected 
+                      ? 'border-2 border-amber-400 dark:border-amber-900 bg-amber-50/10 dark:bg-amber-950/5 shadow-sm shadow-amber-105/20 dark:shadow-none' 
+                      : 'border border-slate-200/80 dark:border-slate-700 bg-slate-50/20 dark:bg-slate-900/20';
+
+                    const iconContainerClass = isAppResubmitted && isCorrected
+                      ? 'bg-amber-50 text-amber-605 border-amber-200'
+                      : isVerified
+                        ? 'bg-emerald-50 text-emerald-605 border-emerald-200'
+                        : isRejected
+                          ? 'bg-rose-50 text-rose-605 border-rose-200'
+                          : 'bg-indigo-50 text-indigo-650 border-indigo-200';
+
                     return (
-                      <div key={doc.id} className="border border-slate-200/80 dark:border-slate-700 rounded-2xl p-5 bg-slate-50/20 dark:bg-slate-900/20 space-y-4 transition-all duration-205 shadow-sm">
+                      <div key={doc.id} className={`rounded-2xl p-5 space-y-4 transition-all duration-205 shadow-sm ${rowBgClass}`}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex items-start space-x-3">
-                            <div className={`p-2.5 rounded-xl border flex-shrink-0 ${
-                              isVerified ? 'bg-emerald-50 text-emerald-605 border-emerald-200' :
-                              isRejected ? 'bg-rose-50 text-rose-605 border-rose-200' :
-                              'bg-indigo-50 text-indigo-650 border-indigo-200'
-                            }`}>
+                            <div className={`p-2.5 rounded-xl border flex-shrink-0 ${iconContainerClass}`}>
                               <FileText className="w-5 h-5" />
                             </div>
                             <div>
-                              <h4 className="text-xs font-black uppercase text-slate-800 dark:text-slate-200">
+                              <h4 className="text-xs font-black uppercase text-slate-805 dark:text-slate-200">
                                 {doc.documentType === 'FEE_RECEIPT' ? 'College Fee Receipt' : `Semester ${doc.semesterNumber} Marks Card`}
                               </h4>
-                              <p className="text-[10px] text-slate-400 font-extrabold font-mono mt-0.5 max-w-sm truncate">{doc.originalFileName}</p>
+                              <p className="text-[10px] text-slate-450 font-extrabold font-mono mt-0.5 max-w-sm truncate">{doc.originalFileName}</p>
                             </div>
                           </div>
                           
                           <div className="flex items-center gap-3">
-                            <span className={`text-[10px] font-black px-3 py-1 rounded-full border uppercase tracking-wider shadow-sm ${
-                              isVerified ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                              isRejected ? 'bg-rose-100 text-rose-805 border-rose-200' :
-                              'bg-amber-100 text-amber-805 border-amber-200'
-                            }`}>
-                              {doc.verificationStatus}
+                            <span className={`text-[10px] font-black px-3 py-1 rounded-full border uppercase tracking-wider shadow-sm ${badgeClass}`}>
+                              {statusText}
                             </span>
                             <a
                               href={doc.url}
@@ -443,7 +498,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                           </button>
                           
                           <button
-                            onClick={() => setVerifyingDocId(doc.id)}
+                            onClick={() => handleStartRejection(doc)}
                             className="px-4 py-2 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
                           >
                             <XCircle className="w-4 h-4" /> Reject File
@@ -673,23 +728,23 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-medium border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                <tr className="bg-black border-b border-slate-800 text-white">
                   <th className="p-4 w-12 text-center">
-                    <button onClick={toggleSelectAll} className="text-slate-400 hover:text-slate-600">
+                    <button onClick={toggleSelectAll} className="text-slate-400 hover:text-white transition-colors">
                       {selectedIds.length === applications.filter(a => ['SUBMITTED', 'RESUBMITTED', 'UNDER_REVIEW'].includes(a.status)).length && selectedIds.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                        <CheckSquare className="w-4 h-4 text-indigo-400" />
                       ) : (
                         <Square className="w-4 h-4" />
                       )}
                     </button>
                   </th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350">PA Number</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350">Student</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350">USN</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350 text-center">Target Sem</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350">Academic Year</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350">Status</th>
-                  <th className="p-4 font-bold text-slate-700 dark:text-slate-350 text-right">Actions</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white">PA Number</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white">Student</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white">USN</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white text-center">Target Sem</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white">Academic Year</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white">Status</th>
+                  <th className="p-4 font-black uppercase tracking-wider text-white text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
