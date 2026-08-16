@@ -12,6 +12,9 @@ import { loggingMiddleware } from './middleware/logging.middleware';
 import { idempotencyMiddleware } from './middleware/idempotency.middleware';
 import { errorHandler } from './middleware/errorHandler.middleware';
 
+import fs from 'fs';
+import * as r2Service from './services/r2.service';
+import logger from './utils/logger.util';
 import authRoutes from './routes/auth.routes';
 import systemRoutes from './routes/system.routes';
 import adminRoutes from './routes/admin.routes';
@@ -60,8 +63,17 @@ app.use('/api', globalLimiter);
 // 5. Idempotency Guard (Mutation double-submit protection)
 app.use('/api', idempotencyMiddleware);
 
-// Serve uploaded files securely - require authentication and check ownership
-app.use('/uploads', authMiddleware as any, (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+// Serve public uploads (avatars, handbooks) directly
+app.use('/uploads/avatars', express.static(path.join(process.cwd(), 'uploads', 'avatars')));
+app.use('/uploads/handbookPdf', express.static(path.join(process.cwd(), 'uploads', 'handbookPdf')));
+
+// Serve uploaded files securely - require authentication and check ownership for application documents
+app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/avatars/') || req.path.startsWith('/handbookPdf/')) {
+    return next();
+  }
+  return (authMiddleware as any)(req, res, next);
+}, (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const filePath = req.path;
   const parts = filePath.split('/');
 
@@ -70,8 +82,8 @@ app.use('/uploads', authMiddleware as any, (req: AuthenticatedRequest, res: Resp
     return res.status(400).json({ error: 'Invalid path traversal detected.' });
   }
 
-  // Local handbook is public
-  if (parts.includes('handbookPdf')) {
+  // Local handbook & avatars are public
+  if (parts.includes('handbookPdf') || parts.includes('avatars')) {
     return next();
   }
 
@@ -112,6 +124,57 @@ const v1Router = express.Router();
 
 // Auth routes
 v1Router.use('/auth', authRoutes);
+
+// Document viewer route for R2 object keys and static uploads
+v1Router.get('/documents/view/*', async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const rawKey = req.params[0] || '';
+    if (!rawKey) {
+      return res.status(400).json({ error: 'Document key is required.' });
+    }
+
+    const key = decodeURIComponent(rawKey);
+
+    if (key.includes('..')) {
+      return res.status(400).json({ error: 'Invalid path traversal detected.' });
+    }
+
+    const ext = path.extname(key).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.gif') contentType = 'image/gif';
+    else if (ext === '.webp') contentType = 'image/webp';
+    else if (ext === '.svg') contentType = 'image/svg+xml';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+
+    if (key.startsWith('/uploads/') || key.startsWith('uploads/')) {
+      const fullPath = path.join(process.cwd(), key.replace(/^\/?uploads\/?/, 'uploads'));
+      if (fs.existsSync(fullPath)) {
+        return res.sendFile(fullPath);
+      } else {
+        return res.status(404).json({ error: 'File not found on disk.' });
+      }
+    }
+
+    try {
+      const buffer = await r2Service.getFile(key);
+      return res.send(buffer);
+    } catch (r2Err) {
+      logger.error(`[DocumentView] Error fetching object '${key}' from R2:`, r2Err);
+      return res.status(404).json({ error: 'File not found in storage.' });
+    }
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // System routes
 v1Router.use('/system', systemRoutes);

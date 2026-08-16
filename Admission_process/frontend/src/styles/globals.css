@@ -216,6 +216,48 @@ textarea::placeholder {
   color: #ffffff !important;
 }
 
+/* Light footer text overrides to override global dark mode !important rules */
+footer.light-footer-mode,
+.light-footer-mode,
+.light-footer-mode p,
+.dark footer.light-footer-mode p,
+.dark .light-footer-mode p {
+  color: #334155 !important;
+}
+
+p.light-footer-copyright,
+.dark p.light-footer-copyright {
+  color: #475569 !important;
+}
+
+p.light-footer-author,
+.dark p.light-footer-author {
+  color: #0f172a !important;
+}
+
+a.light-footer-link,
+.dark a.light-footer-link,
+.light-footer-mode a,
+.dark .light-footer-mode a {
+  color: #2563eb !important;
+}
+
+a.light-footer-link:hover,
+.dark a.light-footer-link:hover,
+.light-footer-mode a:hover,
+.dark .light-footer-mode a:hover {
+  color: #1d4ed8 !important;
+}
+
+/* Explicit Dark Icon override for inputs in login card */
+.dark-input-icon,
+.dark .dark-input-icon,
+svg.dark-input-icon,
+.dark svg.dark-input-icon {
+  color: #0F172A !important;
+  stroke: #0F172A !important;
+}
+
 /* Maintain status colors for alerts & badges specifically */
 .text-emerald-500, .text-\[\#16A34A\], .dark .text-emerald-400 {
   color: #16a34a !important;

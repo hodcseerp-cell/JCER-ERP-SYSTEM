@@ -6,9 +6,14 @@ import {
     Users,
     FileText,
     LogOut,
-    HelpCircle
+    HelpCircle,
+    Download,
+    RefreshCw,
 } from 'lucide-react';
 import AdmissionHeader from '../components/AdmissionHeader';
+import usePwa from '../../../../hooks/usePwa';
+import PwaConfirmationModal from '../../../../components/common/PwaConfirmationModal';
+import GlobalFooter from '../../../../components/common/GlobalFooter';
 
 const DashboardLayout = () => {
     const { user, logout } = useAuth();
@@ -16,6 +21,8 @@ const DashboardLayout = () => {
     const [headerHeight, setHeaderHeight] = useState(72);
     const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024);
     const headerRef = useRef(null);
+
+    const { canInstall, handleInstall, triggerRefresh, confirmRefresh, showRefreshModal, setShowRefreshModal } = usePwa();
 
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
@@ -127,8 +134,24 @@ const DashboardLayout = () => {
                         </NavLink>
 
                         <button
+                            onClick={() => { setSidebarOpen(false); handleInstall(); }}
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                            <Download size={18} className="shrink-0 text-primary-600" />
+                            <span className="truncate">Install App</span>
+                        </button>
+
+                        <button
+                            onClick={() => { setSidebarOpen(false); triggerRefresh(); }}
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                            <RefreshCw size={18} className="shrink-0 text-primary-600" />
+                            <span className="truncate">Refresh App</span>
+                        </button>
+
+                        <button
                             onClick={logout}
-                            className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                         >
                             <LogOut size={18} className="shrink-0 text-current" />
                             <span className="truncate">Logout</span>
@@ -146,11 +169,18 @@ const DashboardLayout = () => {
                     </div>
                 </aside>
 
+                <PwaConfirmationModal
+                    isOpen={showRefreshModal}
+                    onClose={() => setShowRefreshModal(false)}
+                    onConfirm={confirmRefresh}
+                />
+
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#f3f4f6] relative z-10 p-4 sm:p-6 lg:p-8">
-                    <div className="max-w-[1200px] mx-auto w-full animate-fade-in pb-8">
+                    <div className="max-w-[1200px] mx-auto w-full animate-fade-in flex-1">
                         <Outlet />
                     </div>
+                    <GlobalFooter className="mt-auto relative z-20" />
                 </main>
             </div>
         </div>

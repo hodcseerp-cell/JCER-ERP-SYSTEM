@@ -7,6 +7,7 @@ const router = express.Router();
 
 // Public Authentication Endpoints
 router.post('/login', authLimiter, authController.login);
+router.post('/verify-daily-otp', authLimiter, authController.verifyDailyOtp);
 router.post('/check-phone', authController.checkPhone);
 router.post('/refresh-token', refreshLimiter, authController.refreshToken);
 
@@ -20,9 +21,18 @@ router.post('/send-forgot-password-otp', authLimiter, authController.sendForgotP
 router.post('/verify-forgot-password-otp', authLimiter, authController.verifyForgotPasswordOtp);
 router.post('/reset-password', authLimiter, authController.resetPassword);
 
+import multer from 'multer';
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 // Authenticated Endpoints
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/status', authMiddleware, authController.status);
 router.post('/change-password', authMiddleware, authController.changePassword);
+router.put('/profile', authMiddleware, authController.updateProfile);
+router.post('/profile-image', authMiddleware, avatarUpload.single('avatar'), authController.uploadProfileImage);
 
 export default router;

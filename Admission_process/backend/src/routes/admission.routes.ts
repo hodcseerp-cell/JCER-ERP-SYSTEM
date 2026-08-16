@@ -64,6 +64,7 @@ adminAdmissionRouter.delete('/usn/:id', admissionController.removeUsn);
 
 adminAdmissionRouter.get('/documents/export/preview', admissionController.previewBulkExport);
 adminAdmissionRouter.get('/documents/export', admissionController.bulkExportDocuments);
+adminAdmissionRouter.get('/students/:studentId/documents', admissionController.getStudentDocuments);
 adminAdmissionRouter.get('/admissions/:id/documents/zip', admissionController.exportSingleStudentZip);
 
 adminAdmissionRouter.delete('/admissions/bulk-delete-cancelled', authorizeRoles('ADMIN', 'SUPER_ADMIN'), admissionController.bulkDeleteCancelledAdmissions);

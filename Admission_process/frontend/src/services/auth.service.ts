@@ -13,47 +13,75 @@ export interface UserSession {
   phone?: string;
 }
 
+export interface LoginResponse {
+  success: boolean;
+  requiresDailyOtp?: boolean;
+  email?: string;
+  role?: string;
+  message?: string;
+  data?: {
+    token: string;
+    user: UserSession;
+  };
+}
+
 class AuthService {
-  async login(email: string, password: string): Promise<UserSession> {
-    console.log("API Base URL:", API.defaults.baseURL);
+  async login(email: string, password: string): Promise<LoginResponse> {
     const response = await API.post('/auth/login', { email, password });
+    if (response.data?.data?.token) {
+      const { token, user } = response.data.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+    return response.data;
+  }
+
+  async verifyDailyOtp(email: string, otp: string): Promise<UserSession> {
+    const response = await API.post('/auth/verify-daily-otp', { email, otp });
     const { token, user } = response.data.data;
-    
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
-    
     return user;
   }
 
-  async loginDirect(data: any): Promise<any> {
-    console.log("API Base URL:", API.defaults.baseURL);
-    return await API.post('/auth/login', data);
+  async sendRegistrationOtp(data: { firstName: string; lastName: string; email: string; phone?: string }): Promise<any> {
+    return await API.post('/auth/send-registration-otp', data);
+  }
+
+  async verifyRegistrationOtp(email: string, otp: string): Promise<any> {
+    return await API.post('/auth/verify-registration-otp', { email, otp });
   }
 
   async register(data: any): Promise<any> {
-    console.log("API Base URL:", API.defaults.baseURL);
     return await API.post('/auth/register', data);
   }
 
+  async sendForgotPasswordOtp(email: string, role?: string): Promise<any> {
+    return await API.post('/auth/send-forgot-password-otp', { email, role });
+  }
+
+  async verifyForgotPasswordOtp(email: string, otp: string): Promise<any> {
+    return await API.post('/auth/verify-forgot-password-otp', { email, otp });
+  }
+
+  async resetPassword(email: string, newPassword: string, confirmPassword?: string): Promise<any> {
+    return await API.post('/auth/reset-password', { email, newPassword, confirmPassword });
+  }
+
   async checkPhone(phone: string): Promise<any> {
-    console.log("API Base URL:", API.defaults.baseURL);
     return await API.post('/auth/check-phone', { phone });
   }
 
   async changePassword(oldPassword: string, newPassword: string): Promise<UserSession> {
-    console.log("API Base URL:", API.defaults.baseURL);
     const response = await API.post('/auth/change-password', { oldPassword, newPassword });
     const { token, user } = response.data.data;
-    
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
-    
     return user;
   }
 
   async logout(): Promise<void> {
     try {
-      console.log("API Base URL:", API.defaults.baseURL);
       await API.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);

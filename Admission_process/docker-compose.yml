@@ -53,7 +53,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/src:/app/src
-      - ./backend/node_modules:/app/node_modules
+      - /app/node_modules
     command: npm run dev
     networks:
       - college-erp-network
@@ -64,14 +64,11 @@ services:
       dockerfile: Dockerfile
     container_name: college_erp_frontend
     ports:
-      - "5173:5173"
+      - "5173:80"
     environment:
       VITE_API_URL: http://localhost:5000/api
     depends_on:
       - backend
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/node_modules:/app/node_modules
     networks:
       - college-erp-network
 

@@ -18,6 +18,7 @@ router.get('/admissions/stats', principalController.getAdmissionsStats);
 router.get('/admissions/list', principalController.listAdmissions);
 router.get('/admissions/pending', principalController.getPendingAdmissions);
 router.get('/admissions/:id/documents/:field', admissionController.viewAdmissionDocument);
+router.get('/students/:studentId/documents', admissionController.getStudentDocuments);
 router.get('/admissions/:id', principalController.getAdmissionById);
 router.put('/admissions/:id/decide', principalController.decideAdmission);
 router.post('/admissions/:id/approve', principalController.decideAdmission);

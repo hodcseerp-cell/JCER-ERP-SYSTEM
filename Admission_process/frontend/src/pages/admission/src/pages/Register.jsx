@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Phone, Loader2, Eye, EyeOff, GraduationCap, User, ArrowRight, ShieldCheck, KeyRound, RefreshCw, X } from 'lucide-react';
+import { Mail, Lock, Phone, Loader2, Eye, EyeOff, GraduationCap, User, ArrowRight, ShieldCheck, CheckCircle2, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../services/api';
 import authService from '../../../../services/auth.service';
@@ -22,6 +22,13 @@ const Register = () => {
     const [phoneError, setPhoneError] = useState('');
     const [passwordError, setPasswordError] = useState('');
     const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+
+    // Email OTP State
+    const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [isEmailVerified, setIsEmailVerified] = useState(false);
+    const [sendingOtp, setSendingOtp] = useState(false);
+    const [verifyingOtp, setVerifyingOtp] = useState(false);
 
     const [admissionsClosed, setAdmissionsClosed] = useState(false);
     const [admissionCycle, setAdmissionCycle] = useState('');
@@ -53,6 +60,10 @@ const Register = () => {
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+        if (e.target.name === 'email') {
+            setIsEmailVerified(false);
+            setOtpSent(false);
+        }
     };
 
     useEffect(() => {
@@ -106,9 +117,57 @@ const Register = () => {
     const registrationTypeParam = searchParams.get('type');
     const isLateral = registrationTypeParam === 'lateral';
 
-    // Handle Form Submit -> Direct Registration
+    // Handle Send OTP
+    const handleSendOtp = async () => {
+        if (!formData.email || !formData.firstName || !formData.lastName) {
+            toast.error('Please enter First Name, Last Name, and Email Address first.');
+            return;
+        }
+
+        setSendingOtp(true);
+        try {
+            const res = await authService.sendRegistrationOtp({
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                phone: formData.phone,
+            });
+            setOtpSent(true);
+            toast.success(res.data?.message || 'A 6-digit OTP code has been sent to your email inbox.');
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Failed to send OTP email. Please check your email address.');
+        } finally {
+            setSendingOtp(false);
+        }
+    };
+
+    // Handle Verify OTP
+    const handleVerifyOtp = async () => {
+        if (!otpCode || otpCode.length !== 6) {
+            toast.error('Please enter a valid 6-digit OTP code.');
+            return;
+        }
+
+        setVerifyingOtp(true);
+        try {
+            await authService.verifyRegistrationOtp(formData.email, otpCode);
+            setIsEmailVerified(true);
+            toast.success('✓ Email address verified successfully!');
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Invalid or expired OTP code.');
+        } finally {
+            setVerifyingOtp(false);
+        }
+    };
+
+    // Handle Form Submit -> Registration
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!isEmailVerified) {
+            toast.error('Please verify your email address via OTP before creating your account.');
+            return;
+        }
 
         const validationResult = registerSchema.safeParse({
             firstName: formData.firstName,
@@ -218,7 +277,7 @@ const Register = () => {
                                     name="firstName"
                                     value={formData.firstName}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400"
+                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="John"
                                     required
                                 />
@@ -233,30 +292,79 @@ const Register = () => {
                                     name="lastName"
                                     value={formData.lastName}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400"
+                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="Doe"
                                     required
                                 />
                             </div>
                         </div>
 
-                        {/* Email */}
+                        {/* Email Address & Send OTP Button */}
                         <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5" htmlFor="email">
-                                <Mail size={14} className="text-slate-400" />
-                                Email Address <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                type="email"
-                                id="email"
-                                name="email"
-                                value={formData.email}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400"
-                                placeholder="student@example.com"
-                                required
-                            />
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5" htmlFor="email">
+                                    <Mail size={14} className="text-slate-400" />
+                                    Email Address <span className="text-red-500">*</span>
+                                </label>
+                                {isEmailVerified && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                        <CheckCircle2 size={12} /> Email Verified
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="email"
+                                    id="email"
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                    disabled={isEmailVerified}
+                                    className="flex-1 px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 disabled:bg-emerald-50/50 disabled:text-emerald-900 shadow-sm focus:shadow-md"
+                                    placeholder="student@example.com"
+                                    required
+                                />
+                                {!isEmailVerified && (
+                                    <button
+                                        type="button"
+                                        onClick={handleSendOtp}
+                                        disabled={sendingOtp || !formData.email}
+                                        className="px-3.5 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-400 font-bold rounded-xl text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer disabled:opacity-50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0"
+                                    >
+                                        {sendingOtp ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
+                                        {otpSent ? 'Resend OTP' : 'Send OTP'}
+                                    </button>
+                                )}
+                            </div>
                         </div>
+
+                        {/* 6-Digit OTP Verification Box */}
+                        {otpSent && !isEmailVerified && (
+                            <div className="p-3.5 bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90 rounded-2xl space-y-2 animate-fade-in transition-all duration-300 shadow-sm">
+                                <label className="text-xs font-bold text-indigo-950 flex items-center justify-between">
+                                    <span>Enter 6-Digit Verification Code</span>
+                                    <span className="text-[10px] text-indigo-600 font-medium">Valid for 5 mins</span>
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="password"
+                                        maxLength={6}
+                                        value={otpCode}
+                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                        placeholder="••••••"
+                                        className="flex-1 px-3 py-2 bg-white border border-indigo-300 rounded-xl text-center font-mono text-lg font-bold tracking-[8px] outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-sm transition-all"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleVerifyOtp}
+                                        disabled={verifyingOtp || otpCode.length !== 6}
+                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-md hover:shadow-indigo-600/30 hover:-translate-y-0.5 active:translate-y-0"
+                                    >
+                                        {verifyingOtp ? <Loader2 size={13} className="animate-spin" /> : 'Verify OTP'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Phone */}
                         <div className="space-y-1">
@@ -274,7 +382,7 @@ const Register = () => {
                                 value={formData.phone}
                                 onChange={handleChange}
                                 maxLength={10}
-                                className={`w-full px-3 py-2 bg-slate-50 border rounded-lg focus:ring-2 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 ${phoneError ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-primary-600 focus:border-primary-600'}`}
+                                className={`w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${phoneError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
                                 placeholder="9876543210"
                                 required
                             />
@@ -295,14 +403,14 @@ const Register = () => {
                                         name="password"
                                         value={formData.password}
                                         onChange={handleChange}
-                                        className={`w-full px-3 py-2 pr-8 bg-slate-50 border rounded-lg focus:ring-2 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 ${passwordError ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-primary-600 focus:border-primary-600'}`}
+                                        className={`w-full px-3 py-2 pr-8 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${passwordError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
                                         placeholder="••••••••"
                                         required
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded hover:bg-slate-100 transition-colors"
                                     >
                                         {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                                     </button>
@@ -320,7 +428,7 @@ const Register = () => {
                                     name="confirmPassword"
                                     value={formData.confirmPassword}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 transition-all text-xs sm:text-sm text-slate-900 placeholder:text-slate-400"
+                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="••••••••"
                                     required
                                 />
@@ -329,8 +437,8 @@ const Register = () => {
 
                         <button
                             type="submit"
-                            disabled={loading || !!phoneError || !!passwordError}
-                            className="w-full py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg shadow-md shadow-primary-600/20 transition-all duration-200 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm mt-1"
+                            disabled={loading || !isEmailVerified || !!phoneError || !!passwordError}
+                            className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-600/25 hover:shadow-xl hover:shadow-primary-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 group/btn disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm mt-2 cursor-pointer"
                         >
                             {loading ? (
                                 <>
@@ -340,7 +448,7 @@ const Register = () => {
                             ) : (
                                 <>
                                     <span>Create Account</span>
-                                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                    <ArrowRight size={16} className="group-hover/btn:translate-x-1.5 transition-transform duration-300" />
                                 </>
                             )}
                         </button>

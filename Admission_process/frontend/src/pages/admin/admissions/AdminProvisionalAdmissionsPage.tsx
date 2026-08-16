@@ -478,7 +478,14 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                               {statusText}
                             </span>
                             <a
-                              href={doc.url}
+                              href={(() => {
+                                const token = localStorage.getItem('token') || '';
+                                if (!doc.url) return '#';
+                                const base = API.defaults.baseURL || '/api';
+                                const cleanPath = doc.url.startsWith('/') ? doc.url : `/${doc.url}`;
+                                const fullUrl = doc.url.startsWith('http') ? doc.url : `${base.replace(/\/api\/?$/, '')}${cleanPath}`;
+                                return token ? `${fullUrl}?token=${encodeURIComponent(token)}` : fullUrl;
+                              })()}
                               target="_blank"
                               rel="noreferrer"
                               className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-155 flex items-center gap-1.5 shadow-sm cursor-pointer hover:scale-103 active:scale-97"

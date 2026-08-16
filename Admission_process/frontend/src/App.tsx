@@ -55,6 +55,7 @@ import { AdminPromotionPage } from './pages/admin/admissions/AdminPromotionPage'
 import AdminNotificationsPage from './pages/admin/communications/AdminNotificationsPage';
 import AdminAnnouncementsPage from './pages/admin/communications/AdminAnnouncementsPage';
 import AdminAnalyticsPage from './pages/admin/analytics/AdminAnalyticsPage';
+import AdminProfilePage from './pages/admin/AdminProfilePage';
 import CredentialManagementPage from './pages/admin/settings/CredentialManagementPage';
 import AdminSystemSettingsPage from './pages/admin/settings/AdminSystemSettingsPage';
 import AdminAuditLogsPage from './pages/admin/settings/AdminAuditLogsPage';
@@ -66,21 +67,28 @@ import ReportGenerationPage from './pages/principal/ReportGenerationPage';
 import PrincipalProfilePage from './pages/principal/PrincipalProfilePage';
 import { PrincipalAdmissionQueuePage } from './pages/principal/PrincipalAdmissionQueuePage';
 import { PrincipalAdmissionReviewPage } from './pages/principal/PrincipalAdmissionReviewPage';
+import GlobalFooter from './components/common/GlobalFooter';
 
 // ─── Fallback Pages ───────────────────────────────────────────────────────────
 const UnauthorizedPage: React.FC = () => (
-  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
-    <h1 className="text-4xl font-extrabold text-rose-500">403 — Access Denied</h1>
-    <p className="text-slate-400 mt-2 text-sm">You do not have permission to view this resource.</p>
-    <a href="/login" className="mt-6 text-indigo-400 hover:underline text-sm font-semibold">Back to Login</a>
+  <div className="min-h-screen bg-slate-950 flex flex-col justify-between items-center p-6 text-center text-white">
+    <div className="my-auto flex flex-col items-center justify-center">
+      <h1 className="text-4xl font-extrabold text-rose-500">403 — Access Denied</h1>
+      <p className="text-slate-400 mt-2 text-sm">You do not have permission to view this resource.</p>
+      <a href="/login" className="mt-6 text-indigo-400 hover:underline text-sm font-semibold">Back to Login</a>
+    </div>
+    <GlobalFooter isDark className="mt-auto z-10 bg-transparent border-transparent" />
   </div>
 );
 
 const NotFoundPage: React.FC = () => (
-  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
-    <h1 className="text-4xl font-extrabold text-indigo-500">404 — Not Found</h1>
-    <p className="text-slate-400 mt-2 text-sm">The page you are looking for does not exist.</p>
-    <a href="/login" className="mt-6 text-indigo-400 hover:underline text-sm font-semibold">Back to Login</a>
+  <div className="min-h-screen bg-slate-950 flex flex-col justify-between items-center p-6 text-center text-white">
+    <div className="my-auto flex flex-col items-center justify-center">
+      <h1 className="text-4xl font-extrabold text-indigo-500">404 — Not Found</h1>
+      <p className="text-slate-400 mt-2 text-sm">The page you are looking for does not exist.</p>
+      <a href="/login" className="mt-6 text-indigo-400 hover:underline text-sm font-semibold">Back to Login</a>
+    </div>
+    <GlobalFooter isDark className="mt-auto z-10 bg-transparent border-transparent" />
   </div>
 );
 
@@ -212,6 +220,7 @@ export const App: React.FC = () => (
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboardPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="profile" element={<AdminProfilePage />} />
 
               {/* Admission queue & review */}
               <Route path="admissions/queue"       element={<AdmissionQueuePage defaultStatus="QUEUE" />} />

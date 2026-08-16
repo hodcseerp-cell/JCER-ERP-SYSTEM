@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
 import sequelize from '../config/database';
 import User from '../models/User';
 import Student from '../models/Student';
@@ -10,6 +11,9 @@ import otpService from '../services/otp.service';
 import emailService from '../services/email.service';
 import Otp from '../models/Otp';
 import SystemConfiguration from '../models/SystemConfiguration';
+import path from 'path';
+import fs from 'fs';
+import * as r2Service from '../services/r2.service';
 import logger from '../utils/logger.util';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -64,7 +68,6 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     }
 
     logger.info(`LOGIN_DEBUG: User found - ID: ${user.id}, Role: ${user.role}, Status: ${user.status}, Email: ${user.email}`);
-    logger.info(`LOGIN_DEBUG: Stored password hash exists: ${!!user.passwordHash} (length: ${user.passwordHash ? user.passwordHash.length : 0})`);
 
     // Check status
     if (user.status !== 'ACTIVE') {
@@ -75,12 +78,48 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     // Compare entered password with stored hash using bcrypt.compare
     const isMatch = await user.comparePassword(password);
-    logger.info(`LOGIN_DEBUG: bcrypt.compare result for email ${user.email}: ${isMatch}`);
 
     if (!isMatch) {
-      logger.warn(`LOGIN_FAILED: Invalid password (bcrypt.compare returned false) for user: ${user.email}`);
+      logger.warn(`LOGIN_FAILED: Invalid password for user: ${user.email}`);
       securityEvents.loginFailure(req, email, 'Invalid password', user.id);
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // ─── ADMIN & PRINCIPAL DAILY OTP CHECK ─────────────────────────────────────
+    const isDailyPrivilegedUser = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'PRINCIPAL';
+    if (isDailyPrivilegedUser) {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const todayVerification = await Otp.findOne({
+        where: {
+          email: normalizedEmail,
+          purpose: 'DAILY_LOGIN',
+          verified: true,
+          createdAt: {
+            [Op.gte]: startOfToday,
+          },
+        },
+        order: [['createdAt', 'DESC']],
+      });
+
+      if (!todayVerification) {
+        logger.info(`DAILY_OTP_REQUIRED: First login of calendar date for ${user.email} (${user.role})`);
+        
+        // Generate and dispatch daily login OTP
+        const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'DAILY_LOGIN');
+        if (genResult.success && genResult.otp) {
+          await emailService.sendDailyLoginOTP(normalizedEmail, `${user.firstName} ${user.lastName}`, genResult.otp, user.role);
+        }
+
+        return res.status(200).json({
+          success: true,
+          requiresDailyOtp: true,
+          email: normalizedEmail,
+          role: user.role,
+          message: `Daily OTP verification required for today's ${user.role.toLowerCase()} login.`,
+        });
+      }
     }
 
     // Generate tokens and store session via AuthService
@@ -201,17 +240,52 @@ export const checkPhone = async (req: Request, res: Response, next: NextFunction
   }
 };
 
+export const verifyDailyOtp = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email address and OTP code are required.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && user.role !== 'PRINCIPAL')) {
+      return res.status(403).json({ error: 'Unauthorized role for daily OTP verification.' });
+    }
+
+    if (user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Your account is inactive or suspended.' });
+    }
+
+    const verifyResult = await otpService.verifyOtp(normalizedEmail, otp, 'DAILY_LOGIN');
+    if (!verifyResult.success) {
+      return res.status(400).json({ error: verifyResult.error || 'Invalid or expired OTP code.' });
+    }
+
+    // Generate tokens and store session via AuthService
+    const { accessToken, refreshToken } = await authService.generateTokens(user);
+    res.cookie('refreshToken', refreshToken, cookieOptions);
+
+    securityEvents.loginSuccess(req, { id: user.id, role: user.role, email: user.email });
+    logger.info(`DAILY_OTP_SUCCESS: Daily login verified for ${user.email} (${user.role})`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        token: accessToken,
+        user: await getUserPayload(user),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 // ─── EMAIL OTP: REGISTRATION ENDPOINTS ───────────────────────────────────────
 
 export const sendRegistrationOtp = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    if (process.env.EMAIL_OTP_ENABLED !== 'true') {
-      return res.status(200).json({
-        success: true,
-        message: 'OTP verification is disabled. You can register directly.',
-      });
-    }
-
     const { firstName, lastName, email, phone } = req.body;
 
     if (!email || !firstName || !lastName) {
@@ -224,8 +298,10 @@ export const sendRegistrationOtp = async (req: Request, res: Response, next: Nex
       return res.status(403).json({ error: 'Admissions are currently closed. Please contact the college office for further information.' });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Check email uniqueness
-    const existingEmail = await User.findOne({ where: { email: email.trim().toLowerCase() } });
+    const existingEmail = await User.findOne({ where: { email: normalizedEmail } });
     if (existingEmail) {
       return res.status(409).json({ error: 'An account with this email address already exists.' });
     }
@@ -239,14 +315,14 @@ export const sendRegistrationOtp = async (req: Request, res: Response, next: Nex
     }
 
     // Generate and save OTP
-    const genResult = await otpService.generateAndSaveOtp(email, 'REGISTER');
+    const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'REGISTER');
     if (!genResult.success || !genResult.otp) {
       return res.status(429).json({ error: genResult.error || 'Failed to generate OTP.' });
     }
 
     // Send OTP email
     const studentName = `${firstName} ${lastName}`.trim();
-    const emailSent = await emailService.sendRegistrationOTP(email, studentName, genResult.otp);
+    const emailSent = await emailService.sendRegistrationOTP(normalizedEmail, studentName, genResult.otp);
 
     if (!emailSent) {
       return res.status(500).json({ error: 'Failed to send OTP email. Please verify your email address.' });
@@ -263,13 +339,6 @@ export const sendRegistrationOtp = async (req: Request, res: Response, next: Nex
 
 export const verifyRegistrationOtp = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    if (process.env.EMAIL_OTP_ENABLED !== 'true') {
-      return res.status(200).json({
-        success: true,
-        message: 'OTP verification is disabled.',
-      });
-    }
-
     const { email, otp } = req.body;
 
     if (!email || !otp) {
@@ -319,7 +388,21 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     const normalizedEmail = email.trim().toLowerCase();
 
+    // Enforce Backend OTP verification check before allowing registration
+    if (process.env.EMAIL_OTP_ENABLED !== 'false') {
+      const verifiedOtp = await Otp.findOne({
+        where: {
+          email: normalizedEmail,
+          purpose: 'REGISTER',
+          verified: true,
+        },
+        order: [['updatedAt', 'DESC']],
+      });
 
+      if (!verifiedOtp) {
+        return res.status(403).json({ error: 'Email verification required before registration. Please verify your email via OTP code.' });
+      }
+    }
 
     // Check email uniqueness
     const existing = await User.findOne({ where: { email: normalizedEmail } });
@@ -355,6 +438,9 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       registrationType: finalRegType,
     });
 
+    // Send registration successful email notification
+    await emailService.sendRegistrationSuccessEmail(normalizedEmail, `${firstName} ${lastName}`, finalRegType);
+
     // Generate tokens and return login payload
     const { accessToken, refreshToken: newRefreshToken } = await authService.generateTokens(newUser);
     res.cookie('refreshToken', newRefreshToken, cookieOptions);
@@ -376,12 +462,6 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
 export const sendForgotPasswordOtp = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    if (process.env.EMAIL_OTP_ENABLED !== 'true') {
-      return res.status(400).json({
-        error: 'Password recovery is temporarily unavailable. Please contact the administrator.',
-      });
-    }
-
     const { email } = req.body;
 
     if (!email) {
@@ -390,29 +470,20 @@ export const sendForgotPasswordOtp = async (req: Request, res: Response, next: N
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Check if user exists
+    // Account enumeration protection: Return generic success response whether account exists or not
     const user = await User.findOne({ where: { email: normalizedEmail } });
-    if (!user) {
-      return res.status(404).json({ error: 'No registered student account found with this email address.' });
-    }
-
-    // Generate OTP
-    const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'FORGOT_PASSWORD');
-    if (!genResult.success || !genResult.otp) {
-      return res.status(429).json({ error: genResult.error || 'Failed to generate OTP.' });
-    }
-
-    // Send email using Nodemailer Gmail SMTP
-    const studentName = `${user.firstName} ${user.lastName}`.trim();
-    const emailSent = await emailService.sendForgotPasswordOTP(normalizedEmail, studentName, genResult.otp);
-
-    if (!emailSent) {
-      return res.status(500).json({ error: 'Failed to send password reset OTP email. Please try again.' });
+    if (user && user.status === 'ACTIVE') {
+      const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'FORGOT_PASSWORD');
+      if (genResult.success && genResult.otp) {
+        await emailService.sendForgotPasswordOTP(normalizedEmail, `${user.firstName} ${user.lastName}`, genResult.otp, user.role);
+      }
+    } else {
+      logger.info(`FORGOT_PASSWORD_REQUEST: Handled with enumeration protection for ${normalizedEmail}`);
     }
 
     return res.status(200).json({
       success: true,
-      message: 'Password reset OTP has been sent to your email address.',
+      message: 'If an account exists for this email address, a verification code has been sent to your email.',
     });
   } catch (error) {
     return next(error);
@@ -421,12 +492,6 @@ export const sendForgotPasswordOtp = async (req: Request, res: Response, next: N
 
 export const verifyForgotPasswordOtp = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    if (process.env.EMAIL_OTP_ENABLED !== 'true') {
-      return res.status(400).json({
-        error: 'Password recovery is temporarily unavailable. Please contact the administrator.',
-      });
-    }
-
     const { email, otp } = req.body;
 
     if (!email || !otp) {
@@ -449,12 +514,6 @@ export const verifyForgotPasswordOtp = async (req: Request, res: Response, next:
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    if (process.env.EMAIL_OTP_ENABLED !== 'true') {
-      return res.status(400).json({
-        error: 'Password recovery is temporarily unavailable. Please contact the administrator.',
-      });
-    }
-
     const { email, newPassword, confirmPassword } = req.body;
 
     if (!email || !newPassword) {
@@ -540,6 +599,101 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
     return res.status(200).json({
       success: true,
       message: 'Password changed successfully',
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateProfile = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const authReq = req as any;
+    const userId = authReq.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { phone, firstName, lastName } = req.body;
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const updateData: any = {};
+    if (phone !== undefined) updateData.phone = phone;
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+
+    await user.update(updateData);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile details updated successfully.',
+      data: {
+        user: await getUserPayload(user),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const uploadProfileImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const authReq = req as any;
+    const userId = authReq.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'No image file uploaded.' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    let imageUrl = '';
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const r2Key = `avatars/${userId}_${Date.now()}${ext}`;
+
+    try {
+      if (process.env.R2_BUCKET_NAME && process.env.R2_ACCESS_KEY_ID) {
+        await r2Service.uploadFile(req.file.buffer, r2Key, req.file.mimetype);
+        imageUrl = r2Service.resolveFileUrl(r2Key);
+      } else {
+        const avatarsDir = path.join(process.cwd(), 'uploads', 'avatars');
+        if (!fs.existsSync(avatarsDir)) {
+          fs.mkdirSync(avatarsDir, { recursive: true });
+        }
+        const localFileName = `${userId}_${Date.now()}${ext}`;
+        const localDest = path.join(avatarsDir, localFileName);
+        fs.writeFileSync(localDest, req.file.buffer);
+        imageUrl = `/uploads/avatars/${localFileName}`;
+      }
+    } catch (r2Err) {
+      logger.warn('[ProfileImageUpload] Fallback to local uploads/avatars static file:', r2Err);
+      const avatarsDir = path.join(process.cwd(), 'uploads', 'avatars');
+      if (!fs.existsSync(avatarsDir)) {
+        fs.mkdirSync(avatarsDir, { recursive: true });
+      }
+      const localFileName = `${userId}_${Date.now()}${ext}`;
+      const localDest = path.join(avatarsDir, localFileName);
+      fs.writeFileSync(localDest, req.file.buffer);
+      imageUrl = `/uploads/avatars/${localFileName}`;
+    }
+
+    await user.update({ profileImage: imageUrl });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile picture updated successfully.',
+      data: {
+        profileImage: imageUrl,
+        user: await getUserPayload(user),
+      },
     });
   } catch (error) {
     return next(error);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, GraduationCap, School, Layers, Moon, Sun } from 'lucide-react';
+import GlobalFooter from '../../components/common/GlobalFooter';
 
 interface PublicConfig {
   collegeName: string;
@@ -245,9 +246,7 @@ export const AdmissionTypeSelection: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className={`py-6 border-t text-center text-xs font-semibold ${isDark ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-slate-100 border-[#E2E8F0] text-slate-500'}`}>
-        <p>© {new Date().getFullYear()} {config.collegeName}. All rights reserved.</p>
-      </footer>
+      <GlobalFooter isDark={isDark} />
 
     </div>
   );

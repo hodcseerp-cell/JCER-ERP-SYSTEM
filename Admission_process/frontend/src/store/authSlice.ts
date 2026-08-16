@@ -59,8 +59,14 @@ const authSlice = createSlice({
       state.token = null;
       state.error = null;
     },
+    updateUser(state, action: PayloadAction<Partial<UserSession>>) {
+      if (state.user) {
+        state.user = { ...state.user, ...action.payload };
+        localStorage.setItem('user', JSON.stringify(state.user));
+      }
+    },
   },
 });
 
-export const { loginStart, loginSuccess, loginFailure, logout } = authSlice.actions;
+export const { loginStart, loginSuccess, loginFailure, logout, updateUser } = authSlice.actions;
 export default authSlice.reducer;

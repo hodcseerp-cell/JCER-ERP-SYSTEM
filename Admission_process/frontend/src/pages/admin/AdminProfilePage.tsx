@@ -10,15 +10,16 @@ import {
   Lock,
   Camera,
   Building,
-  Loader2
+  Loader2,
+  Shield
 } from 'lucide-react';
 import API from '../../services/api';
 
-export const PrincipalProfilePage: React.FC = () => {
+export const AdminProfilePage: React.FC = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   
-  const [phone, setPhone] = useState(user?.phone || '9448693987');
+  const [phone, setPhone] = useState(user?.phone || '9980979654');
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -115,7 +116,7 @@ export const PrincipalProfilePage: React.FC = () => {
   };
 
   const getAvatarUrl = (url?: string | null) => {
-    if (!url) return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&fit=crop';
+    if (!url) return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&fit=crop';
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
     const base = API.defaults.baseURL || '/api';
     const host = base.replace(/\/api\/?$/, '');
@@ -143,7 +144,7 @@ export const PrincipalProfilePage: React.FC = () => {
             <div className="relative">
               <img
                 src={getAvatarUrl(user?.profileImage)}
-                alt="Principal"
+                alt="Administrator"
                 className="w-28 h-28 rounded-[28px] object-cover border-4 border-white dark:border-neutral-800 shadow-md"
               />
               <button 
@@ -162,14 +163,14 @@ export const PrincipalProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <span className="px-3 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-black uppercase">
-                {user?.role || 'PRINCIPAL'}
+              <span className="px-3 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-black uppercase tracking-wider">
+                ADMINISTRATOR
               </span>
               <h3 className="text-lg font-black text-neutral-900 dark:text-white mt-2">
-                {user?.name || 'Dr. S.V. Gorbal'}
+                {user?.name || 'Arihant Desai'}
               </h3>
               <p className="text-xs text-neutral-400 font-bold mt-0.5">
-                College Administrator / Dean
+                Administrator
               </p>
             </div>
           </div>
@@ -187,7 +188,7 @@ export const PrincipalProfilePage: React.FC = () => {
               <Mail className="w-4 h-4 text-neutral-400 flex-shrink-0" />
               <div>
                 <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</p>
-                <p className="font-bold text-neutral-800 dark:text-neutral-200">{user?.email || 'arihantdesai47@gmail.com'}</p>
+                <p className="font-bold text-neutral-800 dark:text-neutral-200">{user?.email || 'arihantdesai483@gmail.com'}</p>
               </div>
             </div>
 
@@ -279,4 +280,4 @@ export const PrincipalProfilePage: React.FC = () => {
   );
 };
 
-export default PrincipalProfilePage;
+export default AdminProfilePage;

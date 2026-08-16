@@ -17,19 +17,51 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'prompt',
-        includeAssets: ['favicon.ico', 'logo.png', 'college-view.jpg', 'offline.html'],
+        includeAssets: ['favicon.ico', 'logo.png', 'college-view.jpg', 'offline.html', 'pwa-192x192.png', 'pwa-512x512.png', 'icons/icon-192.png', 'icons/icon-512.png'],
         manifest: {
           name: 'JCER Student Admission Portal',
           short_name: 'JCER Admission',
-          description: 'Progressive Web App for Jain College of Engineering and Research Student Admission',
-          theme_color: '#1241a1',
-          background_color: '#ffffff',
+          description: 'Progressive Web App for Jain College of Engineering & Research Student Admission',
+          start_url: '/admission/login',
+          scope: '/',
           display: 'standalone',
           orientation: 'portrait-primary',
+          background_color: '#ffffff',
+          theme_color: '#1241a1',
           icons: [
             {
-              src: '/logo.png',
-              sizes: '192x192 512x512',
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
+            },
+            {
+              src: '/icons/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icons/icon-512.png',
+              sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
             }
@@ -43,6 +75,11 @@ export default defineConfig(({ mode }) => {
               label: 'JCER Campus View'
             }
           ]
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+          navigateFallback: 'index.html'
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,woff,woff2,ttf,eot}'],

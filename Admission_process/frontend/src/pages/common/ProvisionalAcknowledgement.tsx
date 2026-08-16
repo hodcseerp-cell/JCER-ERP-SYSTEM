@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import GlobalFooter from '../../components/common/GlobalFooter';
 
 export const ProvisionalAcknowledgement = () => {
   const { id } = useParams();
@@ -234,6 +235,7 @@ export const ProvisionalAcknowledgement = () => {
         <p>This is a computer-generated provisional admission acknowledgement and does not require a physical stamp unless requested.</p>
       </div>
 
+      <GlobalFooter className="mt-8 border-t border-slate-200/80 bg-white print:hidden" />
     </div>
   );
 };

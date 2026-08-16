@@ -7,7 +7,7 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm install && \
-    npm install -g ts-node
+    npm install -g ts-node tsx
 
 # Copy source code
 COPY . .

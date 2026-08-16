@@ -11,9 +11,11 @@ import SystemConfiguration from '../models/SystemConfiguration';
 import ProvisionalAdmission from '../models/ProvisionalAdmission';
 import ProvisionalAdmissionSemesterRecord from '../models/ProvisionalAdmissionSemesterRecord';
 import ProvisionalAdmissionDocument from '../models/ProvisionalAdmissionDocument';
+import AuditLog from '../models/AuditLog';
 import * as r2 from '../services/r2.service';
 import { buildR2Folder } from '../utils/r2Key.util';
 import logger from '../utils/logger.util';
+import emailService from '../services/email.service';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 // Mapped document display names for R2 key generation
@@ -295,8 +297,8 @@ export const saveProvisionalStep2 = async (req: AuthenticatedRequest, res: Respo
       success: true,
       message: 'Lower examination records saved successfully.'
     });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+  } catch (err) {
+    return next(err);
   }
 };
 
@@ -322,56 +324,62 @@ export const uploadProvisionalDocument = async (req: AuthenticatedRequest, res: 
     }
 
     if (application.status !== 'DRAFT' && application.status !== 'CORRECTION_REQUIRED') {
-      return res.status(400).json({ error: 'Application is not editable.' });
+      return res.status(400).json({ error: 'Application is not currently in an editable state.' });
     }
 
-    const { folder, academicYear } = await resolveStudentR2Base(userId);
-    const shortYear = academicYear.replace(/-20(\d\d)$/, '-$1');
-    const semFolder = application.semester === 3 ? '3rd-semester' :
-                      application.semester === 5 ? '5th-semester' : '7th-semester';
-
-    // Verify document naming conventions
-    const docNameKey = documentType === 'FEE_RECEIPT' ? 'FEE_RECEIPT' : Number(semesterNumber);
-    const docFileName = PROVISIONAL_DOC_NAMES[docNameKey];
-    if (!docFileName) {
-      return res.status(400).json({ error: 'Invalid document type or semester marks card parameter.' });
-    }
-
-    const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
-    const r2Key = `${folder}/provisional-admission/${shortYear}/${semFolder}/${docFileName}${ext}`;
-
-    // Upload to Cloudflare R2
-    await r2.uploadFromDisk(file.path, r2Key, file.mimetype);
-
-    // Save metadata to database
+    // 1. Find existing document record BEFORE uploading to R2 to get exact target r2Key
     let docRecord = await ProvisionalAdmissionDocument.findOne({
       where: {
         provisionalAdmissionId: application.id,
         documentType,
-        semesterNumber: documentType === 'SEMESTER_MARKS_CARD' ? semesterNumber : null,
+        semesterNumber: documentType === 'SEMESTER_MARKS_CARD' ? Number(semesterNumber) : null,
       }
     });
 
+    let targetR2Key = '';
+
+    if (docRecord && docRecord.r2Key) {
+      // CRITICAL RULE: Reuse the exact SAME r2Key for replacement so R2 overwrites in place
+      targetR2Key = docRecord.r2Key;
+    } else {
+      // Construct canonical R2 key for first-time upload
+      const { folder, academicYear } = await resolveStudentR2Base(userId);
+      const shortYear = academicYear.replace(/-20(\d\d)$/, '-$1');
+      const semFolder = application.semester === 3 ? '3rd-semester' :
+                        application.semester === 5 ? '5th-semester' : '7th-semester';
+
+      const docNameKey = documentType === 'FEE_RECEIPT' ? 'FEE_RECEIPT' : Number(semesterNumber);
+      const docFileName = PROVISIONAL_DOC_NAMES[docNameKey];
+      if (!docFileName) {
+        return res.status(400).json({ error: 'Invalid document type or semester marks card parameter.' });
+      }
+
+      const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
+      targetR2Key = `${folder}/provisional-admission/${shortYear}/${semFolder}/${docFileName}${ext}`;
+    }
+
+    // 2. Upload replacement/new file to Cloudflare R2 at targetR2Key (overwrite in place)
+    await r2.uploadFromDisk(file.path, targetR2Key, file.mimetype);
+
+    const isReplacement = !!docRecord;
+    const oldFileName = docRecord ? docRecord.originalFileName : null;
+
+    // 3. Update DB record or create new
     if (docRecord) {
-      const oldKey = docRecord.r2Key;
       await docRecord.update({
-        r2Key,
+        r2Key: targetR2Key,
         originalFileName: file.originalname,
         mimeType: file.mimetype,
         fileSize: file.size,
         verificationStatus: 'PENDING',
         verificationRemarks: 'CORRECTED',
       });
-      // Delete old file from R2 if keys are different
-      if (oldKey !== r2Key) {
-        await r2.deleteFile(oldKey).catch(() => {});
-      }
     } else {
       docRecord = await ProvisionalAdmissionDocument.create({
         provisionalAdmissionId: application.id,
         documentType,
-        semesterNumber: documentType === 'SEMESTER_MARKS_CARD' ? semesterNumber : null,
-        r2Key,
+        semesterNumber: documentType === 'SEMESTER_MARKS_CARD' ? Number(semesterNumber) : null,
+        r2Key: targetR2Key,
         originalFileName: file.originalname,
         mimeType: file.mimetype,
         fileSize: file.size,
@@ -379,14 +387,33 @@ export const uploadProvisionalDocument = async (req: AuthenticatedRequest, res: 
       });
     }
 
-    // Clean up multer local file
+    // 4. Record Audit Log for document replacement/upload
+    await AuditLog.create({
+      userId,
+      action: isReplacement ? 'REPLACE_DOCUMENT_CORRECTION' : 'UPLOAD_PROVISIONAL_DOCUMENT',
+      ipAddress: req.ip || null,
+      userAgent: req.get('user-agent') || null,
+      details: {
+        documentId: docRecord.id,
+        provisionalAdmissionId: application.id,
+        documentType,
+        semesterNumber: semesterNumber || null,
+        oldFileName,
+        newFileName: file.originalname,
+        r2Key: targetR2Key,
+        replacedAt: new Date(),
+      }
+    }).catch((auditErr: any) => logger.warn('[AuditLog] Failed to log document replacement:', auditErr));
+
+    // Clean up multer temp local file
     if (fs.existsSync(file.path)) {
       fs.unlinkSync(file.path);
     }
 
-    const signedUrl = r2.getSignedUrlSync(r2Key);
+    const signedUrl = r2.getSignedUrlSync(targetR2Key);
     return res.status(200).json({
       success: true,
+      message: isReplacement ? 'Document replaced successfully.' : 'Document uploaded successfully.',
       data: {
         document: docRecord,
         url: signedUrl,
@@ -476,6 +503,23 @@ export const submitProvisionalAdmission = async (req: AuthenticatedRequest, res:
       courseSnapshot: 'Bachelor of Engineering (B.E.)',
       submittedAt: new Date(),
     });
+
+    // Safely send email notification for Provisional Admission
+    try {
+      const user = await User.findByPk(userId);
+      if (user) {
+        const submissionDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        await emailService.sendProvisionalSubmittedNotification(user.email, {
+          studentName,
+          provisionalAdmissionNumber: application.provisionalAdmissionNumber,
+          semester: `${application.semester}th Semester`,
+          academicYear: application.academicYear || '2026-2027',
+          submissionDate,
+        });
+      }
+    } catch (emailErr) {
+      logger.error('Failed to send provisional admission submitted email:', emailErr);
+    }
 
     return res.status(200).json({
       success: true,
@@ -751,6 +795,47 @@ export const processProvisionalAction = async (req: AuthenticatedRequest, res: R
       });
     } else {
       return res.status(400).json({ error: 'Invalid review action.' });
+    }
+
+    // Dispatch safe email notification to student for Provisional Admission review action
+    try {
+      const studentProfile = await Student.findByPk(application.studentId, {
+        include: [{ model: User, as: 'user' }]
+      });
+      if (studentProfile && studentProfile.user) {
+        const studentName = `${studentProfile.user.firstName || ''} ${studentProfile.user.lastName || ''}`.trim();
+        const studentEmail = studentProfile.user.email;
+
+        if (action === 'APPROVE') {
+          await emailService.sendApprovalNotification(studentEmail, {
+            studentName,
+            applicationNumber: application.provisionalAdmissionNumber,
+            applicationType: 'PROVISIONAL_ADMISSION',
+            semester: `${application.semester}th Semester`,
+            academicYear: application.academicYear || '2026-2027',
+          });
+        } else if (action === 'CORRECTION_REQUIRED') {
+          await emailService.sendCorrectionRequiredNotification(studentEmail, {
+            studentName,
+            applicationNumber: application.provisionalAdmissionNumber,
+            applicationType: 'PROVISIONAL_ADMISSION',
+            semester: `${application.semester}th Semester`,
+            academicYear: application.academicYear || '2026-2027',
+            reason: remarks || 'Please correct requested fields.',
+          });
+        } else if (action === 'REJECT') {
+          await emailService.sendRejectionNotification(studentEmail, {
+            studentName,
+            applicationNumber: application.provisionalAdmissionNumber,
+            applicationType: 'PROVISIONAL_ADMISSION',
+            semester: `${application.semester}th Semester`,
+            academicYear: application.academicYear || '2026-2027',
+            rejectionReason: remarks || 'Application rejected during verification.',
+          });
+        }
+      }
+    } catch (emailErr) {
+      logger.error('Failed to send provisional action email notification:', emailErr);
     }
 
     return res.status(200).json({

@@ -6,6 +6,7 @@ import authService from '../../services/auth.service';
 import API from '../../services/api';
 import { RootState } from '../../store';
 import { getAcademicYear } from '../../utils/date.util';
+import { GlobalFooter } from '../common/GlobalFooter';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -37,9 +38,12 @@ import {
   GraduationCap,
   Layers,
   Archive,
-  ArrowUpCircle
+  ArrowUpCircle,
+  Download,
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
+import usePwa from '../../hooks/usePwa';
+import PwaConfirmationModal from '../common/PwaConfirmationModal';
 
 import { filterMenuItems } from '../../utils/feature.util';
 import GlobalSearchModal from '../admin/GlobalSearchModal';
@@ -322,6 +326,8 @@ export const AdminLayout: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileMenuOpen]);
 
+  const { canInstall, handleInstall, triggerRefresh, confirmRefresh, showRefreshModal, setShowRefreshModal } = usePwa();
+
   const handleLogout = () => {
     setProfileMenuOpen(false);
     authService.logout();
@@ -380,9 +386,19 @@ export const AdminLayout: React.FC = () => {
     { name: 'Students', path: '/admin/students' },
   ];
 
+  const getAvatarUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+    const base = API.defaults.baseURL || '/api';
+    const host = base.replace(/\/api\/?$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${host}${cleanPath}`;
+  };
+
   const pageTitles: Record<string, string> = {
     '/admin/dashboard': 'Admin Dashboard',
     '/admin/analytics': 'Analytics',
+    '/admin/profile':   'Admin Profile',
     '/admin/admissions/queue':        'Application Queue',
     '/admin/admissions/resubmitted':  'Resubmitted Applications',
     '/admin/admissions/corrections':  'Correction Requests',
@@ -650,8 +666,12 @@ export const AdminLayout: React.FC = () => {
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
                 className="flex items-center space-x-2 header-dark-btn h-9 pl-1 pr-3 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
               >
-                <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
-                  <Shield className="w-3 h-3" style={{ color: '#ffffff' }} />
+                <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
+                  {user?.profileImage ? (
+                    <img src={getAvatarUrl(user.profileImage)} alt={user?.name || 'Admin'} className="w-full h-full object-cover" />
+                  ) : (
+                    <Shield className="w-3 h-3" style={{ color: '#ffffff' }} />
+                  )}
                 </div>
                 <span className="text-xs font-semibold pr-0.5 hidden md:block">
                   {user?.name?.split(' ')[0] || 'Admin'}
@@ -666,9 +686,36 @@ export const AdminLayout: React.FC = () => {
                     <p className="profile-dropdown-value text-sm font-extrabold">{user?.name || 'Administrator'}</p>
                     <p className="text-[10px] mt-0.5 font-extrabold" style={{ color: '#7C3AED' }}>ADMINISTRATOR</p>
                   </div>
+
+                  <button
+                    onClick={() => { setProfileMenuOpen(false); navigate('/admin/profile'); }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold flex items-center space-x-2.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  >
+                    <User className="w-4 h-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
+                    <span>My Profile</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setProfileMenuOpen(false); handleInstall(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold flex items-center space-x-2.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
+                    <span>Install App</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setProfileMenuOpen(false); triggerRefresh(); }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-bold flex items-center space-x-2.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
+                    <span>Refresh App</span>
+                  </button>
+
+                  <div className="my-1 border-t border-neutral-100 dark:border-neutral-800/30" />
+
                   <button
                     onClick={handleLogout}
-                    className="profile-dropdown-logout w-full text-left px-4 py-3 text-sm font-bold flex items-center space-x-2.5 transition-colors cursor-pointer"
+                    className="profile-dropdown-logout w-full text-left px-4 py-2.5 text-xs font-bold flex items-center space-x-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
                   >
                     <LogOut className="w-4 h-4 flex-shrink-0" />
                     <span>Logout Session</span>
@@ -678,6 +725,12 @@ export const AdminLayout: React.FC = () => {
             </div>
           </div>
         </header>
+
+        <PwaConfirmationModal
+          isOpen={showRefreshModal}
+          onClose={() => setShowRefreshModal(false)}
+          onConfirm={confirmRefresh}
+        />
 
         {/* ── PAGE CONTENT (OUTLET) ── */}
         <main className="flex-1 flex flex-col relative">
@@ -693,6 +746,7 @@ export const AdminLayout: React.FC = () => {
             <Outlet />
           </div>
         </main>
+        <GlobalFooter className="mt-auto relative z-20" />
         <GlobalSearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
       </div>
     </div>
