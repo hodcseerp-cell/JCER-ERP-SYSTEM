@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getAcademicYear } from '../../utils/date.util';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { HeroSection } from '../../components/common/HeroSection';
@@ -433,9 +433,9 @@ export const LandingPage: React.FC = () => {
             © {new Date().getFullYear()} Jain College of Engineering & Research, Belagavi. All rights reserved.
           </p>
           <div className="flex items-center gap-6 font-bold uppercase tracking-wider">
-            <a href="#" className="hover:text-[#2563EB] transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-[#2563EB] transition-colors">Terms of Use</a>
-            <a href="#" className="hover:text-[#2563EB] transition-colors">Support</a>
+            <Link to="/privacy-policy" className="hover:text-[#2563EB] transition-colors">Privacy Policy</Link>
+            <Link to="/terms-of-use" className="hover:text-[#2563EB] transition-colors">Terms of Use</Link>
+            <Link to="/support" className="hover:text-[#2563EB] transition-colors">Support</Link>
           </div>
         </footer>
       </div>

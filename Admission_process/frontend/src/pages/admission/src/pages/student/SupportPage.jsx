@@ -77,7 +77,7 @@ const SupportPage = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phone</p>
-                                <p className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-primary-700 transition-colors">099448693987</p>
+                                <p className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-primary-700 transition-colors">+919980979654</p>
                             </div>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">Click to call directly on mobile</p>

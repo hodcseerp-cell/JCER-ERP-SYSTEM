@@ -22,6 +22,8 @@ import LandingPage from './pages/common/LandingPage';
 import { AdmissionTypeSelection } from './pages/common/AdmissionTypeSelection';
 import { ProvisionalAcknowledgement } from './pages/common/ProvisionalAcknowledgement';
 import ModuleUnavailablePage from './pages/common/ModuleUnavailablePage';
+import PrivacyPolicyPage from './pages/common/PrivacyPolicyPage';
+import TermsOfUsePage from './pages/common/TermsOfUsePage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -164,6 +166,9 @@ export const App: React.FC = () => (
           {/* ── Public ── */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms-of-use" element={<TermsOfUsePage />} />
+          <Route path="/support" element={<AdmissionSupportPage />} />
           <Route path="/admission/type" element={<AdmissionTypeSelection />} />
           <Route path="/admission/acknowledgement/:id" element={<ProvisionalAcknowledgement />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
