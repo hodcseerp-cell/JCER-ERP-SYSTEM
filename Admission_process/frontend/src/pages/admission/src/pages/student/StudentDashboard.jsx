@@ -435,7 +435,7 @@ const DashboardFooterInfo = ({ closingDateIso, feeStatusText, isClosed }) => {
                     </p>
                     <p className="text-base font-bold text-emerald-600 flex items-center gap-1.5">
                         <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse" />
-                        🟢 Admissions Open
+                        Admissions Open
                     </p>
                 </div>
             </div>
