@@ -79,7 +79,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiUrl,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, '/api'),
+          rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/uploads': {
           target: socketUrl,

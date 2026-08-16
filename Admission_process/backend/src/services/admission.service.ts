@@ -1537,11 +1537,8 @@ class AdmissionService {
 
   /** Admin: stats for dashboard */
   async getDashboardStats(): Promise<any> {
-    const cacheKey = 'admin:stats';
-    if (process.env.NODE_ENV !== 'development') {
-      const cached = await redisService.getCache(cacheKey);
-      if (cached) return cached;
-    }
+    // Real-time stats are critical for the admin dashboard queue to prevent stale counts.
+    // Query the database directly to ensure accuracy.
 
     const [
       total,
@@ -1615,9 +1612,6 @@ class AdmissionService {
       recent 
     };
 
-    if (process.env.NODE_ENV !== 'development') {
-      await redisService.setCache(cacheKey, result, 300); // 5 mins TTL
-    }
     return result;
   }
 }
