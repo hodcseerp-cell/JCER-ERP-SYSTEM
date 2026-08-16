@@ -35,6 +35,18 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
+    const ALL_STEP2_FIELDS = ['firstName', 'middleName', 'lastName', 'gender', 'dateOfBirth', 'caste', 'category', 'religion', 'nationality', 'areaType', 'studiedInKarnataka'];
+    const hasFlaggedFieldsInStep2 = ALL_STEP2_FIELDS.some(f => isFieldFlagged(f));
+
+    const isFieldDisabled = (fieldName) => {
+        if (readOnly) return true;
+        if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+        if (hasFlaggedFieldsInStep2) {
+            return !isFieldFlagged(fieldName);
+        }
+        return false;
+    };
+
     const isFieldCorrected = (fieldName) => {
         if (!originalValues) return false;
         if (!isFieldFlagged(fieldName)) return false;
@@ -154,11 +166,11 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 </span>
             </div>
 
-            <fieldset disabled={readOnly} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 p-0 m-0 border-0 w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 p-0 m-0 border-0 w-full">
                 {/* First Name */}
                 <div className={getFieldContainerClass('firstName')}>
                     <label className="text-sm font-medium text-slate-700">First Name (As per SSLC) <span className="text-red-500">*</span></label>
-                    <input required type="text" name="firstName" className={getFieldInputClass('firstName')} value={data.firstName || ''} onChange={handleChange} placeholder="Enter first name" />
+                    <input required disabled={isFieldDisabled('firstName')} type="text" name="firstName" className={getFieldInputClass('firstName')} value={data.firstName || ''} onChange={handleChange} placeholder="Enter first name" />
                     {renderFeedback('firstName')}
                     {!data.firstName && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -168,14 +180,14 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 {/* Middle Name */}
                 <div className={getFieldContainerClass('middleName')}>
                     <label className="text-sm font-medium text-slate-700">Middle Name</label>
-                    <input type="text" name="middleName" className={getFieldInputClass('middleName')} value={data.middleName || ''} onChange={handleChange} placeholder="Enter middle name" />
+                    <input disabled={isFieldDisabled('middleName')} type="text" name="middleName" className={getFieldInputClass('middleName')} value={data.middleName || ''} onChange={handleChange} placeholder="Enter middle name" />
                     {renderFeedback('middleName')}
                 </div>
 
                 {/* Last Name */}
                 <div className={getFieldContainerClass('lastName')}>
                     <label className="text-sm font-medium text-slate-700">Last Name (As per SSLC) <span className="text-red-500">*</span></label>
-                    <input required type="text" name="lastName" className={getFieldInputClass('lastName')} value={data.lastName || ''} onChange={handleChange} placeholder="Enter last name" />
+                    <input required disabled={isFieldDisabled('lastName')} type="text" name="lastName" className={getFieldInputClass('lastName')} value={data.lastName || ''} onChange={handleChange} placeholder="Enter last name" />
                     {renderFeedback('lastName')}
                     {!data.lastName && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -185,7 +197,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 {/* Caste */}
                 <div className={getFieldContainerClass('caste')}>
                     <label className="text-sm font-medium text-slate-700">Caste <span className="text-red-500">*</span></label>
-                    <input required type="text" name="caste" className={getFieldInputClass('caste')} value={data.caste || ''} onChange={handleChange} placeholder="Enter caste" />
+                    <input required disabled={isFieldDisabled('caste')} type="text" name="caste" className={getFieldInputClass('caste')} value={data.caste || ''} onChange={handleChange} placeholder="Enter caste" />
                     {renderFeedback('caste')}
                     {!data.caste && applicationStatus === 'REJECTED' && (
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -197,6 +209,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Gender <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="gender" name="gender" required
+                        disabled={isFieldDisabled('gender')}
                         value={data.gender || ''}
                         onChange={(val) => handleChange({ target: { name: 'gender', value: val } })}
                         placeholder="Select gender..."
@@ -217,6 +230,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Date of Birth <span className="text-red-500">*</span></label>
                     <input
                         required
+                        disabled={isFieldDisabled('dateOfBirth')}
                         type="text"
                         name="dateOfBirth"
                         className={getFieldInputClass('dateOfBirth')}
@@ -236,6 +250,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Category <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="category" name="category" required
+                        disabled={isFieldDisabled('category')}
                         value={data.category || ''}
                         onChange={(val) => handleChange({ target: { name: 'category', value: val } })}
                         placeholder="Select category..."
@@ -264,6 +279,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Religion <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="religion" name="religion" required
+                        disabled={isFieldDisabled('religion')}
                         value={data.religion || ''}
                         onChange={(val) => handleChange({ target: { name: 'religion', value: val } })}
                         placeholder="Select religion..."
@@ -280,6 +296,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Nationality <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="nationality" name="nationality" required
+                        disabled={isFieldDisabled('nationality')}
                         value={data.nationality || ''}
                         onChange={(val) => handleChange({ target: { name: 'nationality', value: val } })}
                         placeholder="Select nationality..."
@@ -300,6 +317,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Area Type <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="areaType" name="areaType" required
+                        disabled={isFieldDisabled('areaType')}
                         value={data.areaType || ''}
                         onChange={(val) => handleChange({ target: { name: 'areaType', value: val } })}
                         placeholder="Select area type..."
@@ -319,6 +337,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <label className="text-sm font-medium text-slate-700">Karnataka Resident (7yrs) <span className="text-red-500">*</span></label>
                     <SelectDropdown
                         id="studiedInKarnataka" name="studiedInKarnataka" required
+                        disabled={isFieldDisabled('studiedInKarnataka')}
                         value={data.studiedInKarnataka !== undefined ? String(data.studiedInKarnataka) : ''}
                         onChange={(val) => handleChange({ target: { name: 'studiedInKarnataka', value: val } })}
                         placeholder="Select..."
@@ -332,7 +351,7 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                     )}
                 </div>
-            </fieldset>
+            </div>
 
             <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mt-4">
                 <p className="text-sm text-red-800 font-medium">

@@ -36,6 +36,18 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
+    const ALL_STEP3_FIELDS = ['fatherName', 'parentMobile', 'occupation', 'motherName', 'motherPhone', 'motherOccupation', 'annualIncome'];
+    const hasFlaggedFieldsInStep3 = ALL_STEP3_FIELDS.some(f => isFieldFlagged(f));
+
+    const isFieldDisabled = (fieldName) => {
+        if (readOnly) return true;
+        if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+        if (hasFlaggedFieldsInStep3) {
+            return !isFieldFlagged(fieldName);
+        }
+        return false;
+    };
+
     const isFieldCorrected = (fieldName) => {
         if (!originalValues) return false;
         if (!isFieldFlagged(fieldName)) return false;
@@ -128,7 +140,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in flex flex-col">
-            <fieldset disabled={readOnly} className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
+            <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             
             {/* Father's Details */}
             <div className="space-y-4">
@@ -145,7 +157,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Father Name */}
                     <div className={getFieldContainerClass('fatherName')}>
                         <label className="text-sm font-medium text-slate-700">Father's Name <span className="text-red-500">*</span></label>
-                        <input required type="text" name="fatherName" className={getFieldInputClass('fatherName')} value={data.fatherName || ''} onChange={handleChange} placeholder="Enter father's name" />
+                        <input required disabled={isFieldDisabled('fatherName')} type="text" name="fatherName" className={getFieldInputClass('fatherName')} value={data.fatherName || ''} onChange={handleChange} placeholder="Enter father's name" />
                         {renderFeedback('fatherName')}
                         {!data.fatherName && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -155,7 +167,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Father Mobile */}
                     <div className={getFieldContainerClass('parentMobile')}>
                         <label className="text-sm font-medium text-slate-700">Father's Mobile No. <span className="text-red-500">*</span></label>
-                        <input required type="tel" name="parentMobile" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('parentMobile')} value={data.parentMobile || data.fatherPhone || ''} onChange={handleChange} placeholder="Enter father's mobile number" />
+                        <input required disabled={isFieldDisabled('parentMobile')} type="tel" name="parentMobile" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('parentMobile')} value={data.parentMobile || data.fatherPhone || ''} onChange={handleChange} placeholder="Enter father's mobile number" />
                         {renderFeedback('parentMobile')}
                         {!(data.parentMobile || data.fatherPhone) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -165,7 +177,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Father Occupation */}
                     <div className={getFieldContainerClass('occupation')}>
                         <label className="text-sm font-medium text-slate-700">Father's Occupation <span className="text-red-500">*</span></label>
-                        <input required type="text" name="occupation" className={getFieldInputClass('occupation')} value={data.occupation || data.fatherOccupation || ''} onChange={handleChange} placeholder="Enter father's occupation" />
+                        <input required disabled={isFieldDisabled('occupation')} type="text" name="occupation" className={getFieldInputClass('occupation')} value={data.occupation || data.fatherOccupation || ''} onChange={handleChange} placeholder="Enter father's occupation" />
                         {renderFeedback('occupation')}
                         {!(data.occupation || data.fatherOccupation) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -183,7 +195,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Mother Name */}
                     <div className={getFieldContainerClass('motherName')}>
                         <label className="text-sm font-medium text-slate-700">Mother's Name <span className="text-red-500">*</span></label>
-                        <input required type="text" name="motherName" className={getFieldInputClass('motherName')} value={data.motherName || ''} onChange={handleChange} placeholder="Enter mother's name" />
+                        <input required disabled={isFieldDisabled('motherName')} type="text" name="motherName" className={getFieldInputClass('motherName')} value={data.motherName || ''} onChange={handleChange} placeholder="Enter mother's name" />
                         {renderFeedback('motherName')}
                         {!data.motherName && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -193,7 +205,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Mother Mobile */}
                     <div className={getFieldContainerClass('motherPhone')}>
                         <label className="text-sm font-medium text-slate-700">Mother's Mobile No. <span className="text-red-500">*</span></label>
-                        <input required type="tel" name="motherPhone" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('motherPhone')} value={data.motherPhone || ''} onChange={handleChange} placeholder="Enter mother's mobile number" />
+                        <input required disabled={isFieldDisabled('motherPhone')} type="tel" name="motherPhone" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('motherPhone')} value={data.motherPhone || ''} onChange={handleChange} placeholder="Enter mother's mobile number" />
                         {renderFeedback('motherPhone')}
                         {!data.motherPhone && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -203,7 +215,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Mother Occupation */}
                     <div className={getFieldContainerClass('motherOccupation')}>
                         <label className="text-sm font-medium text-slate-700">Mother's Occupation <span className="text-red-500">*</span></label>
-                        <input required type="text" name="motherOccupation" className={getFieldInputClass('motherOccupation')} value={data.motherOccupation || ''} onChange={handleChange} placeholder="Enter mother's occupation" />
+                        <input required disabled={isFieldDisabled('motherOccupation')} type="text" name="motherOccupation" className={getFieldInputClass('motherOccupation')} value={data.motherOccupation || ''} onChange={handleChange} placeholder="Enter mother's occupation" />
                         {renderFeedback('motherOccupation')}
                         {!data.motherOccupation && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -223,7 +235,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                             Parent Email ID
                             <span className="text-[11px] font-normal text-slate-400 italic">(Optional)</span>
                         </label>
-                        <input type="email" name="parentEmail" className="input-premium h-11" value={data.parentEmail || data.fatherEmail || ''} onChange={handleChange} placeholder="Enter parent email (optional)" />
+                        <input disabled={readOnly} type="email" name="parentEmail" className="input-premium h-11" value={data.parentEmail || data.fatherEmail || ''} onChange={handleChange} placeholder="Enter parent email (optional)" />
                     </div>
 
                     {/* Annual Income */}
@@ -231,7 +243,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                         <label className="text-sm font-medium text-slate-700">Annual Income (₹) <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                            <input required type="number" min="0" name="annualIncome" inputMode="numeric" className={getFieldInputClass('annualIncome', '!pl-9')} value={data.annualIncome || data.fatherAnnualIncome || ''} onChange={handleChange} placeholder="Enter annual income" />
+                            <input required disabled={isFieldDisabled('annualIncome')} type="number" min="0" name="annualIncome" inputMode="numeric" className={getFieldInputClass('annualIncome', '!pl-9')} value={data.annualIncome || data.fatherAnnualIncome || ''} onChange={handleChange} placeholder="Enter annual income" />
                         </div>
                         {renderFeedback('annualIncome')}
                         {!(data.annualIncome || data.fatherAnnualIncome) && applicationStatus === 'REJECTED' && (
@@ -240,7 +252,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     </div>
                 </div>
             </div>
-            </fieldset>
+            </div>
 
             <div className="pt-4 sm:pt-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sticky bottom-0 bg-white/95 backdrop-blur-md p-3 sm:p-0 -mx-4 -mb-4 sm:mx-0 sm:mb-0 sm:static sm:bg-transparent z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:shadow-none">
                 <button type="button" onClick={onPrev} className="btn-secondary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-5 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold">

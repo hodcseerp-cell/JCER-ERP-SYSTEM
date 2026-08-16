@@ -31,6 +31,18 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
+    const ALL_STEP1_FIELDS = ['admissionType', 'branchId', 'aadhaar', 'cetNumber', 'dcetNumber', 'qualification'];
+    const hasFlaggedFieldsInStep1 = ALL_STEP1_FIELDS.some(f => isFieldFlagged(f));
+
+    const isFieldDisabled = (fieldName) => {
+        if (readOnly) return true;
+        if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+        if (hasFlaggedFieldsInStep1) {
+            return !isFieldFlagged(fieldName);
+        }
+        return false;
+    };
+
     const isFieldCorrected = (fieldName) => {
         if (!originalValues) return false;
         if (!isFieldFlagged(fieldName)) return false;
@@ -215,13 +227,11 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
     const [isCheckingAadhaar, setIsCheckingAadhaar] = useState(false);
     const [aadhaarError, setAadhaarError] = useState('');
     const [isCheckingCet, setIsCheckingCet] = useState(false);
-    const [cetError, setCetError] = useState('');
-
     const isFormDisabled = !readOnly && (loading || isCheckingAadhaar || isCheckingCet || !!aadhaarError || !!cetError);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in">
-            <fieldset disabled={readOnly} className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
+            <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             <div className="flex items-center gap-3 mb-1">
                 <div className="w-1 h-6 bg-primary-600 rounded-full"></div>
                 <h2 className="text-lg font-semibold text-slate-900">Step 1: Admission Details</h2>
@@ -234,6 +244,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                     <SelectDropdown
                         id="admissionType"
                         required
+                        disabled={isFieldDisabled('admissionType')}
                         value={data.admissionType || ''}
                         onChange={(val) => {
                             const updates = { admissionType: val, cetNumber: '', dcetNumber: '' };
@@ -264,6 +275,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                     <SelectDropdown
                         id="branchId"
                         required
+                        disabled={isFieldDisabled('branchId')}
                         value={data.branchId || ''}
                         onChange={(val) => updateData({ branchId: val })}
                         placeholder="Select preferred engineering branch..."
@@ -282,6 +294,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                         <SelectDropdown
                             id="qualification"
                             required
+                            disabled={isFieldDisabled('qualification')}
                             value={data.qualification || ''}
                             onChange={(val) => updateData({ qualification: val })}
                             placeholder="Select qualification..."
@@ -304,6 +317,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                         <div className="relative">
                             <input
                                 required
+                                disabled={isFieldDisabled('cetNumber')}
                                 type="text"
                                 className={getFieldInputClass('cetNumber', 'pr-10')}
                                 value={data.cetNumber || ''}
@@ -333,6 +347,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                     <div className="relative">
                         <input
                             required
+                            disabled={isFieldDisabled('aadhaar')}
                             type="text"
                             maxLength={12}
                             placeholder="Enter 12-digit aadhaar number"
@@ -371,6 +386,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                         <div className="relative">
                             <input
                                 required
+                                disabled={isFieldDisabled('cetNumber')}
                                 type="text"
                                 className={getFieldInputClass('cetNumber', 'pr-10')}
                                 value={data.cetNumber || ''}
@@ -398,6 +414,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                         <div className="relative">
                             <input
                                 required
+                                disabled={isFieldDisabled('dcetNumber')}
                                 type="text"
                                 className={getFieldInputClass('dcetNumber', 'pr-10')}
                                 value={data.dcetNumber || ''}
@@ -418,7 +435,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
                     </div>
                 )}
             </div>
-            </fieldset>
+            </div>
 
             <div className="flex justify-end items-center pt-4 sm:pt-6 border-t border-slate-100 mt-6 sm:mt-8 sticky bottom-0 bg-white/95 backdrop-blur-md p-3 sm:p-0 -mx-4 -mb-4 sm:mx-0 sm:mb-0 sm:static sm:bg-transparent z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:shadow-none">
                 <button 

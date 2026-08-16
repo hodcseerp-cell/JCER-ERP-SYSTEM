@@ -720,7 +720,17 @@ const AdmissionForm = () => {
             const keyMap = { 1: 'admission', 2: 'personal', 3: 'parent', 4: 'address', 5: 'academic', 6: 'documents' };
             const stepKey = keyMap[stepIndex];
             const correctionRequested = stepStatus.correctionRequestedSections || [];
-            return !correctionRequested.includes(stepKey);
+            if (correctionRequested.includes(stepKey)) return false;
+
+            const remarksLower = (stepStatus.adminRemarks || '').toLowerCase();
+            if (stepIndex === 1 && ['admission type', 'preferred branch', 'branch', 'aadhaar', 'qualification', 'cet number', 'dcet number'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 2 && ['first name', 'middle name', 'last name', 'gender', 'birth', 'dob', 'nationality', 'religion', 'caste', 'category', 'area type', 'email', 'mobile number', 'phone'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 3 && ['father', 'mother', 'parent', 'guardian', 'annual income'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 4 && ['address', 'residence', 'pincode', 'city', 'state'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 5 && ['school', 'board', 'passing year', 'register number', 'marks', 'attempts', 'percentage', 'university', 'puc', 'diploma', 'cet', 'dcet'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 6 && ['document', 'upload', 'certificate', 'card', 'photo', 'signature', 'marks card', 'income', 'caste'].some(kw => remarksLower.includes(kw))) return false;
+
+            return true;
         }
         return status !== 'DRAFT' && status !== 'REJECTED';
     };

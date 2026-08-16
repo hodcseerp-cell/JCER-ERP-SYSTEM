@@ -612,6 +612,43 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             });
         })();
 
+        const isDocDisabled = (() => {
+            if (readOnly) return true;
+            if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+
+            const remarkLabels = {
+                photo: ['passport size photo', 'recent passport photo'],
+                signature: ['candidate e-signature', 'e-signature'],
+                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
+                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
+                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
+                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
+                cetScoreCard: ['entrance score card (cet/dcet)'],
+                aadhaar: ['aadhaar card copy'],
+                feesPaidReceipt: ['college fees receipt'],
+                admissionFormFeeReceipt: ['admission form fee receipt'],
+                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
+                incomeCertificate: ['income / gap year certificate', 'income certificate'],
+                studyCertificate: ['domicile / study certificate', '7 years study certificate']
+            };
+
+            const hasFlaggedDocs = REQUIRED_DOCUMENTS.some(d => {
+                if (!adminRemarks) return false;
+                const targetLabels = remarkLabels[d.id] || [];
+                return adminRemarks.split('\n').some(line => {
+                    const lowerLine = line.toLowerCase();
+                    return lowerLine.trim().startsWith('•') && 
+                           targetLabels.some(label => lowerLine.includes(label)) &&
+                           (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
+                });
+            });
+
+            if (hasFlaggedDocs) {
+                return !isOriginalFlagged;
+            }
+            return false;
+        })();
+
         const docRemarks = (() => {
             if (!adminRemarks) return null;
             const lines = adminRemarks.split('\n');
@@ -838,7 +875,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                         type="file"
                         className="hidden"
                         accept={ACCEPTED_MIME}
-                        disabled={isBusy || readOnly}
+                        disabled={isBusy || isDocDisabled}
                         onChange={(e) => handleFileInputChange(e, doc.id)}
                         aria-hidden="true"
                     />
@@ -849,7 +886,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                             <button
                                 type="button"
                                 onClick={() => handleReplaceClick(doc.id)}
-                                disabled={isBusy || readOnly}
+                                disabled={isBusy || isDocDisabled}
                                 className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all select-none text-center disabled:opacity-50"
                             >
                                 <RefreshCw size={13} />
@@ -858,7 +895,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                             <button
                                 type="button"
                                 onClick={() => handleRemoveClick(doc.id)}
-                                disabled={isBusy || readOnly}
+                                disabled={isBusy || isDocDisabled}
                                 className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold transition-all select-none disabled:opacity-50 text-center"
                             >
                                 <Trash2 size={13} />
@@ -873,7 +910,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                                     fileInputRefs.current[doc.id].click();
                                 }
                             }}
-                            disabled={isBusy || readOnly}
+                            disabled={isBusy || isDocDisabled}
                             className={`w-full mt-auto pt-2 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-xs font-semibold transition-all select-none text-center ${
                                 cardState === 'missing'
                                     ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100 hover:border-red-400 border-2'

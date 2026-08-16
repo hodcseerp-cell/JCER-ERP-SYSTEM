@@ -40,6 +40,18 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
+    const ALL_STEP4_FIELDS = ['Address', 'City', 'Taluk', 'DistrictId', 'Pincode', 'permanentAddress', 'permanentCity', 'permanentTaluk', 'permanentDistrictId', 'permanentPincode'];
+    const hasFlaggedFieldsInStep4 = ALL_STEP4_FIELDS.some(f => isFieldFlagged(f));
+
+    const isFieldDisabled = (fieldName) => {
+        if (readOnly) return true;
+        if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+        if (hasFlaggedFieldsInStep4) {
+            return !isFieldFlagged(fieldName);
+        }
+        return false;
+    };
+
     const isFieldCorrected = (fieldName) => {
         if (!originalValues) return false;
         if (!isFieldFlagged(fieldName)) return false;
@@ -191,7 +203,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
 
     return (
         <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in flex flex-col">
-            <fieldset disabled={readOnly} className="space-y-8 flex flex-col p-0 m-0 border-0 w-full">
+            <div className="space-y-8 flex flex-col p-0 m-0 border-0 w-full">
             {/* Current Address */}
             <div className="space-y-5">
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
@@ -208,7 +220,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     {/* Street Address */}
                     <div className={getFieldContainerClass('Address', 'md:col-span-2 lg:col-span-3')}>
                         <label className="text-sm font-medium text-slate-700">Street Address <span className="text-red-500">*</span></label>
-                        <textarea required name="Address" rows="3" className={getFieldInputClass('Address', 'py-3 h-auto min-h-[80px]')} value={data.Address || data.currentAddressLine1 || ''} onChange={handleChange} placeholder="Enter street address" />
+                        <textarea required disabled={isFieldDisabled('Address')} name="Address" rows="3" className={getFieldInputClass('Address', 'py-3 h-auto min-h-[80px]')} value={data.Address || data.currentAddressLine1 || ''} onChange={handleChange} placeholder="Enter street address" />
                         {renderFeedback('Address')}
                         {!(data.Address || data.currentAddressLine1) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -218,7 +230,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     {/* City */}
                     <div className={getFieldContainerClass('City')}>
                         <label className="text-sm font-medium text-slate-700">City / Village <span className="text-red-500">*</span></label>
-                        <input required type="text" name="City" className={getFieldInputClass('City')} value={data.City || data.currentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
+                        <input required disabled={isFieldDisabled('City')} type="text" name="City" className={getFieldInputClass('City')} value={data.City || data.currentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
                         {renderFeedback('City')}
                         {!(data.City || data.currentCity) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -228,7 +240,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     {/* Taluk */}
                     <div className={getFieldContainerClass('Taluk')}>
                         <label className="text-sm font-medium text-slate-700">Taluk <span className="text-red-500">*</span></label>
-                        <input required type="text" name="Taluk" className={getFieldInputClass('Taluk')} value={data.Taluk || ''} onChange={handleChange} placeholder="Enter taluk" />
+                        <input required disabled={isFieldDisabled('Taluk')} type="text" name="Taluk" className={getFieldInputClass('Taluk')} value={data.Taluk || ''} onChange={handleChange} placeholder="Enter taluk" />
                         {renderFeedback('Taluk')}
                         {!data.Taluk && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -238,7 +250,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     {/* District */}
                     <div className={getFieldContainerClass('DistrictId')}>
                         <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                        <input required type="text" name="DistrictId" className={getFieldInputClass('DistrictId')} value={data.DistrictId || ''} onChange={handleChange} placeholder="Enter district" />
+                        <input required disabled={isFieldDisabled('DistrictId')} type="text" name="DistrictId" className={getFieldInputClass('DistrictId')} value={data.DistrictId || ''} onChange={handleChange} placeholder="Enter district" />
                         {renderFeedback('DistrictId')}
                         {!data.DistrictId && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -248,7 +260,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     {/* Pincode */}
                     <div className={getFieldContainerClass('Pincode')}>
                         <label className="text-sm font-medium text-slate-700">Pincode <span className="text-red-500">*</span></label>
-                        <input required type="text" name="Pincode" className={getFieldInputClass('Pincode')} value={data.Pincode || data.currentPincode || ''} onChange={handlePincodeChange} placeholder="Enter pincode" />
+                        <input required disabled={isFieldDisabled('Pincode')} type="text" name="Pincode" className={getFieldInputClass('Pincode')} value={data.Pincode || data.currentPincode || ''} onChange={handlePincodeChange} placeholder="Enter pincode" />
                         {renderFeedback('Pincode')}
                         {!(data.Pincode || data.currentPincode) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-550 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -258,7 +270,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
 
                     <div className="space-y-1.5 p-3 rounded-xl">
                         <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                        <input required type="text" name="currentState" className="input-premium h-11 uppercase" value={data.currentState || ''} onChange={handleChange} placeholder="Enter state" />
+                        <input required disabled={readOnly} type="text" name="currentState" className="input-premium h-11 uppercase" value={data.currentState || ''} onChange={handleChange} placeholder="Enter state" />
                     </div>
                 </div>
             </div>
@@ -289,7 +301,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                         {/* Permanent Address Street */}
                         <div className={getFieldContainerClass('permanentAddress', 'md:col-span-2 lg:col-span-3')}>
                             <label className="text-sm font-medium text-slate-700">Street Address <span className="text-red-500">*</span></label>
-                            <textarea required name="permanentAddress" rows="3" className={getFieldInputClass('permanentAddress', 'py-3 h-auto min-h-[80px]')} value={data.permanentAddress || data.permanentAddressLine1 || ''} onChange={handleChange} placeholder="Enter permanent street address" />
+                            <textarea required disabled={isFieldDisabled('permanentAddress')} name="permanentAddress" rows="3" className={getFieldInputClass('permanentAddress', 'py-3 h-auto min-h-[80px]')} value={data.permanentAddress || data.permanentAddressLine1 || ''} onChange={handleChange} placeholder="Enter permanent street address" />
                             {renderFeedback('permanentAddress')}
                             {!(data.permanentAddress || data.permanentAddressLine1) && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -299,7 +311,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                         {/* Permanent City */}
                         <div className={getFieldContainerClass('permanentCity')}>
                             <label className="text-sm font-medium text-slate-700">City / Village <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentCity" className={getFieldInputClass('permanentCity')} value={data.permanentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
+                            <input required disabled={isFieldDisabled('permanentCity')} type="text" name="permanentCity" className={getFieldInputClass('permanentCity')} value={data.permanentCity || ''} onChange={handleChange} placeholder="Enter city or village" />
                             {renderFeedback('permanentCity')}
                             {!data.permanentCity && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -309,7 +321,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                         {/* Permanent Taluk */}
                         <div className={getFieldContainerClass('permanentTaluk')}>
                             <label className="text-sm font-medium text-slate-700">Taluk <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentTaluk" className={getFieldInputClass('permanentTaluk')} value={data.permanentTaluk || ''} onChange={handleChange} placeholder="Enter permanent taluk" />
+                            <input required disabled={isFieldDisabled('permanentTaluk')} type="text" name="permanentTaluk" className={getFieldInputClass('permanentTaluk')} value={data.permanentTaluk || ''} onChange={handleChange} placeholder="Enter permanent taluk" />
                             {renderFeedback('permanentTaluk')}
                             {!data.permanentTaluk && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -319,7 +331,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                         {/* Permanent District */}
                         <div className={getFieldContainerClass('permanentDistrictId')}>
                             <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentDistrictId" className={getFieldInputClass('permanentDistrictId')} value={data.permanentDistrictId || ''} onChange={handleChange} placeholder="Enter permanent district" />
+                            <input required disabled={isFieldDisabled('permanentDistrictId')} type="text" name="permanentDistrictId" className={getFieldInputClass('permanentDistrictId')} value={data.permanentDistrictId || ''} onChange={handleChange} placeholder="Enter permanent district" />
                             {renderFeedback('permanentDistrictId')}
                             {!data.permanentDistrictId && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -329,7 +341,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                         {/* Permanent Pincode */}
                         <div className={getFieldContainerClass('permanentPincode')}>
                             <label className="text-sm font-medium text-slate-700">Pincode <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentPincode" className={getFieldInputClass('permanentPincode')} value={data.permanentPincode || ''} onChange={handlePincodeChange} placeholder="Enter permanent pincode" />
+                            <input required disabled={isFieldDisabled('permanentPincode')} type="text" name="permanentPincode" className={getFieldInputClass('permanentPincode')} value={data.permanentPincode || ''} onChange={handlePincodeChange} placeholder="Enter permanent pincode" />
                             {renderFeedback('permanentPincode')}
                             {!data.permanentPincode && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
@@ -341,7 +353,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
 
                         <div className="space-y-1.5 p-3 rounded-xl">
                             <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                            <input required type="text" name="permanentState" className="input-premium h-11 uppercase" value={data.permanentState || ''} onChange={handleChange} placeholder="Enter state" />
+                            <input required disabled={readOnly} type="text" name="permanentState" className="input-premium h-11 uppercase" value={data.permanentState || ''} onChange={handleChange} placeholder="Enter state" />
                         </div>
                     </div>
                 )}
@@ -358,7 +370,7 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
                     </div>
                 )}
             </div>
-            </fieldset>
+            </div>
 
             <div className="pt-4 sm:pt-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sticky bottom-0 bg-white/95 backdrop-blur-md p-3 sm:p-0 -mx-4 -mb-4 sm:mx-0 sm:mb-0 sm:static sm:bg-transparent z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:shadow-none">
                 <button type="button" onClick={onPrev} className="btn-secondary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-5 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold">

@@ -14,24 +14,41 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
         if (!adminRemarks) return false;
         const remarksLower = adminRemarks.toLowerCase();
         const matches = {
-            tenthSchool: ['10th school', 'sslc school'],
+            tenthSchool: ['10th school', 'sslc school', 'school name ( sslc )', 'school name (sslc)', 'school name'],
             tenthBoard: ['10th board', 'sslc board'],
-            tenthPassingYear: ['10th year of passing', 'sslc year'],
-            tenthRegisterNumber: ['10th register number', 'sslc register number'],
-            tenthPercentage: ['10th percentage', 'sslc percentage'],
-            diplomaUniversity: ['diploma university'],
+            tenthPassingYear: ['10th year of passing', 'sslc year', '10th year'],
+            tenthRegisterNumber: ['10th register number', 'sslc register number', '10th reg'],
+            tenthPercentage: ['10th percentage', 'sslc percentage', '10th marks', 'sslc marks'],
+            diplomaUniversity: ['diploma university', 'diploma college'],
             diplomaYear: ['diploma year of passing', 'diploma year'],
-            diplomaRegisterNumber: ['diploma register number'],
-            diplomaPercentage: ['diploma percentage'],
-            twelfthSchool: ['12th/puc school', 'puc school'],
-            twelfthStream: ['12th/puc stream', 'puc stream'],
-            twelfthBoard: ['12th/puc board', 'puc board'],
-            twelfthPassingYear: ['12th/puc year of passing', 'puc year'],
-            twelfthRegisterNumber: ['12th/puc register number', 'puc register number'],
-            twelfthPercentage: ['12th/puc percentage', 'puc percentage']
+            diplomaRegisterNumber: ['diploma register number', 'diploma reg'],
+            diplomaPercentage: ['diploma percentage', 'diploma marks'],
+            twelfthSchool: ['12th/puc school', 'puc school', '12th school', 'puc college'],
+            twelfthStream: ['12th/puc stream', 'puc stream', '12th stream'],
+            twelfthBoard: ['12th/puc board', 'puc board', '12th board'],
+            twelfthPassingYear: ['12th/puc year of passing', 'puc year', '12th year'],
+            twelfthRegisterNumber: ['12th/puc register number', 'puc register number', '12th register number', 'puc reg'],
+            twelfthPercentage: ['12th/puc percentage', 'puc percentage', '12th marks', 'puc marks']
         };
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
+    };
+
+    const ALL_STEP5_FIELDS = [
+        'tenthSchool', 'tenthBoard', 'tenthPassingYear', 'tenthRegisterNumber', 'tenthPercentage',
+        'diplomaUniversity', 'diplomaYear', 'diplomaRegisterNumber', 'diplomaPercentage',
+        'twelfthSchool', 'twelfthStream', 'twelfthBoard', 'twelfthPassingYear', 'twelfthRegisterNumber', 'twelfthPercentage'
+    ];
+
+    const hasFlaggedFieldsInStep5 = ALL_STEP5_FIELDS.some(f => isFieldFlagged(f));
+
+    const isFieldDisabled = (fieldName) => {
+        if (readOnly) return true;
+        if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+        if (hasFlaggedFieldsInStep5) {
+            return !isFieldFlagged(fieldName);
+        }
+        return false;
     };
 
     const BOARDS_CONFIG = {
@@ -566,6 +583,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </label>
                     <input
                         required
+                        disabled={isFieldDisabled('tenthPercentage')}
                         type="text"
                         name={field.name}
                         className={`input-premium h-11 ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
@@ -592,7 +610,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in flex flex-col">
-            <fieldset disabled={readOnly} className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
+            <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             {/* SSLC Section */}
             <div>
                 <SectionHeader icon={School} title="SSLC (10th Standard) Details" subtitle="Secondary education academic records" />
@@ -601,7 +619,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-5 pb-5 border-b border-slate-100">
                     <div className={`space-y-1.5 col-span-1 md:col-span-2 lg:col-span-4 p-3 rounded-xl transition-all ${isFieldFlagged('tenthSchool') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                         <label className="text-sm font-medium text-slate-700">School Name ( SSLC) <span className="text-red-500">*</span></label>
-                        <input required type="text" name="sslcSchool" className={`input-premium h-11 uppercase ${isFieldFlagged('tenthSchool') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.sslcSchool || ''} onChange={handleChange} placeholder="Enter your 10th standard school name" />
+                        <input required disabled={isFieldDisabled('tenthSchool')} type="text" name="sslcSchool" className={`input-premium h-11 uppercase ${isFieldFlagged('tenthSchool') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.sslcSchool || ''} onChange={handleChange} placeholder="Enter your 10th standard school name" />
                         {isFieldFlagged('tenthSchool') && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                         )}
@@ -613,6 +631,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <label className="text-sm font-medium text-slate-700">Board <span className="text-red-500">*</span></label>
                         <SelectDropdown
                             id="sslcBoard" name="sslcBoard" required
+                            disabled={isFieldDisabled('tenthBoard')}
                             value={data.sslcBoard || ''}
                             onChange={(val) => handleBoardChange({ target: { name: 'sslcBoard', value: val } })}
                             placeholder="Select board..."
@@ -641,7 +660,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </div>
                     <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('tenthPassingYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                         <label className="text-sm font-medium text-slate-700">Year of Passing <span className="text-red-500">*</span></label>
-                        <input required type="number" name="sslcYear" className={`input-premium h-11 ${isFieldFlagged('tenthPassingYear') ? 'border-red-500' : ''}`} value={data.sslcYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
+                        <input required disabled={isFieldDisabled('tenthPassingYear')} type="number" name="sslcYear" className={`input-premium h-11 ${isFieldFlagged('tenthPassingYear') ? 'border-red-500' : ''}`} value={data.sslcYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
                         {isFieldFlagged('tenthPassingYear') && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                         )}
@@ -651,7 +670,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </div>
                     <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('tenthRegisterNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                         <label className="text-sm font-medium text-slate-700">Register Number <span className="text-red-500">*</span></label>
-                        <input required type="text" name="sslcRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('tenthRegisterNumber') ? 'border-red-500' : ''}`} value={data.sslcRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" {...sslcRegProps} />
+                        <input required disabled={isFieldDisabled('tenthRegisterNumber')} type="text" name="sslcRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('tenthRegisterNumber') ? 'border-red-500' : ''}`} value={data.sslcRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" {...sslcRegProps} />
                         {isFieldFlagged('tenthRegisterNumber') && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                         )}
@@ -662,7 +681,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </div>
                     <div className="space-y-1.5 p-3 rounded-xl">
                         <label className="text-sm font-medium text-slate-700">No. of Attempts <span className="text-red-500">*</span></label>
-                        <input required type="number" min="1" name="sslcAttempts" className="input-premium h-11" value={data.sslcAttempts || ''} onChange={handleChange} placeholder="1" />
+                        <input required disabled={isFieldDisabled('tenthSchool')} type="number" min="1" name="sslcAttempts" className="input-premium h-11" value={data.sslcAttempts || ''} onChange={handleChange} placeholder="1" />
                         {!data.sslcAttempts && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
@@ -722,7 +741,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         <div className={`space-y-1.5 md:col-span-2 lg:col-span-3 p-3 rounded-xl transition-all ${isFieldFlagged('twelfthSchool') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">School / College Name <span className="text-red-500">*</span></label>
-                            <input required type="text" name="pucSchool" className={`input-premium h-11 uppercase ${isFieldFlagged('twelfthSchool') ? 'border-red-500' : ''}`} value={data.pucSchool || ''} onChange={handleChange} placeholder="Enter your 12th standard school/college name" />
+                            <input required disabled={isFieldDisabled('twelfthSchool')} type="text" name="pucSchool" className={`input-premium h-11 uppercase ${isFieldFlagged('twelfthSchool') ? 'border-red-500' : ''}`} value={data.pucSchool || ''} onChange={handleChange} placeholder="Enter your 12th standard school/college name" />
                             {isFieldFlagged('twelfthSchool') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
@@ -734,6 +753,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             <label className="text-sm font-medium text-slate-700">Board</label>
                             <SelectDropdown
                                 id="pucBoard" name="pucBoard"
+                                disabled={isFieldDisabled('twelfthBoard')}
                                 value={data.pucBoard || ''}
                                 onChange={(val) => handleChange({ target: { name: 'pucBoard', value: val } })}
                                 placeholder="Select board..."
@@ -750,14 +770,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('twelfthPassingYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Year of Passing</label>
-                            <input type="number" name="pucYear" className={`input-premium h-11 ${isFieldFlagged('twelfthPassingYear') ? 'border-red-500' : ''}`} value={data.pucYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
+                            <input disabled={isFieldDisabled('twelfthPassingYear')} type="number" name="pucYear" className={`input-premium h-11 ${isFieldFlagged('twelfthPassingYear') ? 'border-red-500' : ''}`} value={data.pucYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
                             {isFieldFlagged('twelfthPassingYear') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('twelfthRegisterNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Register Number</label>
-                            <input type="text" name="pucRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('twelfthRegisterNumber') ? 'border-red-500' : ''}`} value={data.pucRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" {...pucRegProps} />
+                            <input disabled={isFieldDisabled('twelfthRegisterNumber')} type="text" name="pucRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('twelfthRegisterNumber') ? 'border-red-500' : ''}`} value={data.pucRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" {...pucRegProps} />
                             {isFieldFlagged('twelfthRegisterNumber') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
@@ -766,6 +786,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700">Physics Marks (Max 100)</label>
                             <input
+                                disabled={isFieldDisabled('twelfthPercentage')}
                                 type="number"
                                 min="0"
                                 max="100"
@@ -784,6 +805,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700">Chemistry Marks (Max 100)</label>
                             <input
+                                disabled={isFieldDisabled('twelfthPercentage')}
                                 type="number"
                                 min="0"
                                 max="100"
@@ -802,6 +824,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700">Maths Marks (Max 100)</label>
                             <input
+                                disabled={isFieldDisabled('twelfthPercentage')}
                                 type="number"
                                 min="0"
                                 max="100"
@@ -820,6 +843,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium text-slate-700">Biology / Computer Science (Max 100)</label>
                             <input
+                                disabled={isFieldDisabled('twelfthPercentage')}
                                 type="number"
                                 min="0"
                                 max="100"
@@ -858,32 +882,32 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaUniversity') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">University</label>
-                            <input type="text" name="diplomaUniversity" className={`input-premium h-11 uppercase ${isFieldFlagged('diplomaUniversity') ? 'border-red-500' : ''}`} value={data.diplomaUniversity || ''} onChange={handleChange} placeholder="Enter university" />
+                            <input disabled={isFieldDisabled('diplomaUniversity')} type="text" name="diplomaUniversity" className={`input-premium h-11 uppercase ${isFieldFlagged('diplomaUniversity') ? 'border-red-500' : ''}`} value={data.diplomaUniversity || ''} onChange={handleChange} placeholder="Enter university" />
                             {isFieldFlagged('diplomaUniversity') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Year of Passing</label>
-                            <input type="number" name="diplomaYear" className={`input-premium h-11 ${isFieldFlagged('diplomaYear') ? 'border-red-500' : ''}`} value={data.diplomaYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
+                            <input disabled={isFieldDisabled('diplomaYear')} type="number" name="diplomaYear" className={`input-premium h-11 ${isFieldFlagged('diplomaYear') ? 'border-red-500' : ''}`} value={data.diplomaYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
                             {isFieldFlagged('diplomaYear') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaRegisterNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Register Number</label>
-                            <input type="text" name="diplomaRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('diplomaRegisterNumber') ? 'border-red-500' : ''}`} value={data.diplomaRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" />
+                            <input disabled={isFieldDisabled('diplomaRegisterNumber')} type="text" name="diplomaRegisterNumber" className={`input-premium h-11 uppercase ${isFieldFlagged('diplomaRegisterNumber') ? 'border-red-500' : ''}`} value={data.diplomaRegisterNumber || ''} onChange={handleChange} placeholder="Enter register number" />
                             {isFieldFlagged('diplomaRegisterNumber') && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
                             )}
                         </div>
                         <div className="space-y-1.5 p-3 rounded-xl">
                             <label className="text-sm font-medium text-slate-700">Final Year Max Marks</label>
-                            <input type="number" name="diplomaFinalYearMaxMarks" className="input-premium h-11" value={data.diplomaFinalYearMaxMarks || ''} onChange={handleChange} placeholder="Enter final year max marks" />
+                            <input disabled={isFieldDisabled('diplomaPercentage')} type="number" name="diplomaFinalYearMaxMarks" className="input-premium h-11" value={data.diplomaFinalYearMaxMarks || ''} onChange={handleChange} placeholder="Enter final year max marks" />
                         </div>
                         <div className="space-y-1.5 p-3 rounded-xl">
                             <label className="text-sm font-medium text-slate-700">Final Year Obtained</label>
-                            <input type="number" name="diplomaFinalYearObtained" className="input-premium h-11" value={data.diplomaFinalYearObtained || ''} onChange={handleChange} placeholder="Enter final year marks obtained" />
+                            <input disabled={isFieldDisabled('diplomaPercentage')} type="number" name="diplomaFinalYearObtained" className="input-premium h-11" value={data.diplomaFinalYearObtained || ''} onChange={handleChange} placeholder="Enter final year marks obtained" />
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaPercentage') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Percentage (%)</label>
@@ -895,7 +919,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </div>
                 </div>
             )}
-            </fieldset>
+            </div>
 
             <div className="pt-4 sm:pt-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sticky bottom-0 bg-white/95 backdrop-blur-md p-3 sm:p-0 -mx-4 -mb-4 sm:mx-0 sm:mb-0 sm:static sm:bg-transparent z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:shadow-none">
                 <button type="button" onClick={onPrev} className="btn-secondary w-full sm:w-auto min-h-[48px] sm:min-h-[44px] h-11 px-5 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold">
