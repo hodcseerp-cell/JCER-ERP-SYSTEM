@@ -307,7 +307,8 @@ export const LoginPage: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={`e.g. email@example.com`}
-                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-neutral-900 shadow-sm"
+                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-slate-900 light-input-mode shadow-sm"
+                  style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                   required
                 />
               </div>
@@ -340,7 +341,8 @@ export const LoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-neutral-900 shadow-sm"
+                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-slate-900 light-input-mode shadow-sm"
+                  style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                   required
                 />
               </div>
@@ -374,33 +376,33 @@ export const LoginPage: React.FC = () => {
       {/* ─── ADMIN & PRINCIPAL DAILY OTP MODAL ───────────────────────────────── */}
       {showDailyOtpModal && (
         <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
+          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
             
             <button 
               onClick={() => setShowDailyOtpModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
             >
-              <X className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+              <X className="w-4 h-4 text-neutral-600" />
             </button>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
                   <ShieldCheck className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">Daily Login Authentication</h3>
-                  <p className="text-xs text-neutral-500">First login of calendar date for <strong>{pendingRole}</strong> ({pendingEmail})</p>
+                  <h3 className="text-base font-bold text-neutral-900">Daily Login Authentication</h3>
+                  <p className="text-xs text-neutral-600">First login of calendar date for <strong className="text-neutral-900">{pendingRole}</strong> ({pendingEmail})</p>
                 </div>
               </div>
 
-              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-3 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                ⏱ A 6-digit OTP code has been sent via Brevo to <strong>{pendingEmail}</strong>. Once verified, today's verification remains valid for the rest of today.
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 font-medium" style={{ color: '#78350f' }}>
+                ⏱ A 6-digit OTP code has been sent to <strong className="text-amber-950">{pendingEmail}</strong>. Once verified, today's verification remains valid for the rest of today.
               </div>
 
               <form onSubmit={handleVerifyDailyOtpSubmit} className="space-y-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 block">
+                  <label className="text-xs font-bold text-neutral-700 block">
                     Enter 6-Digit Daily OTP
                   </label>
                   <input
@@ -410,7 +412,8 @@ export const LoginPage: React.FC = () => {
                     value={dailyOtp}
                     onChange={(e) => setDailyOtp(e.target.value.replace(/\D/g, ''))}
                     placeholder="123456"
-                    className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-neutral-900 dark:text-white"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 light-input-mode"
+                    style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                   />
                 </div>
 
@@ -419,7 +422,7 @@ export const LoginPage: React.FC = () => {
                     type="button"
                     onClick={handleResendDailyOtp}
                     disabled={resendingDailyOtp || verifyingDailyOtp}
-                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline bg-transparent border-none cursor-pointer disabled:opacity-50"
+                    className="text-xs font-semibold text-indigo-600 hover:underline bg-transparent border-none cursor-pointer disabled:opacity-50"
                   >
                     {resendingDailyOtp ? 'Resending...' : 'Resend Daily OTP'}
                   </button>
@@ -448,23 +451,23 @@ export const LoginPage: React.FC = () => {
       {/* ─── REUSABLE FORGOT PASSWORD MODAL (ALL ROLES) ────────────────────── */}
       {showForgotModal && (
         <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
+          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
             
             <button 
               onClick={() => { if (!forgotLoading) setShowForgotModal(false); }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
             >
-              <X className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+              <X className="w-4 h-4 text-neutral-600" />
             </button>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
                   <KeyRound className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">Password Recovery</h3>
-                  <p className="text-xs text-neutral-500">Secure OTP Password Reset for Student, Admin & Principal</p>
+                  <h3 className="text-base font-bold text-neutral-900">Password Recovery</h3>
+                  <p className="text-xs text-neutral-600">Secure OTP Password Reset for Student, Admin & Principal</p>
                 </div>
               </div>
 
@@ -472,14 +475,15 @@ export const LoginPage: React.FC = () => {
               {forgotStep === 'EMAIL' && (
                 <form onSubmit={handleSendForgotOtp} className="space-y-4 pt-2">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 block">Registered Email Address</label>
+                    <label className="text-xs font-bold text-neutral-700 block">Registered Email Address</label>
                     <input
                       type="email"
                       required
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       placeholder="e.g. name@example.com"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl py-3 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-neutral-900 dark:text-white font-medium"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
+                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                     />
                   </div>
 
@@ -503,12 +507,12 @@ export const LoginPage: React.FC = () => {
               {/* Step 2: Verify OTP */}
               {forgotStep === 'OTP' && (
                 <form onSubmit={handleVerifyForgotOtp} className="space-y-4 pt-2">
-                  <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 rounded-2xl p-3 text-xs text-indigo-900 dark:text-indigo-300">
-                    Enter the 6-digit OTP sent to <strong>{forgotEmail}</strong>.
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-xs text-indigo-950 font-medium" style={{ color: '#1e1b4b' }}>
+                    Enter the 6-digit OTP sent to <strong className="text-indigo-950">{forgotEmail}</strong>.
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 block">Enter 6-Digit Code</label>
+                    <label className="text-xs font-bold text-neutral-700 block">Enter 6-Digit Code</label>
                     <input
                       type="text"
                       required
@@ -516,7 +520,8 @@ export const LoginPage: React.FC = () => {
                       value={forgotOtp}
                       onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
                       placeholder="123456"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-neutral-900 dark:text-white"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 light-input-mode"
+                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                     />
                   </div>
 
@@ -524,7 +529,7 @@ export const LoginPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setForgotStep('EMAIL')}
-                      className="text-xs font-semibold text-neutral-500 hover:underline bg-transparent border-none cursor-pointer"
+                      className="text-xs font-semibold text-neutral-600 hover:underline bg-transparent border-none cursor-pointer"
                     >
                       Change Email
                     </button>
@@ -551,7 +556,7 @@ export const LoginPage: React.FC = () => {
               {forgotStep === 'NEW_PASSWORD' && (
                 <form onSubmit={handleResetPassword} className="space-y-3 pt-2">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 block">New Password</label>
+                    <label className="text-xs font-bold text-neutral-700 block">New Password</label>
                     <input
                       type="password"
                       required
@@ -559,12 +564,13 @@ export const LoginPage: React.FC = () => {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Minimum 8 characters"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-neutral-900 dark:text-white font-medium"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
+                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 block">Confirm New Password</label>
+                    <label className="text-xs font-bold text-neutral-700 block">Confirm New Password</label>
                     <input
                       type="password"
                       required
@@ -572,7 +578,8 @@ export const LoginPage: React.FC = () => {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Re-enter new password"
-                      className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-neutral-900 dark:text-white font-medium"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
+                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                     />
                   </div>
 

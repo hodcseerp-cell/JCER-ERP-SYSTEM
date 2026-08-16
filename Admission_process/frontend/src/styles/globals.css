@@ -258,6 +258,44 @@ svg.dark-input-icon,
   stroke: #0F172A !important;
 }
 
+/* Explicit Light Input Mode overrides for /login and OTP modals */
+.light-input-mode,
+.dark .light-input-mode,
+input.light-input-mode,
+.dark input.light-input-mode,
+.light-input-mode[type="text"],
+.light-input-mode[type="email"],
+.light-input-mode[type="password"],
+.dark .light-input-mode[type="text"],
+.dark .light-input-mode[type="email"],
+.dark .light-input-mode[type="password"] {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+.light-input-mode::placeholder,
+.dark .light-input-mode::placeholder,
+input.light-input-mode::placeholder,
+.dark input.light-input-mode::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+/* Chrome/Safari Autofill override for light inputs */
+.light-input-mode:-webkit-autofill,
+.light-input-mode:-webkit-autofill:hover,
+.light-input-mode:-webkit-autofill:focus,
+.light-input-mode:-webkit-autofill:active,
+.dark .light-input-mode:-webkit-autofill,
+.dark .light-input-mode:-webkit-autofill:hover,
+.dark .light-input-mode:-webkit-autofill:focus,
+.dark .light-input-mode:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a !important;
+  color: #0f172a !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* Maintain status colors for alerts & badges specifically */
 .text-emerald-500, .text-\[\#16A34A\], .dark .text-emerald-400 {
   color: #16a34a !important;
