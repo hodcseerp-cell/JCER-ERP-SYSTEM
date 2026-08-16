@@ -1943,17 +1943,25 @@ const validateUsnAssignment = async (
   const VTU_BRANCH_CODES: Record<string, string> = {
     'CSE': 'CS',
     'CSE-AIML': 'CI',
+    'AIML': 'CI',
+    'AI&ML': 'CI',
+    'AI-ML': 'CI',
     'CV': 'CV',
     'CIVIL': 'CV',
     'CE': 'CV',
     'ECE': 'EC',
     'ME': 'ME',
-    'MECHANICAL': 'ME'
+    'MECHANICAL': 'ME',
+    'ISE': 'IS',
+    'IS': 'IS',
+    'CSE-DS': 'CD',
+    'DS': 'CD',
+    'CSBS': 'CB',
+    'EEE': 'EE',
+    'EE': 'EE'
   };
-  const expectedPrefix = VTU_BRANCH_CODES[admission.branch.code.toUpperCase()];
-  if (!expectedPrefix) {
-    return { error: `Invalid or unsupported branch code: ${admission.branch.code}` };
-  }
+  const normBranch = admission.branch.code.toUpperCase().trim();
+  const expectedPrefix = VTU_BRANCH_CODES[normBranch] || normBranch.substring(0, 2);
   if (expectedPrefix !== usnDeptCode) {
     return { error: `USN department code '${usnDeptCode}' does not match applicant branch '${admission.branch.code}' (expected '${expectedPrefix}').` };
   }
@@ -2058,25 +2066,30 @@ export const bulkAssignUsns = async (
 
       // 2. Claim and lock new USN
       if (cleanUsn) {
-        const registryEntry = await UsnRegistry.findOne({
+        let registryEntry = await UsnRegistry.findOne({
           where: { usn: cleanUsn },
           lock: transaction.LOCK.UPDATE,
           transaction
         });
         if (!registryEntry) {
-          throw new Error(`USN ${cleanUsn} does not exist in the official USN registry.`);
+          // Auto-create registry entry if not pre-seeded — admin-assigned USNs are trusted
+          const studentFullName = admission.studentpersonaldetails
+            ? `${admission.studentpersonaldetails.firstName || ''} ${admission.studentpersonaldetails.lastName || ''}`.trim()
+            : 'Unknown';
+          const deptCode = admission.branch?.code || 'GEN';
+          registryEntry = await UsnRegistry.create({
+            usn: cleanUsn,
+            status: 'CLAIMED',
+            studentName: studentFullName,
+            departmentCode: deptCode,
+            semester: 1,
+          }, { transaction });
+        } else {
+          if (registryEntry.status !== 'AVAILABLE') {
+            throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
+          }
+          await registryEntry.update({ status: 'CLAIMED' }, { transaction });
         }
-        if (registryEntry.status !== 'AVAILABLE') {
-          throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
-        }
-
-        const doubleCheck = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
-        const doubleCheckStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
-        if (doubleCheck || doubleCheckStu) {
-          throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
-        }
-
-        await registryEntry.update({ status: 'CLAIMED' }, { transaction });
       }
 
       await admission.update({ usn: cleanUsn }, { transaction });
@@ -2119,9 +2132,10 @@ export const bulkAssignUsns = async (
 
     await transaction.commit();
     return res.json({ success: true, message: 'All USNs assigned successfully.' });
-  } catch (err) {
+  } catch (err: any) {
     await transaction.rollback();
-    return next(err);
+    console.error('[bulkAssignUsns] Transaction failed:', err.message);
+    return res.status(500).json({ error: err.message || 'USN assignment failed. Changes rolled back.' });
   }
 };
 
@@ -2160,23 +2174,35 @@ export const assignSingleUsn = async (
 
         // 2. Claim and validate new USN
         if (cleanUsn) {
-          const registryEntry = await UsnRegistry.findOne({
+          let registryEntry = await UsnRegistry.findOne({
             where: { usn: cleanUsn },
             lock: transaction.LOCK.UPDATE,
             transaction
           });
           if (!registryEntry) {
-            throw new Error(`USN ${cleanUsn} does not exist in the official USN registry.`);
-          }
-          if (registryEntry.status !== 'AVAILABLE') {
-            throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
-          }
+            // Auto-create registry entry if not pre-seeded — admin-assigned USNs are trusted
+            const studentFullName = admission.studentpersonaldetails
+              ? `${admission.studentpersonaldetails.firstName || ''} ${admission.studentpersonaldetails.lastName || ''}`.trim()
+              : 'Unknown';
+            const deptCode = admission.branch?.code || 'GEN';
+            registryEntry = await UsnRegistry.create({
+              usn: cleanUsn,
+              status: 'CLAIMED',
+              studentName: studentFullName,
+              departmentCode: deptCode,
+              semester: 1,
+            }, { transaction });
+          } else {
+            if (registryEntry.status !== 'AVAILABLE') {
+              throw new Error(`USN ${cleanUsn} is already claimed by another candidate.`);
+            }
 
-          const dupAdm = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
-          const dupStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
-          if (dupAdm || dupStu) throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
+            const dupAdm = await Admission.findOne({ where: { usn: cleanUsn, id: { [Op.ne]: admission.id } }, transaction });
+            const dupStu = await Student.findOne({ where: { usn: cleanUsn, userId: { [Op.ne]: admission.userId } }, transaction });
+            if (dupAdm || dupStu) throw new Error(`USN ${cleanUsn} has already been assigned to another applicant.`);
 
-          await registryEntry.update({ status: 'CLAIMED' }, { transaction });
+            await registryEntry.update({ status: 'CLAIMED' }, { transaction });
+          }
         }
 
         await admission.update({ usn: cleanUsn }, { transaction });
@@ -2411,9 +2437,30 @@ export const validateImportUsns = async (
         continue;
       }
 
-      const branchCodePrefix = admission.branch.code.toUpperCase().substring(0, 2);
-      if (branchCodePrefix !== usnDeptCode) {
-        results.push(buildErrorResult(`USN department code '${usnDeptCode}' does not match branch '${admission.branch.code}'.`));
+      const VTU_BRANCH_CODES: Record<string, string> = {
+        'CSE': 'CS',
+        'CSE-AIML': 'CI',
+        'AIML': 'CI',
+        'AI&ML': 'CI',
+        'AI-ML': 'CI',
+        'CV': 'CV',
+        'CIVIL': 'CV',
+        'CE': 'CV',
+        'ECE': 'EC',
+        'ME': 'ME',
+        'MECHANICAL': 'ME',
+        'ISE': 'IS',
+        'IS': 'IS',
+        'CSE-DS': 'CD',
+        'DS': 'CD',
+        'CSBS': 'CB',
+        'EEE': 'EE',
+        'EE': 'EE'
+      };
+      const normBranch = admission.branch.code.toUpperCase().trim();
+      const expectedDept = VTU_BRANCH_CODES[normBranch] || normBranch.substring(0, 2);
+      if (expectedDept !== usnDeptCode) {
+        results.push(buildErrorResult(`USN department code '${usnDeptCode}' does not match branch '${admission.branch.code}' (expected '${expectedDept}').`));
         continue;
       }
 
@@ -2518,6 +2565,59 @@ export const exportSingleStudentZip = async (
         } catch (err) {
           logger.error(`Error loading document ${fileUrl} for zip:`, err);
         }
+      }
+    }
+
+    // Export provisional admission documents (if any)
+    if (admission.userId) {
+      try {
+        const studentRecord = await Student.findOne({ where: { userId: admission.userId } });
+        if (studentRecord) {
+          const ProvisionalAdmission = (await import('../models/ProvisionalAdmission')).default;
+          const ProvisionalAdmissionDocument = (await import('../models/ProvisionalAdmissionDocument')).default;
+
+          const provApps = await ProvisionalAdmission.findAll({
+            where: { studentId: studentRecord.id },
+            include: [{ model: ProvisionalAdmissionDocument, as: 'documents' }]
+          });
+          for (const app of provApps) {
+            if (app.documents && app.documents.length > 0) {
+              for (const doc of app.documents) {
+                const fileUrl = doc.r2Key;
+                if (fileUrl) {
+                  let fileBuffer: Buffer | null = null;
+                  try {
+                    fileBuffer = await r2.getFile(fileUrl);
+                    if (fileBuffer) {
+                      const ext = path.extname(fileUrl).toLowerCase() || '.jpg';
+                      let docLabel = '';
+                      if (doc.documentType === 'FEE_RECEIPT') {
+                        docLabel = 'CollegeFeeReceipt';
+                      } else if (doc.documentType === 'SEMESTER_MARKS_CARD') {
+                        docLabel = `MarksCard_Sem${doc.semesterNumber}`;
+                      } else {
+                        docLabel = doc.originalFileName || 'ProvisionalDoc';
+                      }
+                      docLabel = docLabel.replace(/\.[^/.]+$/, '');
+                      
+                      const admissionYear = admission.academicYear || '2026-2027';
+                      const shortYear = admissionYear.replace(/-20(\d\d)$/, '-$1');
+                      const semFolder = app.semester === 3 ? '3rd-semester' : app.semester === 5 ? '5th-semester' : '7th-semester';
+                      
+                      const entryPath = `${zipFolderName}/provisional-admission/${shortYear}/${semFolder}/${docLabel}${ext}`;
+                      await zip.addFile(entryPath, fileBuffer);
+                      documentCount++;
+                    }
+                  } catch (err) {
+                    logger.error(`Error loading provisional document ${fileUrl} for zip:`, err);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(`Error loading provisional documents for student ${studentName}:`, err);
       }
     }
 
@@ -2692,6 +2792,61 @@ export const bulkExportDocuments = async (
             }
           } else {
             missingDocsList.push(field);
+          }
+        }
+
+        // Export provisional admission documents (if any)
+        if (adm.userId) {
+          try {
+            const studentRecord = await Student.findOne({ where: { userId: adm.userId } });
+            if (studentRecord) {
+              const ProvisionalAdmission = (await import('../models/ProvisionalAdmission')).default;
+              const ProvisionalAdmissionDocument = (await import('../models/ProvisionalAdmissionDocument')).default;
+
+              const provApps = await ProvisionalAdmission.findAll({
+                where: { studentId: studentRecord.id },
+                include: [{ model: ProvisionalAdmissionDocument, as: 'documents' }]
+              });
+              for (const app of provApps) {
+                if (app.documents && app.documents.length > 0) {
+                  for (const doc of app.documents) {
+                    const fileUrl = doc.r2Key;
+                    if (fileUrl) {
+                      let fileBuffer: Buffer | null = null;
+                      try {
+                        fileBuffer = await r2.getFile(fileUrl);
+                        if (fileBuffer) {
+                          const ext = path.extname(fileUrl).toLowerCase() || '.jpg';
+                          let docLabel = '';
+                          if (doc.documentType === 'FEE_RECEIPT') {
+                            docLabel = 'CollegeFeeReceipt';
+                          } else if (doc.documentType === 'SEMESTER_MARKS_CARD') {
+                            docLabel = `MarksCard_Sem${doc.semesterNumber}`;
+                          } else {
+                            docLabel = doc.originalFileName || 'ProvisionalDoc';
+                          }
+                          docLabel = docLabel.replace(/\.[^/.]+$/, '');
+                          
+                          const yearStr = String(academicYear || '2026-2027');
+                          const shortYear = yearStr.replace(/-20(\d\d)$/, '-$1');
+                          const semFolder = app.semester === 3 ? '3rd-semester' : app.semester === 5 ? '5th-semester' : '7th-semester';
+                          
+                          // ZIP path: [Academic Year]/[Branch]/[Student Name - Application Number]/provisional-admission/[shortYear]/[semFolder]/[docLabel][ext]
+                          const entryPath = `${academicYear}/${branchCode}/${folderName}/provisional-admission/${shortYear}/${semFolder}/${docLabel}${ext}`;
+                          await zip.addFile(entryPath, fileBuffer);
+                          totalDocumentsAdded++;
+                          addedForStudent.push(`Provisional_${semFolder}_${docLabel}`);
+                        }
+                      } catch (err) {
+                        logger.error(`Error loading provisional document ${fileUrl} for bulk ZIP:`, err);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            logger.error(`Error loading provisional documents for student ${studentName}:`, err);
           }
         }
 

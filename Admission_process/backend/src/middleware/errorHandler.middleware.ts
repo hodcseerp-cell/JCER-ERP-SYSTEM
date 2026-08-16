@@ -13,35 +13,34 @@ export const errorHandler = (
   
   // Identify if it's a known operational exception
   const isOperational = err instanceof HttpException;
-  
-  // Mask Sequelize / Database errors
+
+  // Detect raw Sequelize / DB errors that expose SQL internals — these must be sanitized
+  const isSequelizeError = err.name?.startsWith('Sequelize') || !!err.sql;
+
   let message = err.message || 'Internal Server Error';
   let errorResponse: any = { error: message };
 
-  if (!isOperational) {
-    // If it's a Sequelize database error, sanitize the message
-    if (err.name?.startsWith('Sequelize') || err.sql) {
-      logger.error('Database query error:', {
-        correlationId,
-        message: err.message,
-        sql: err.sql,
-        parameters: err.parameters,
-        stack: err.stack,
-      });
-      message = 'A database error occurred. Reference ID: ' + correlationId;
-      errorResponse = { error: 'Internal Server Error', referenceId: correlationId };
-    } else {
-      // General unexpected errors
-      logger.error('Unhandled runtime exception:', {
-        correlationId,
-        message: err.message,
-        stack: err.stack,
-      });
-      message = 'An unexpected error occurred. Reference ID: ' + correlationId;
-      errorResponse = { error: 'Internal Server Error', referenceId: correlationId };
-    }
+  if (isSequelizeError) {
+    // Sanitize Sequelize DB errors — never expose SQL queries or table names
+    logger.error('Database query error:', {
+      correlationId,
+      message: err.message,
+      sql: err.sql,
+      parameters: err.parameters,
+      stack: err.stack,
+    });
+    errorResponse = { error: 'A database error occurred. Please try again.', referenceId: correlationId };
+  } else if (!isOperational) {
+    // Plain Error thrown from controller business logic — safe to expose message
+    logger.error('Controller error:', {
+      correlationId,
+      message: err.message,
+      stack: err.stack,
+    });
+    // Expose the actual error message (e.g. "USN already claimed", "Not found")
+    errorResponse = { error: message };
   } else {
-    // Log operational exceptions as warning/info
+    // Log operational HttpException as warning/info
     logger.warn(`Operational HTTP Exception [${status}]: ${message}`, {
       correlationId,
       path: req.path,
@@ -53,15 +52,12 @@ export const errorHandler = (
     };
   }
 
-  // Include detailed error messages and stack trace in development
+  // Include stack trace in development for debugging
   if (process.env.NODE_ENV !== 'production') {
     errorResponse.stack = err.stack;
     errorResponse.details = (err as any).details || (err as any).errors || undefined;
-    // For database/internal errors in dev, we can expose the actual message
-    if (!isOperational) {
-      errorResponse.error = err.message;
-    }
   }
 
   res.status(status).json(errorResponse);
 };
+

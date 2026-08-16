@@ -97,7 +97,10 @@ export const getMyProvisionalAdmission = async (req: AuthenticatedRequest, res: 
     }
 
     const application = await ProvisionalAdmission.findOne({
-      where: { studentId: student.id },
+      where: { 
+        studentId: student.id,
+        semester: student.semester
+      },
       include: [
         { model: ProvisionalAdmissionSemesterRecord, as: 'semesterRecords' },
         { model: ProvisionalAdmissionDocument, as: 'documents' }
@@ -357,7 +360,7 @@ export const uploadProvisionalDocument = async (req: AuthenticatedRequest, res: 
         mimeType: file.mimetype,
         fileSize: file.size,
         verificationStatus: 'PENDING',
-        verificationRemarks: null,
+        verificationRemarks: 'CORRECTED',
       });
       // Delete old file from R2 if keys are different
       if (oldKey !== r2Key) {
@@ -463,8 +466,10 @@ export const submitProvisionalAdmission = async (req: AuthenticatedRequest, res:
       ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim()
       : 'Student';
 
+    const nextStatus = application.status === 'CORRECTION_REQUIRED' ? 'RESUBMITTED' : 'SUBMITTED';
+
     await application.update({
-      status: 'SUBMITTED',
+      status: nextStatus,
       studentNameSnapshot: studentName,
       usnSnapshot: student.usn,
       branchSnapshot: admission?.branch?.name || null,

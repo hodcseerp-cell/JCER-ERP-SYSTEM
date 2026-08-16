@@ -138,7 +138,28 @@ export const bulkUploadStudents = async (
 
     // Cache departments mapping to speed up verification
     const departments = await Department.findAll();
-    const deptMap = new Map(departments.map(d => [d.code.toUpperCase(), d]));
+    const deptMap = new Map<string, Department>();
+    departments.forEach(d => {
+      deptMap.set(d.code.toUpperCase(), d);
+    });
+    // Support VTU department code aliases (e.g. CI -> CSE-AIML)
+    const VTU_ALIASES: Record<string, string> = {
+      'CI': 'CSE-AIML',
+      'CS': 'CSE',
+      'EC': 'ECE',
+      'CV': 'CV',
+      'ME': 'ME',
+      'IS': 'ISE',
+      'CD': 'CSE-DS',
+      'CB': 'CSBS',
+      'EE': 'EEE'
+    };
+    for (const [vtu, branchCode] of Object.entries(VTU_ALIASES)) {
+      const dept = deptMap.get(branchCode);
+      if (dept && !deptMap.has(vtu)) {
+        deptMap.set(vtu, dept);
+      }
+    }
 
     for (const row of rows) {
       const usn = (row.usn || row.USN || '').toString().trim().toUpperCase();

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { getAcademicYear } from '../../../utils/date.util';
 
 interface USNApplicant {
@@ -17,6 +18,9 @@ interface USNApplicant {
   admissionType: string;
   qualification: string | null;
   applicationStatus: string;
+  applicationType?: string;
+  entrySemester?: number;
+  semester?: number;
   usn: string | null;
   branch: {
     id: string;
@@ -34,6 +38,11 @@ const getFullName = (details: any) => {
   if (!details) return 'N/A';
   const middle = details.middleName ? ` ${details.middleName}` : '';
   return `${details.firstName}${middle} ${details.lastName}`.replace(/\s+/g, ' ').trim();
+};
+
+const getSemesterDisplay = (app: USNApplicant): string => {
+  const sem = app.entrySemester || (app.qualification === 'DIPLOMA' || app.admissionType === 'DCET' || app.applicationType === 'LATERAL_ENTRY' ? 3 : 1);
+  return `${sem}${sem === 1 ? 'st' : sem === 2 ? 'nd' : sem === 3 ? 'rd' : 'th'} Sem`;
 };
 
 export const AdminUsnAllocationPage: React.FC = () => {
@@ -83,7 +92,9 @@ export const AdminUsnAllocationPage: React.FC = () => {
     idx: number;
     name: string;
     appNum: string;
+    semester: string;
     newUsn: string;
+    isChanged: boolean;
     valid: boolean;
     error?: string;
   }[]>([]);
@@ -274,9 +285,30 @@ export const AdminUsnAllocationPage: React.FC = () => {
       // Branch code check
       if (!localErr && branchCode) {
         const usnDept = match[2];
-        const expectedDept = branchCode.toUpperCase().substring(0, 2);
+        const VTU_BRANCH_CODES: Record<string, string> = {
+          'CSE': 'CS',
+          'CSE-AIML': 'CI',
+          'AIML': 'CI',
+          'AI&ML': 'CI',
+          'AI-ML': 'CI',
+          'CV': 'CV',
+          'CIVIL': 'CV',
+          'CE': 'CV',
+          'ECE': 'EC',
+          'ME': 'ME',
+          'MECHANICAL': 'ME',
+          'ISE': 'IS',
+          'IS': 'IS',
+          'CSE-DS': 'CD',
+          'DS': 'CD',
+          'CSBS': 'CB',
+          'EEE': 'EE',
+          'EE': 'EE'
+        };
+        const normBranch = branchCode.toUpperCase().trim();
+        const expectedDept = VTU_BRANCH_CODES[normBranch] || normBranch.substring(0, 2);
         if (expectedDept !== usnDept) {
-          localErr = `Department code '${usnDept}' does not match applicant branch '${branchCode}'`;
+          localErr = `Department code '${usnDept}' does not match applicant branch '${branchCode}' (expected '${expectedDept}')`;
         }
       }
     }
@@ -332,29 +364,48 @@ export const AdminUsnAllocationPage: React.FC = () => {
 
   const pendingCount = actualDraftChanges.length;
 
-  // 8. Open Review and Save Modal (Two-Stage Workflow)
+  // 8. Open Review and Save Modal (Two-Stage Workflow) - Shows all students in current list
   const handleReviewSave = async () => {
     setLoadingList(true);
     try {
       const listToPreview = [];
       let index = 1;
 
-      // Add manual changes to preview
-      for (const [appId, newUsn] of actualDraftChanges) {
-        const applicantInfo = applicants.find(a => a.id === appId);
-        if (applicantInfo) {
-          const localErr = validationErrors[appId];
-          const asyncErr = asyncValidation[appId]?.error;
-          const isValid = !localErr && !asyncErr && asyncValidation[appId]?.valid;
-          listToPreview.push({
-            idx: index++,
-            name: getFullName(applicantInfo.studentpersonaldetails),
-            appNum: applicantInfo.applicationNumber,
-            newUsn: newUsn || '— (Remove Allocation)',
-            valid: !!isValid,
-            error: localErr || asyncErr
-          });
+      // Iterate through all applicants present in the current view/filter
+      for (const applicantInfo of applicants) {
+        const appId = applicantInfo.id;
+        const isChanged = draftChanges[appId] !== undefined && draftChanges[appId] !== applicantInfo.usn;
+        const currentDraftUsn = draftChanges[appId] !== undefined ? draftChanges[appId] : (applicantInfo.usn || '');
+        const localErr = validationErrors[appId];
+        const asyncErr = asyncValidation[appId]?.error;
+
+        let isValid = true;
+        let displayUsn = currentDraftUsn;
+
+        if (isChanged) {
+          if (currentDraftUsn === '') {
+            displayUsn = '— (Remove Allocation)';
+            isValid = true;
+          } else {
+            const hasError = !!(localErr || asyncErr);
+            const isAsyncValid = asyncValidation[appId]?.valid;
+            isValid = !hasError && !!isAsyncValid;
+          }
+        } else if (!currentDraftUsn) {
+          displayUsn = '—';
+          isValid = true;
         }
+
+        listToPreview.push({
+          idx: index++,
+          name: getFullName(applicantInfo.studentpersonaldetails),
+          appNum: applicantInfo.applicationNumber,
+          semester: getSemesterDisplay(applicantInfo),
+          newUsn: displayUsn,
+          isChanged,
+          valid: isValid,
+          error: localErr || asyncErr
+        });
       }
 
       setPreviewList(listToPreview);
@@ -546,37 +597,202 @@ export const AdminUsnAllocationPage: React.FC = () => {
     }
   };
 
-  // 11. Excel Export of Currently Filtered Records
-  const handleExportExcel = () => {
-    const exportRows = applicants.map((app, idx) => ({
-      'SL NO.': (page - 1) * limit + idx + 1,
-      'APPLICATION NUMBER': app.applicationNumber || 'N/A',
-      'STUDENT NAME': getFullName(app.studentpersonaldetails),
-      'USN': draftChanges[app.id] !== undefined ? draftChanges[app.id] : (app.usn || ''),
-    }));
+  // Helper to generate beautifully styled Excel sheets with custom widths, colors and borders
+  const generateStyledExcelFile = async (
+    sheetTitle: string,
+    rows: { slNo: number; appNum: string; name: string; semester: string; usn: string }[],
+    fileName: string
+  ) => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JCER ERP System';
+    workbook.lastModifiedBy = 'Admin';
+    workbook.created = new Date();
+    workbook.modified = new Date();
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'USN Allocations');
-    
-    const branchName = branchId !== 'ALL' ? branches.find(b => b.id === branchId)?.code || 'All' : 'All';
-    const fileName = `USN_Allocations_${branchName}_${entryType}_${academicYear}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    const worksheet = workbook.addWorksheet(sheetTitle, {
+      views: [{ showGridLines: true }]
+    });
+
+    // Define columns with generous initial widths so text never overlaps or clips
+    worksheet.columns = [
+      { header: 'SL NO.', key: 'slNo', width: 12 },
+      { header: 'APPLICATION NUMBER', key: 'appNum', width: 32 },
+      { header: 'STUDENT NAME', key: 'name', width: 36 },
+      { header: 'CURRENT SEMESTER', key: 'semester', width: 22 },
+      { header: 'USN', key: 'usn', width: 24 },
+    ];
+
+    // Populate data rows
+    rows.forEach(r => {
+      worksheet.addRow({
+        slNo: r.slNo,
+        appNum: r.appNum,
+        name: r.name,
+        semester: r.semester,
+        usn: r.usn,
+      });
+    });
+
+    // Style Header Row (Row 1) - Dark Slate Navy theme with white bold text
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        name: 'Segoe UI',
+        size: 11,
+        bold: true,
+        color: { argb: 'FFFFFFFF' } // Crisp White
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0F172A' } // Deep Slate / Navy (#0F172A)
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: false
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF334155' } },
+        left: { style: 'thin', color: { argb: 'FF334155' } },
+        bottom: { style: 'medium', color: { argb: 'FF020617' } },
+        right: { style: 'thin', color: { argb: 'FF334155' } },
+      };
+    });
+
+    // Style Data Rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      row.height = 24;
+      const isEven = rowNumber % 2 === 0;
+
+      row.eachCell((cell, colNumber) => {
+        cell.font = {
+          name: 'Segoe UI',
+          size: 10.5,
+          color: { argb: 'FF0F172A' }
+        };
+
+        // Subtle alternating zebra fill for easy scanning
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isEven ? 'FFF8FAFC' : 'FFFFFFFF' }
+        };
+
+        // Clean grid cell borders
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+
+        // Formatting & alignment by column
+        if (colNumber === 1) {
+          // SL NO.
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF64748B' } };
+        } else if (colNumber === 2) {
+          // APPLICATION NUMBER
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FF1E293B' } };
+        } else if (colNumber === 3) {
+          // STUDENT NAME
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FF0F172A' } };
+        } else if (colNumber === 4) {
+          // CURRENT SEMESTER
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FF475569' } };
+        } else if (colNumber === 5) {
+          // USN
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FF4338CA' } };
+        }
+      });
+    });
+
+    // Auto-fit column widths based on maximum content length with safety padding
+    worksheet.columns.forEach(column => {
+      let maxLen = 0;
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const cellLength = cell.value ? String(cell.value).length : 0;
+        if (cellLength > maxLen) {
+          maxLen = cellLength;
+        }
+      });
+      column.width = Math.max(maxLen + 5, column.width || 16);
+    });
+
+    // Add AutoFilter dropdown arrows on the header row
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: 5 }
+    };
+
+    // Generate buffer & trigger download in browser
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
-  // 12. Prefilled Excel Template Download (exactly 4 fields)
-  const handleDownloadTemplate = () => {
-    const templateRows = applicants.map((app, idx) => ({
-      'SL NO.': (page - 1) * limit + idx + 1,
-      'APPLICATION NUMBER': app.applicationNumber,
-      'STUDENT NAME': getFullName(app.studentpersonaldetails),
-      'USN': '',
-    }));
+  // 11. Excel Export of Currently Filtered Records
+  const handleExportExcel = async () => {
+    try {
+      const exportRows = applicants.map((app, idx) => ({
+        slNo: (page - 1) * limit + idx + 1,
+        appNum: app.applicationNumber || 'N/A',
+        name: getFullName(app.studentpersonaldetails),
+        semester: getSemesterDisplay(app),
+        usn: draftChanges[app.id] !== undefined ? draftChanges[app.id] : (app.usn || ''),
+      }));
 
-    const worksheet = XLSX.utils.json_to_sheet(templateRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'USN Template');
-    XLSX.writeFile(workbook, `USN_Allocation_Template_${academicYear}.xlsx`);
+      const branchName = branchId !== 'ALL' ? branches.find(b => b.id === branchId)?.code || 'All' : 'All';
+      const fileName = `USN_Allocations_${branchName}_${entryType}_${academicYear}.xlsx`;
+
+      await generateStyledExcelFile(
+        'USN Allocations',
+        exportRows,
+        fileName
+      );
+      toast.success('USN Allocations exported successfully.');
+    } catch (err) {
+      console.error('Export Excel error:', err);
+      toast.error('Failed to export Excel file.');
+    }
+  };
+
+  // 12. Prefilled Excel Template Download (exactly 5 fields)
+  const handleDownloadTemplate = async () => {
+    try {
+      const templateRows = applicants.map((app, idx) => ({
+        slNo: (page - 1) * limit + idx + 1,
+        appNum: app.applicationNumber || 'N/A',
+        name: getFullName(app.studentpersonaldetails),
+        semester: getSemesterDisplay(app),
+        usn: '',
+      }));
+
+      await generateStyledExcelFile(
+        'USN Template',
+        templateRows,
+        `USN_Allocation_Template_${academicYear}.xlsx`
+      );
+      toast.success('USN Template downloaded successfully.');
+    } catch (err) {
+      console.error('Download template error:', err);
+      toast.error('Failed to generate formatted Excel template.');
+    }
   };
 
   const handleFilterChange = (setter: (v: string) => void, val: string) => {
@@ -601,7 +817,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-black text-neutral-900 dark:text-white uppercase tracking-wide flex items-center gap-2">
-            <GraduationCap className="text-violet-650 dark:text-violet-400" size={26} /> USN Allocation & Entry
+            <GraduationCap className="text-violet-600 dark:text-violet-400" size={26} /> USN Allocation & Entry
           </h2>
           <p className="text-xs text-neutral-500 font-semibold mt-1">Assign and manage verified official university serial numbers.</p>
         </div>
@@ -655,7 +871,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
             )}
             <p className="text-[10px] font-semibold text-neutral-450 dark:text-neutral-500">Verified & approved applicants</p>
           </div>
-          <div className="p-3 bg-violet-50 dark:bg-violet-950/20 text-violet-650 dark:text-violet-400 rounded-xl">
+          <div className="p-3 bg-violet-50 dark:bg-violet-950/20 text-violet-600 dark:text-violet-400 rounded-xl">
             <Users size={22} />
           </div>
         </div>
@@ -708,7 +924,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
               </h3>
             )}
             <div className="w-full bg-neutral-100 dark:bg-neutral-850 h-1.5 rounded-full overflow-hidden mt-1.5 max-w-[120px]">
-              <div className="bg-violet-650 h-full rounded-full transition-all duration-500" style={{ width: `${summary.completionRate}%` }} />
+              <div className="bg-violet-600 h-full rounded-full transition-all duration-500" style={{ width: `${summary.completionRate}%` }} />
             </div>
           </div>
           <div className="p-3 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-650 dark:text-indigo-400 rounded-xl">
@@ -810,7 +1026,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
           
           {loadingList && applicants.length > 0 && (
             <div className="absolute inset-0 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
-              <Loader2 className="animate-spin text-violet-655" size={32} />
+              <Loader2 className="animate-spin text-violet-600" size={32} />
             </div>
           )}
 
@@ -820,6 +1036,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
                 <th className="py-4 px-5 w-16 text-center">SL. NO.</th>
                 <th className="py-4 px-4">APPLICATION NUMBER</th>
                 <th className="py-4 px-4">STUDENT NAME</th>
+                <th className="py-4 px-4 text-center w-36">CURRENT SEMESTER</th>
                 <th className="py-4 px-4 min-w-[220px]">USN</th>
               </tr>
             </thead>
@@ -831,12 +1048,13 @@ export const AdminUsnAllocationPage: React.FC = () => {
                     <td className="py-4 px-5 text-center"><div className="h-4 w-6 bg-neutral-200 dark:bg-neutral-800 rounded mx-auto" /></td>
                     <td className="py-4 px-4"><div className="h-4 w-40 bg-neutral-200 dark:bg-neutral-800 rounded font-mono" /></td>
                     <td className="py-4 px-4"><div className="h-4 w-48 bg-neutral-200 dark:bg-neutral-800 rounded" /></td>
+                    <td className="py-4 px-4 text-center"><div className="h-6 w-20 bg-neutral-200 dark:bg-neutral-800 rounded-lg mx-auto" /></td>
                     <td className="py-3 px-4"><div className="h-8 w-48 bg-neutral-200 dark:bg-neutral-800 rounded-xl" /></td>
                   </tr>
                 ))
               ) : applicants.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-20 text-center">
+                  <td colSpan={5} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3 select-none">
                       <GraduationCap className="text-neutral-300 dark:text-neutral-800" size={48} />
                       <p className="text-sm font-black text-neutral-500 uppercase tracking-widest">No Eligible Applicants Found</p>
@@ -880,6 +1098,13 @@ export const AdminUsnAllocationPage: React.FC = () => {
                         </div>
                       </td>
 
+                      {/* Current Semester */}
+                      <td className="py-4 px-4 text-center">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-300 border border-slate-200/80 dark:border-neutral-700">
+                          {getSemesterDisplay(app)}
+                        </span>
+                      </td>
+
                       {/* USN Allotment Input */}
                       <td className="py-3 px-4">
                         <div className="space-y-1">
@@ -893,7 +1118,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
                                 ? 'border-rose-500 focus:border-rose-600 bg-rose-50/10' 
                                 : isDraft
                                   ? 'border-violet-500 focus:border-violet-600 bg-violet-50/5 dark:bg-violet-950/5'
-                                  : 'border-neutral-200/80 dark:border-neutral-800 focus:border-violet-550'
+                                  : 'border-neutral-200/80 dark:border-neutral-800 focus:border-violet-500'
                             }`}
                           />
                           {validationError && (
@@ -953,7 +1178,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
                   onClick={() => setPage(i + 1)}
                   className={`w-7 h-7 text-xs font-black rounded-lg transition-colors cursor-pointer ${
                     page === i + 1
-                      ? 'bg-violet-650 text-white shadow-sm'
+                      ? 'bg-violet-600 text-white shadow-sm'
                       : 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                   }`}
                 >
@@ -997,7 +1222,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
               type="button"
               onClick={handleReviewSave}
               disabled={errorCount > 0}
-              className="px-5 py-2 bg-violet-650 hover:bg-violet-750 text-white disabled:opacity-50 text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md shadow-violet-500/10 flex items-center justify-center gap-1.5 cursor-pointer"
+              className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50 text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md shadow-violet-500/10 flex items-center justify-center gap-1.5 cursor-pointer"
             >
               Review & Save
             </button>
@@ -1029,15 +1254,15 @@ export const AdminUsnAllocationPage: React.FC = () => {
             {/* Validation overview cards */}
             <div className="grid grid-cols-3 gap-4 flex-shrink-0 select-none">
               <div className="bg-neutral-50 dark:bg-neutral-955 border border-neutral-200/50 dark:border-neutral-800 rounded-xl p-3 text-center">
-                <span className="text-[10px] font-bold text-neutral-450 uppercase tracking-wide">Total Batch</span>
+                <span className="text-[10px] font-bold text-neutral-450 uppercase tracking-wide">Total Students</span>
                 <p className="text-lg font-black text-neutral-850 dark:text-white">{previewList.length}</p>
               </div>
-              <div className="bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-200/30 dark:border-emerald-900/55 rounded-xl p-3 text-center">
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-450 uppercase tracking-wide">Valid Entries</span>
-                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{previewList.filter(p => p.valid).length}</p>
+              <div className="bg-violet-50/40 dark:bg-violet-950/10 border border-violet-200/30 dark:border-violet-900/55 rounded-xl p-3 text-center">
+                <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Pending Changes</span>
+                <p className="text-lg font-black text-violet-600 dark:text-violet-400">{previewList.filter(p => p.isChanged && p.valid).length}</p>
               </div>
               <div className="bg-rose-50/40 dark:bg-rose-950/10 border border-rose-200/30 dark:border-rose-900/55 rounded-xl p-3 text-center">
-                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">Errors</span>
+                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">Validation Errors</span>
                 <p className="text-lg font-black text-rose-600">{previewList.filter(p => !p.valid).length}</p>
               </div>
             </div>
@@ -1055,11 +1280,13 @@ export const AdminUsnAllocationPage: React.FC = () => {
             <div className="overflow-y-auto flex-grow border border-neutral-150 dark:border-neutral-800 rounded-2xl bg-neutral-50/30 dark:bg-neutral-955/10">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-100 dark:bg-neutral-950 border-b border-neutral-200 dark:border-neutral-850 font-black text-neutral-450 uppercase tracking-widest text-[9px] select-none sticky top-0">
+                  <tr className="bg-black text-white border-b border-neutral-800 font-black uppercase tracking-widest text-[9px] select-none sticky top-0">
                     <th className="py-3 px-4 w-12 text-center">SL NO.</th>
                     <th className="py-3 px-4">APPLICATION NUMBER</th>
                     <th className="py-3 px-4">STUDENT NAME</th>
+                    <th className="py-3 px-4 text-center">CURRENT SEMESTER</th>
                     <th className="py-3 px-4">USN</th>
+                    <th className="py-3 px-4 text-center">STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1067,13 +1294,43 @@ export const AdminUsnAllocationPage: React.FC = () => {
                     <tr 
                       key={idx}
                       className={`border-b border-neutral-100 dark:border-neutral-850 hover:bg-neutral-100/50 ${
-                        !item.valid ? 'bg-rose-50/15' : ''
+                        !item.valid ? 'bg-rose-50/15' : item.isChanged ? 'bg-violet-50/15 dark:bg-violet-950/15' : ''
                       }`}
                     >
                       <td className="py-3 px-4 text-center font-bold text-slate-400">{String(item.idx).padStart(2, '0')}</td>
                       <td className="py-3 px-4 font-semibold text-slate-800 dark:text-neutral-200 font-mono">{item.appNum}</td>
                       <td className="py-3 px-4 font-bold text-slate-700 dark:text-neutral-300">{item.name}</td>
-                      <td className="py-3 px-4 font-bold text-violet-650 dark:text-violet-400 tracking-wider uppercase font-mono">{item.newUsn}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-300 border border-slate-200/80 dark:border-neutral-700">
+                          {item.semester}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-bold tracking-wider uppercase font-mono">
+                        {item.isChanged ? (
+                          <span className="text-violet-600 dark:text-violet-400 font-black">{item.newUsn}</span>
+                        ) : (
+                          <span className="text-slate-600 dark:text-neutral-400">{item.newUsn}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {!item.valid ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
+                            ✕ {item.error || 'Error'}
+                          </span>
+                        ) : item.isChanged ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                            ✎ Ready to Save
+                          </span>
+                        ) : item.newUsn && item.newUsn !== '—' && item.newUsn !== '— (Remove Allocation)' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                            ✓ Assigned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                            Pending
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1092,7 +1349,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
               
               <button
                 type="button"
-                disabled={savingChanges || previewList.filter(p => !p.valid).length > 0}
+                disabled={savingChanges || previewList.filter(p => !p.valid).length > 0 || actualDraftChanges.length === 0}
                 onClick={handleConfirmSave}
                 className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50 text-xs font-bold rounded-xl transition-all shadow-md shadow-violet-600/10 flex items-center justify-center gap-1.5 cursor-pointer"
               >
