@@ -227,6 +227,7 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
     const [isCheckingAadhaar, setIsCheckingAadhaar] = useState(false);
     const [aadhaarError, setAadhaarError] = useState('');
     const [isCheckingCet, setIsCheckingCet] = useState(false);
+    const [cetError, setCetError] = useState('');
     const isFormDisabled = !readOnly && (loading || isCheckingAadhaar || isCheckingCet || !!aadhaarError || !!cetError);
 
     return (

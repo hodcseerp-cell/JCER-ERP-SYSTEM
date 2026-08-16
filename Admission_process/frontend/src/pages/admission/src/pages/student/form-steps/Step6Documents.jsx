@@ -632,7 +632,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                 studyCertificate: ['domicile / study certificate', '7 years study certificate']
             };
 
-            const hasFlaggedDocs = REQUIRED_DOCUMENTS.some(d => {
+            const hasFlaggedDocs = DOCS.some(d => {
                 if (!adminRemarks) return false;
                 const targetLabels = remarkLabels[d.id] || [];
                 return adminRemarks.split('\n').some(line => {
