@@ -252,7 +252,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
 
   const displayReviewedBy = (app.reviewedBy && !app.reviewedBy.includes('-') && app.reviewedBy.length < 35)
     ? app.reviewedBy
-    : 'Admissions Officer - Rajesh Kumar';
+    : 'Admissions Officer - Shivakumar Biradar';
 
   const rawDate = app.feeVerifiedAt || app.verifiedAt || app.updatedAt;
   const displayVerificationDate = rawDate

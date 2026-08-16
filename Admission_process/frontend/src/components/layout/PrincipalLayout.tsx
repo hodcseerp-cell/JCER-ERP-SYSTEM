@@ -5,6 +5,7 @@ import { logout } from '../../store/authSlice';
 import API from '../../services/api';
 import { RootState } from '../../store';
 import { getAcademicYear } from '../../utils/date.util';
+import { GlobalFooter } from '../common/GlobalFooter';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -20,9 +21,13 @@ import {
   Megaphone,
   FileText,
   FileCheck2,
-  AlertCircle
+  AlertCircle,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
+import usePwa from '../../hooks/usePwa';
+import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import { filterMenuItems } from '../../utils/feature.util';
 
 interface MenuItem {
@@ -43,6 +48,15 @@ export const PrincipalLayout: React.FC = () => {
   const location = useLocation();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+
+  const getAvatarUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+    const base = API.defaults.baseURL || '/api';
+    const host = base.replace(/\/api\/?$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${host}${cleanPath}`;
+  };
 
   const [features, setFeatures] = useState<Record<string, boolean>>({
     admission: true,
@@ -115,6 +129,8 @@ export const PrincipalLayout: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const { canInstall, handleInstall, triggerRefresh, confirmRefresh, showRefreshModal, setShowRefreshModal } = usePwa();
 
   const handleLogout = () => {
     dispatch(logout());
@@ -274,7 +290,11 @@ export const PrincipalLayout: React.FC = () => {
                 className="flex items-center space-x-2.5 px-3.5 py-1.5 rounded-2xl border border-neutral-200/50 dark:border-neutral-800/40 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
               >
                 <div className="size-7 rounded-full overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/50 dark:border-neutral-800/40 flex items-center justify-center font-black text-xs text-neutral-700 dark:text-neutral-300">
-                  {user?.name?.charAt(0) || 'P'}
+                  {user?.profileImage ? (
+                    <img src={getAvatarUrl(user.profileImage)} alt={user?.name || 'Principal'} className="w-full h-full object-cover" />
+                  ) : (
+                    user?.name?.charAt(0) || 'P'
+                  )}
                 </div>
                 <div className="hidden sm:flex flex-col text-left">
                   <span className="text-[11px] font-bold tracking-tight leading-none text-neutral-800 dark:text-neutral-200">{user?.name}</span>
@@ -292,7 +312,23 @@ export const PrincipalLayout: React.FC = () => {
                   >
                     <User size={14} /> My Profile
                   </Link>
+
+                  <button
+                    onClick={() => { setProfileMenuOpen(false); handleInstall(); }}
+                    className="w-full px-4 py-2 text-xs font-bold flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors text-neutral-700 dark:text-neutral-300 text-left"
+                  >
+                    <Download size={14} className="text-indigo-600 dark:text-indigo-400" /> Install App
+                  </button>
+
+                  <button
+                    onClick={() => { setProfileMenuOpen(false); triggerRefresh(); }}
+                    className="w-full px-4 py-2 text-xs font-bold flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors text-neutral-700 dark:text-neutral-300 text-left"
+                  >
+                    <RefreshCw size={14} className="text-indigo-600 dark:text-indigo-400" /> Refresh App
+                  </button>
+
                   <hr className="my-1 border-neutral-100 dark:border-neutral-800/40" />
+
                   <button
                     onClick={handleLogout}
                     className="w-full px-4 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-colors flex items-center gap-2 text-left"
@@ -304,6 +340,12 @@ export const PrincipalLayout: React.FC = () => {
             </div>
           </div>
         </header>
+
+        <PwaConfirmationModal
+          isOpen={showRefreshModal}
+          onClose={() => setShowRefreshModal(false)}
+          onConfirm={confirmRefresh}
+        />
 
         {/* ── SUB PAGE ROUTER CONTENT ── */}
         <main className="flex-1 relative">
@@ -319,6 +361,7 @@ export const PrincipalLayout: React.FC = () => {
             <Outlet />
           </div>
         </main>
+        <GlobalFooter className="mt-auto relative z-20" />
       </div>
     </div>
   );

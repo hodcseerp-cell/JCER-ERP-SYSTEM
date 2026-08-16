@@ -1,7 +1,7 @@
 import { DataTypes, Model } from 'sequelize';
 import db from '../config/database';
 
-export type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD';
+export type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'DAILY_LOGIN';
 
 export class Otp extends Model {
   public id!: string;
@@ -34,7 +34,7 @@ Otp.init(
       allowNull: false,
     },
     purpose: {
-      type: DataTypes.ENUM('REGISTER', 'FORGOT_PASSWORD'),
+      type: DataTypes.ENUM('REGISTER', 'FORGOT_PASSWORD', 'DAILY_LOGIN'),
       allowNull: false,
     },
     expiresAt: {

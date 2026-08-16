@@ -22,8 +22,8 @@ export const ProtectedLayout: React.FC = () => {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // Admin routes: only ADMIN or SUPER_ADMIN
-  if (location.pathname.startsWith('/admin') && role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+  // Admin routes: ADMIN, SUPER_ADMIN, or PRINCIPAL
+  if (location.pathname.startsWith('/admin') && role !== 'ADMIN' && role !== 'SUPER_ADMIN' && role !== 'PRINCIPAL') {
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -42,8 +42,8 @@ export const ProtectedLayout: React.FC = () => {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // Principal routes: PRINCIPAL or SUPER_ADMIN
-  if (location.pathname.startsWith('/principal') && role !== 'PRINCIPAL' && role !== 'SUPER_ADMIN') {
+  // Principal routes: PRINCIPAL, SUPER_ADMIN, or ADMIN
+  if (location.pathname.startsWith('/principal') && role !== 'PRINCIPAL' && role !== 'SUPER_ADMIN' && role !== 'ADMIN') {
     return <Navigate to="/unauthorized" replace />;
   }
 

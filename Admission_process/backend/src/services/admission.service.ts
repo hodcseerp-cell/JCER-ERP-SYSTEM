@@ -1175,10 +1175,13 @@ class AdmissionService {
             
             await emailService.sendCorrectionRequiredNotification(
               user.email,
-              `${user.firstName} ${user.lastName}`.trim(),
-              admission.applicationNumber || admission.id,
-              reason,
-              notificationRemarks
+              {
+                studentName: `${user.firstName} ${user.lastName}`.trim(),
+                applicationNumber: admission.applicationNumber || admission.id,
+                applicationType: 'FRESH_ADMISSION',
+                reason,
+                remarks: notificationRemarks
+              }
             );
           }
         } catch (emailErr: any) {

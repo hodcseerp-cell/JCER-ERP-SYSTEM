@@ -19,6 +19,8 @@ import AdmissionParentDetail from '../models/AdmissionParentDetail';
 import AdmissionAddress from '../models/AdmissionAddress';
 import AdmissionAcademicDetail from '../models/AdmissionAcademicDetail';
 import Student from '../models/Student';
+import ProvisionalAdmission from '../models/ProvisionalAdmission';
+import ProvisionalAdmissionDocument from '../models/ProvisionalAdmissionDocument';
 import UsnRegistry from '../models/UsnRegistry';
 import Notification from '../models/Notification';
 import * as r2 from '../services/r2.service';
@@ -775,6 +777,177 @@ export const viewAdmissionDocument = async (
       const buffer = await r2.getFile(fileUrl);
       return res.send(buffer);
     }
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const DOCUMENT_LABEL_MAP: Record<string, string> = {
+  photo: 'Candidate Photograph',
+  signature: 'Candidate Signature',
+  tenthMarksheet: 'SSLC / 10th Marksheet',
+  twelfthMarksheet: 'PUC / 12th Marksheet',
+  diplomaSemester5Marksheet: 'Diploma Semester 5 Marksheet',
+  diplomaSemester6Marksheet: 'Diploma Semester 6 Marksheet',
+  cetScoreCard: 'CET / DCET Score Card',
+  aadhaar: 'Aadhaar Card',
+  casteCertificate: 'Caste Certificate',
+  domicileCertificate: 'Study Certificate',
+  gapCertificate: 'Income Certificate',
+  feesPaidReceipt: 'College Fee Receipt',
+  admissionFeeReceipt: 'Admission Fee Receipt',
+  admissionFormFeeReceipt: 'Admission Form Fee Receipt',
+};
+
+/** GET /api/admin/students/:studentId/documents — Admin / Principal fetch student documents & signed preview URLs */
+export const getStudentDocuments = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { studentId } = req.params;
+
+    let admission = await Admission.findOne({
+      where: {
+        [Op.or]: [
+          { id: studentId },
+          { userId: studentId }
+        ]
+      },
+      include: [
+        { model: User, as: 'user' },
+        { model: Department, as: 'branch' },
+        { model: AdmissionDocument, as: 'studentdocuments' }
+      ]
+    });
+
+    let studentRecord: Student | null = null;
+
+    if (!admission) {
+      studentRecord = await Student.findOne({
+        where: {
+          [Op.or]: [
+            { id: studentId },
+            { userId: studentId }
+          ]
+        },
+        include: [{ model: User, as: 'user' }, { model: Department, as: 'department' }]
+      });
+
+      if (studentRecord) {
+        admission = await Admission.findOne({
+          where: { userId: studentRecord.userId },
+          include: [
+            { model: User, as: 'user' },
+            { model: Department, as: 'branch' },
+            { model: AdmissionDocument, as: 'studentdocuments' }
+          ]
+        });
+      }
+    } else {
+      studentRecord = await Student.findOne({
+        where: { userId: admission.userId },
+        include: [{ model: User, as: 'user' }, { model: Department, as: 'department' }]
+      });
+    }
+
+    if (!admission && !studentRecord) {
+      return res.status(404).json({ error: 'Student or admission application not found.' });
+    }
+
+    const userObj = admission?.user || studentRecord?.user;
+    const studentName = userObj
+      ? `${userObj.firstName || ''} ${userObj.lastName || ''}`.trim()
+      : 'Student';
+
+    const usn = studentRecord?.usn || studentRecord?.enrollmentNumber || 'N/A';
+    const appNo = admission?.applicationNumber || 'N/A';
+    const branchName = admission?.branch?.name || studentRecord?.department?.name || 'General';
+
+    const token = req.query.token || (req.headers.authorization ? req.headers.authorization.split(' ')[1] : '');
+    const tokenSuffix = token ? `?token=${encodeURIComponent(String(token))}` : '';
+
+    const docsRecord = admission?.studentdocuments;
+    const documents: any[] = [];
+
+    if (docsRecord && admission) {
+      for (const [field, dbCol] of Object.entries(DOCUMENT_FIELD_MAP)) {
+        const fileKeyOrUrl = docsRecord.get(dbCol as string) as string | null;
+        if (fileKeyOrUrl) {
+          const ext = path.extname(fileKeyOrUrl).toLowerCase();
+          const isPdf = ext === '.pdf';
+          let mimeType = 'application/octet-stream';
+          if (ext === '.pdf') mimeType = 'application/pdf';
+          else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+          else if (ext === '.png') mimeType = 'image/png';
+          else if (ext === '.gif') mimeType = 'image/gif';
+          else if (ext === '.webp') mimeType = 'image/webp';
+
+          const baseUrl = `/api/admin/admissions/${admission.id}/documents/${field}`;
+          const viewUrl = `${baseUrl}${tokenSuffix}`;
+
+          documents.push({
+            id: `${admission.id}_${field}`,
+            field,
+            name: DOCUMENT_LABEL_MAP[field] || field,
+            documentType: field.toUpperCase(),
+            r2Key: fileKeyOrUrl,
+            previewUrl: viewUrl,
+            downloadUrl: viewUrl,
+            mimeType,
+            isPdf,
+            uploadedAt: docsRecord.updatedAt
+          });
+        }
+      }
+    }
+
+    const provisionalDocs: any[] = [];
+    if (studentRecord) {
+      const provAdmission = await ProvisionalAdmission.findOne({
+        where: { studentId: studentRecord.id },
+        include: [{ model: ProvisionalAdmissionDocument, as: 'documents' }]
+      });
+
+      if (provAdmission && provAdmission.documents) {
+        for (const doc of provAdmission.documents) {
+          const ext = path.extname(doc.r2Key).toLowerCase();
+          const isPdf = ext === '.pdf';
+          const r2ViewUrl = r2.resolveFileUrl(doc.r2Key);
+          const fullViewUrl = `${r2ViewUrl}${tokenSuffix}`;
+
+          provisionalDocs.push({
+            id: doc.id,
+            semesterNumber: doc.semesterNumber,
+            name: doc.documentType === 'FEE_RECEIPT' ? 'College Fee Receipt' : `Semester ${doc.semesterNumber} Marks Card`,
+            documentType: doc.documentType,
+            originalFileName: doc.originalFileName,
+            r2Key: doc.r2Key,
+            previewUrl: fullViewUrl,
+            downloadUrl: fullViewUrl,
+            mimeType: doc.mimeType || (isPdf ? 'application/pdf' : 'image/png'),
+            isPdf,
+            verificationStatus: doc.verificationStatus,
+            uploadedAt: doc.updatedAt
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        studentId: studentRecord?.id || admission?.id,
+        applicationId: admission?.id || null,
+        studentName,
+        usn,
+        applicationNumber: appNo,
+        branch: branchName,
+        academicYear: admission?.academicYear || '2026-2027',
+        applicationStatus: admission?.applicationStatus || 'ENROLLED',
+        documents,
+        provisionalDocuments: provisionalDocs
+      }
+    });
   } catch (err) {
     return next(err);
   }

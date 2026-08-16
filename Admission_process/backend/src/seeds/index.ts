@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import sequelize from '../config/database';
 import User from '../models/User';
 import Department from '../models/Department';
@@ -51,28 +52,36 @@ export async function seed(exitOnComplete = false) {
 
     // ─── 3. Users ──────────────────────────────────────────────────────────
 
+    const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'arihantdesai483@gmail.com';
+    const adminPass = process.env.INITIAL_ADMIN_PASSWORD || 'Desai@2004';
+    const adminHash = await bcrypt.hash(adminPass, 10);
+
+    const principalEmail = process.env.INITIAL_PRINCIPAL_EMAIL || 'arihantdesai47@gmail.com';
+    const principalPass = process.env.INITIAL_PRINCIPAL_PASSWORD || 'Desai@2004';
+    const principalHash = await bcrypt.hash(principalPass, 10);
+
     // Admin User
     const adminUser = await User.create({
-      username: 'admin1',
-      email: 'admin@college.com',
-      passwordHash: 'password123',
+      username: adminEmail,
+      email: adminEmail,
+      passwordHash: adminHash,
       role: 'ADMIN',
       status: 'ACTIVE',
-      firstName: 'Rajesh',
-      lastName: 'Kumar',
+      firstName: 'Shivakumar',
+      lastName: 'Biradar',
       phone: '9876543200',
       profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&fit=crop',
     });
 
     // Principal User
     await User.create({
-      username: 'principal1',
-      email: 'principal@college.com',
-      passwordHash: 'password123',
+      username: principalEmail,
+      email: principalEmail,
+      passwordHash: principalHash,
       role: 'PRINCIPAL',
       status: 'ACTIVE',
-      firstName: 'Dr. Ramesh',
-      lastName: 'Prasad',
+      firstName: 'Dr. S.V.',
+      lastName: 'Gorbal',
       phone: '9876543201',
       profileImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&fit=crop',
     });

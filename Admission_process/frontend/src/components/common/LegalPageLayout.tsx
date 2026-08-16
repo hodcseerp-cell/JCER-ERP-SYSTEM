@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Shield, FileText } from 'lucide-react';
 import { LEGAL_LAST_UPDATED } from '../../constants/legal.constants';
+import GlobalFooter from './GlobalFooter';
 
 interface LegalPageLayoutProps {
   title: string;
@@ -120,18 +121,7 @@ export const LegalPageLayout: React.FC<LegalPageLayoutProps> = ({ title, section
       </main>
 
       {/* Footer */}
-      <div className="w-full bg-[#F8FAFC] dark:bg-[#0b0f19] border-t border-[#E2E8F0] dark:border-slate-800/80">
-        <footer className="w-full max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-slate-500 dark:text-slate-400">
-          <p className="font-semibold text-center md:text-left">
-            © {new Date().getFullYear()} Jain College of Engineering & Research, Belagavi. All rights reserved.
-          </p>
-          <div className="flex items-center gap-6 font-bold uppercase tracking-wider">
-            <Link to="/privacy-policy" className="hover:text-[#2563EB] transition-colors">Privacy Policy</Link>
-            <Link to="/terms-of-use" className="hover:text-[#2563EB] transition-colors">Terms of Use</Link>
-            <Link to="/support" className="hover:text-[#2563EB] transition-colors">Support</Link>
-          </div>
-        </footer>
-      </div>
+      <GlobalFooter isDark={isDark} />
     </div>
   );
 };

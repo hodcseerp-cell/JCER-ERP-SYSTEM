@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
 import User from '../models/User';
@@ -25,14 +26,17 @@ const ensurePrincipalDataSeeded = async () => {
   try {
     let principalUser = await User.findOne({ where: { role: 'PRINCIPAL' } });
     if (!principalUser) {
+      const email = process.env.INITIAL_PRINCIPAL_EMAIL || 'arihantdesai47@gmail.com';
+      const rawPassword = process.env.INITIAL_PRINCIPAL_PASSWORD || 'Desai@2004';
+      const passwordHash = await bcrypt.hash(rawPassword, 10);
       principalUser = await User.create({
-        username: 'principal1',
-        email: 'principal@college.com',
-        passwordHash: 'password123',
+        username: email,
+        email: email,
+        passwordHash: passwordHash,
         role: 'PRINCIPAL',
         status: 'ACTIVE',
-        firstName: 'Dr. Ramesh',
-        lastName: 'Prasad',
+        firstName: 'Dr. S.V.',
+        lastName: 'Gorbal',
         phone: '9876543201',
         profileImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&fit=crop',
         mustChangePassword: false
@@ -340,10 +344,13 @@ export const decideAdmission = async (
           if (user) {
             await emailService.sendCorrectionRequiredNotification(
               user.email,
-              `${user.firstName} ${user.lastName}`.trim(),
-              admission.applicationNumber || '',
-              rejectionReason || remarks || 'Correction Required',
-              remarks
+              {
+                studentName: `${user.firstName} ${user.lastName}`.trim(),
+                applicationNumber: admission.applicationNumber || '',
+                applicationType: 'FRESH_ADMISSION',
+                reason: rejectionReason || remarks || 'Correction Required',
+                remarks
+              }
             );
           }
         } catch (err: any) {

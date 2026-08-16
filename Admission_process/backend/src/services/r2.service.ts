@@ -213,13 +213,10 @@ export async function deleteFile(key: string | null | undefined): Promise<void> 
  */
 export async function getSignedUrl(
   key: string,
-  ttl: number = SIGNED_URL_TTL,
+  _ttl: number = SIGNED_URL_TTL,
 ): Promise<string> {
-  return s3.getSignedUrlPromise('getObject', {
-    Bucket: BUCKET,
-    Key: key,
-    Expires: ttl,
-  });
+  if (!key) return '';
+  return resolveFileUrl(key);
 }
 
 /**
@@ -227,16 +224,10 @@ export async function getSignedUrl(
  */
 export function getSignedUrlSync(
   key: string,
-  ttl: number = SIGNED_URL_TTL,
+  _ttl: number = SIGNED_URL_TTL,
 ): string {
-  if (!key || key.startsWith('/uploads/') || key.startsWith('uploads/')) {
-    return key;
-  }
-  return s3.getSignedUrl('getObject', {
-    Bucket: BUCKET,
-    Key: key,
-    Expires: ttl,
-  });
+  if (!key) return '';
+  return resolveFileUrl(key);
 }
 
 /**
@@ -245,4 +236,21 @@ export function getSignedUrlSync(
 export async function getFile(key: string): Promise<Buffer> {
   const data = await s3.getObject({ Bucket: BUCKET, Key: key }).promise();
   return data.Body as Buffer;
+}
+
+/**
+ * Resolve an object key or local path to a fully qualified or static URL.
+ */
+export function resolveFileUrl(keyOrPath: string): string {
+  if (!keyOrPath) return '';
+  if (keyOrPath.startsWith('http://') || keyOrPath.startsWith('https://')) {
+    return keyOrPath;
+  }
+  if (process.env.R2_PUBLIC_URL) {
+    return `${process.env.R2_PUBLIC_URL.replace(/\/$/, '')}/${keyOrPath.replace(/^\//, '')}`;
+  }
+  if (keyOrPath.startsWith('/uploads/') || keyOrPath.startsWith('uploads/')) {
+    return keyOrPath.startsWith('/') ? keyOrPath : `/${keyOrPath}`;
+  }
+  return `/api/documents/view/${encodeURIComponent(keyOrPath)}`;
 }
