@@ -20,21 +20,76 @@ const formatSize = (bytes) => {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
-// Helper to resolve static file paths from backend origin.
-// Signed R2 URLs (https://...) are returned as-is.
-// Legacy local /uploads/... paths are resolved against the backend origin.
-// Raw R2 object keys (e.g. "2026-2027/CSE/JCER-0001/Photo.jpg") are NOT
-// valid URLs — return '' so the broken-image icon is shown instead of a
-// mangled URL.
-const resolveDocUrl = (path) => {
-    if (!path) return '';
-    if (path.startsWith('http') || path.startsWith('blob:')) return path;
-    if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
-        const base = api.defaults.baseURL || '/api';
-        return `${base.replace('/api', '')}/${path.replace(/^\//, '')}`;
+// Document preview component with fallback error handling and View button
+const DocumentPreview = ({ previewUrl, label, onOpenView }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [previewUrl]);
+
+    return (
+        <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2">
+            {!hasError ? (
+                <img
+                    src={previewUrl}
+                    alt={`${label} preview`}
+                    className="w-full h-28 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={onOpenView}
+                    onError={() => setHasError(true)}
+                />
+            ) : (
+                <div 
+                    className="w-full h-28 flex flex-col items-center justify-center bg-slate-100 text-slate-500 cursor-pointer hover:bg-slate-200 transition-colors p-2 text-center"
+                    onClick={onOpenView}
+                >
+                    <FileImage size={24} className="mb-1 text-slate-400" />
+                    <span className="text-[10px] font-medium text-slate-600">Click to View Document</span>
+                </div>
+            )}
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenView();
+                }}
+                className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black/80 text-white rounded-md px-2 py-1 text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
+                aria-label={`View full size preview of ${label}`}
+            >
+                <Eye size={11} /> View
+            </button>
+        </div>
+    );
+};
+
+// Helper to resolve static file paths or R2 object keys to full backend URLs.
+const resolveDocUrl = (path, apiField = '') => {
+    if (!path || typeof path !== 'string') return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
+        return path;
     }
-    // Raw R2 key with no signed URL yet — cannot display
-    return '';
+    const base = api.defaults.baseURL || '/api';
+    const host = base.replace(/\/api(\/v\d+)?$/, '').replace(/\/+$/, '');
+    const token = localStorage.getItem('token');
+
+    if (apiField) {
+        return `${host}/api/student/documents/${apiField}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    }
+
+    if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        return `${host}${cleanPath}`;
+    }
+
+    if (path.startsWith('/api/') || path.startsWith('api/')) {
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        return `${host}${cleanPath}`;
+    }
+
+    // For R2 object keys e.g. "2026-2027/CSE/JCER-0001/Photo.jpg"
+    const cleanKey = path.startsWith('/') ? path.slice(1) : path;
+    const encodedSegments = cleanKey.split('/').map(encodeURIComponent).join('/');
+    return `${host}/api/documents/view/${encodedSegments}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 };
 
 // Helper to parse filename from backend path (strips query-string from signed URLs)
@@ -741,7 +796,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             cardClass = 'bg-primary-50 border-primary-400 border-dashed scale-[1.01] shadow-md';
         }
 
-        const previewUrl = cardState === 'uploaded' ? resolveDocUrl(data?.[doc.dbKey]) : state?.previewUrl;
+        const previewUrl = cardState === 'uploaded' ? resolveDocUrl(data?.[doc.dbKey], doc.apiField) : state?.previewUrl;
         const showPreview = (cardState === 'uploaded' || cardState === 'ready' || cardState === 'uploading') && previewUrl;
         const showActionButtons = cardState === 'uploaded';
         const filename = cardState === 'uploaded' ? getFilenameFromUrl(data?.[doc.dbKey]) : '';
@@ -803,21 +858,11 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
 
                     {/* ── Image Preview ── */}
                     {showPreview && (
-                        <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2">
-                            <img
-                                src={previewUrl}
-                                alt={`${doc.label} preview`}
-                                className="w-full h-28 object-cover"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => window.open(previewUrl, '_blank')}
-                                className="absolute top-1.5 right-1.5 bg-black/50 hover:bg-black/70 text-white rounded-md px-1.5 py-1 text-[10px] flex items-center gap-1 transition-colors"
-                                aria-label={`View full size preview of ${doc.label}`}
-                            >
-                                <Eye size={10} /> View
-                            </button>
-                        </div>
+                        <DocumentPreview
+                            previewUrl={previewUrl}
+                            label={doc.label}
+                            onOpenView={() => window.open(previewUrl, '_blank')}
+                        />
                     )}
 
                     {/* Filename display */}
@@ -941,7 +986,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         const state      = docStates[docId] || {};
         const cardState  = getCardState(doc);
         const isBusy     = cardState === 'processing' || cardState === 'uploading';
-        const previewUrl = cardState === 'uploaded' ? resolveDocUrl(data?.[doc.dbKey]) : state?.previewUrl;
+        const previewUrl = cardState === 'uploaded' ? resolveDocUrl(data?.[doc.dbKey], doc.apiField) : state?.previewUrl;
         const showPreview = (cardState === 'uploaded' || cardState === 'ready' || cardState === 'uploading') && previewUrl;
         const filename = cardState === 'uploaded' ? getFilenameFromUrl(data?.[doc.dbKey]) : '';
 
@@ -949,15 +994,12 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-white flex flex-col items-center justify-center space-y-3 min-h-[140px] relative">
                 {showPreview ? (
                     <div className="w-full flex flex-col items-center">
-                        <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 mb-2 w-full max-w-[200px]">
-                            <img src={previewUrl} alt="Preview" className="w-full h-24 object-cover" />
-                            <button
-                                type="button"
-                                onClick={() => window.open(previewUrl, '_blank')}
-                                className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-md px-1.5 py-0.5 text-[9px] flex items-center gap-1 transition-colors"
-                            >
-                                <Eye size={9} /> View
-                            </button>
+                        <div className="w-full max-w-[200px]">
+                            <DocumentPreview
+                                previewUrl={previewUrl}
+                                label={doc.label}
+                                onOpenView={() => window.open(previewUrl, '_blank')}
+                            />
                         </div>
                         {filename && <p className="text-[10px] text-slate-500 font-medium truncate max-w-xs">{filename}</p>}
                         

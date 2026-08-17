@@ -99,6 +99,56 @@ const Step2Personal = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             return;
         }
 
+        if (!data.firstName?.trim()) {
+            toast.error('Please enter First Name.');
+            return;
+        }
+
+        if (!data.lastName?.trim()) {
+            toast.error('Please enter Last Name.');
+            return;
+        }
+
+        if (!data.gender) {
+            toast.error('Please select Gender.');
+            return;
+        }
+
+        if (!data.dateOfBirth) {
+            toast.error('Please enter Date of Birth (DD/MM/YYYY).');
+            return;
+        }
+
+        if (!data.religion) {
+            toast.error('Please select Religion.');
+            return;
+        }
+
+        if (!data.category) {
+            toast.error('Please select Category.');
+            return;
+        }
+
+        if (!data.caste?.trim()) {
+            toast.error('Please enter Caste.');
+            return;
+        }
+
+        if (!data.nationality?.trim()) {
+            toast.error('Please enter Nationality.');
+            return;
+        }
+
+        if (!data.areaType) {
+            toast.error('Please select Area Type (Urban / Rural).');
+            return;
+        }
+
+        if (data.studiedInKarnataka === undefined || data.studiedInKarnataka === null || data.studiedInKarnataka === '') {
+            toast.error('Please select whether you studied in Karnataka.');
+            return;
+        }
+
         setLoading(true);
 
         try {

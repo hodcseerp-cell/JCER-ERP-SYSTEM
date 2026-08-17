@@ -478,14 +478,32 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
         (Number(studentSemester) === 5 && provisionalConfig?.provisionalAdmission5Open) ||
         (Number(studentSemester) === 7 && provisionalConfig?.provisionalAdmission7Open);
 
-    const resolveDocUrl = (path) => {
-        if (!path) return '';
-        if (path.startsWith('http') || path.startsWith('blob:')) return path;
-        if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
-            const base = api.defaults.baseURL || '/api';
-            return `${base.replace(/\/api$/, '')}/${path.replace(/^\//, '')}`;
+    const resolveDocUrl = (path, apiField = '') => {
+        if (!path || typeof path !== 'string') return '';
+        if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
+            return path;
         }
-        return ''; // raw R2 key — backend must sign before sending
+        const base = api.defaults.baseURL || '/api';
+        const host = base.replace(/\/api(\/v\d+)?$/, '').replace(/\/+$/, '');
+        const token = localStorage.getItem('token');
+
+        if (apiField) {
+            return `${host}/api/student/documents/${apiField}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        }
+
+        if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+            const cleanPath = path.startsWith('/') ? path : `/${path}`;
+            return `${host}${cleanPath}`;
+        }
+
+        if (path.startsWith('/api/') || path.startsWith('api/')) {
+            const cleanPath = path.startsWith('/') ? path : `/${path}`;
+            return `${host}${cleanPath}`;
+        }
+
+        const cleanKey = path.startsWith('/') ? path.slice(1) : path;
+        const encodedSegments = cleanKey.split('/').map(encodeURIComponent).join('/');
+        return `${host}/api/documents/view/${encodedSegments}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     };
 
     const handleFileChange = (e) => {

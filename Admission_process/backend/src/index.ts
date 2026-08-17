@@ -433,6 +433,12 @@ async function startServer() {
       console.log('ENUM migration skipped:', e.message);
     }
 
+    try {
+      await sequelize.query(`ALTER TYPE "enum_otps_purpose" ADD VALUE IF NOT EXISTS 'EMAIL_CHANGE'`).catch(() => {});
+    } catch (e: any) {
+      // ignore
+    }
+
     // Alter PostgreSQL enum values for Admission Category if they are missing
     try {
       const categoryEnumValues = ['C1', '2A', '2B', '3A', '3B'];

@@ -135,6 +135,62 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
             return;
         }
 
+        const currAddress = data.Address || data.currentAddressLine1;
+        const currCity = data.City || data.currentCity;
+        const currDistrict = data.DistrictId || data.currentDistrictId;
+        const currPincode = data.Pincode || data.currentPincode;
+        const currState = data.currentState;
+
+        if (!currAddress?.trim()) {
+            toast.error("Please enter Current Address Line 1.");
+            return;
+        }
+        if (!currCity?.trim()) {
+            toast.error("Please enter Current City / Town / Village.");
+            return;
+        }
+        if (!currDistrict) {
+            toast.error("Please select Current District.");
+            return;
+        }
+        if (!currPincode || String(currPincode).length !== 6) {
+            toast.error("Please enter a valid 6-digit Current Pincode.");
+            return;
+        }
+        if (!currState?.trim()) {
+            toast.error("Please select Current State.");
+            return;
+        }
+
+        if (!sameAsCurrent) {
+            const permAddress = data.permanentAddress || data.permanentAddressLine1;
+            const permCity = data.permanentCity;
+            const permDistrict = data.permanentDistrictId;
+            const permPincode = data.permanentPincode;
+            const permState = data.permanentState;
+
+            if (!permAddress?.trim()) {
+                toast.error("Please enter Permanent Address Line 1.");
+                return;
+            }
+            if (!permCity?.trim()) {
+                toast.error("Please enter Permanent City / Town / Village.");
+                return;
+            }
+            if (!permDistrict) {
+                toast.error("Please select Permanent District.");
+                return;
+            }
+            if (!permPincode || String(permPincode).length !== 6) {
+                toast.error("Please enter a valid 6-digit Permanent Pincode.");
+                return;
+            }
+            if (!permState?.trim()) {
+                toast.error("Please select Permanent State.");
+                return;
+            }
+        }
+
         setLoading(true);
 
         try {

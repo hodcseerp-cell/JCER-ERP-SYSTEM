@@ -535,20 +535,43 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Modal Preview & Download</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <DocumentItem field="photo" appId={app.id} label="Applicant Photo" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-              <DocumentItem field="signature" appId={app.id} label="Signature" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-              <DocumentItem field="tenthMarksheet" appId={app.id} label="10th Marksheet" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-              {app?.qualification === 'DIPLOMA' || app?.admissionType === 'DCET' ? (
-                <>
-                  <DocumentItem field="diplomaSemester5Marksheet" appId={app.id} label="Diploma 5th Sem Card" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-                  <DocumentItem field="diplomaSemester6Marksheet" appId={app.id} label="Diploma 6th Sem Card" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-                </>
-              ) : (
-                <DocumentItem field="twelfthMarksheet" appId={app.id} label="12th / PUC Card" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-              )}
-              <DocumentItem field="domicileCertificate" appId={app.id} label="Study / Domicile Cert" onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })} />
-            </div>
+            {(() => {
+              const docs = app.studentdocuments || {};
+              const documentList = [
+                { field: 'photo', dbKey: 'photoUrl', label: 'Applicant Photo', required: true },
+                { field: 'signature', dbKey: 'signatureUrl', label: 'Signature', required: true },
+                { field: 'tenthMarksheet', dbKey: 'tenthMarksheetUrl', label: '10th Marksheet', required: true },
+                ...(app?.qualification === 'DIPLOMA' || app?.admissionType === 'DCET' ? [
+                  { field: 'diplomaSemester5Marksheet', dbKey: 'diplomaSemester5MarksheetUrl', label: 'Diploma 5th Sem Card', required: true },
+                  { field: 'diplomaSemester6Marksheet', dbKey: 'diplomaSemester6MarksheetUrl', label: 'Diploma 6th Sem Card', required: true },
+                ] : [
+                  { field: 'twelfthMarksheet', dbKey: 'twelfthMarksheetUrl', label: '12th / PUC Card', required: true },
+                ]),
+                { field: 'cetScoreCard', dbKey: 'cetScoreCardUrl', label: 'Entrance Score Card (CET/DCET)', required: false },
+                { field: 'aadhaar', dbKey: 'aadhaarUrl', label: 'Aadhaar Card Copy', required: true },
+                { field: 'domicileCertificate', dbKey: 'domicileCertificateUrl', label: 'Study / Domicile Cert', required: true },
+                { field: 'casteCertificate', dbKey: 'casteCertificateUrl', label: 'Caste Certificate', required: false },
+                { field: 'incomeCertificate', dbKey: 'gapCertificateUrl', label: 'Income / Gap Certificate', required: false },
+                { field: 'feesPaidReceipt', dbKey: 'feesPaidReceiptUrl', label: 'College Fees Receipt', required: false },
+                { field: 'admissionFormFeeReceipt', dbKey: 'admissionFormFeeReceiptUrl', label: 'Admission Form Fee Receipt', required: false },
+              ];
+
+              const visibleDocuments = documentList.filter(d => d.required || !!(docs as any)[d.dbKey]);
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {visibleDocuments.map(doc => (
+                    <DocumentItem
+                      key={doc.field}
+                      field={doc.field}
+                      appId={app.id}
+                      label={doc.label}
+                      onPreview={(url, label, isPdf) => setPreviewDoc({ url, label, isPdf })}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Section: Timeline */}

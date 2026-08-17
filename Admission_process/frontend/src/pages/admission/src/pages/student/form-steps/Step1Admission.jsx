@@ -190,13 +190,33 @@ const Step1Admission = ({ onNext, data, updateData, applicationStatus, adminRema
             return;
         }
 
+        if (!data.admissionType) {
+            toast.error('Please select Admission Type.');
+            return;
+        }
+
+        if (!data.branchId) {
+            toast.error('Please select your Preferred Branch.');
+            return;
+        }
+
+        if (!data.qualification) {
+            toast.error('Please select your Qualification.');
+            return;
+        }
+
         if (!data.aadhaar || data.aadhaar.length !== 12) {
             toast.error('Please enter a valid 12-digit Aadhaar number.');
             return;
         }
 
-        if (!data.qualification) {
-            toast.error('Please select your qualification.');
+        if ((data.admissionType === 'KCET' || data.admissionType === 'COMEDK') && !data.cetNumber?.trim()) {
+            toast.error(`Please enter your ${data.admissionType} Number.`);
+            return;
+        }
+
+        if (data.admissionType === 'DCET' && !data.dcetNumber?.trim()) {
+            toast.error('Please enter your DCET Number.');
             return;
         }
 

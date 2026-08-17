@@ -218,6 +218,7 @@ export interface AdmissionStats {
   feeReceiptUploaded?: number;
   feeVerified?: number;
   correctionRequired?: number;
+  provisionalCount?: number;
   recent: AdmissionApplication[];
 }
 

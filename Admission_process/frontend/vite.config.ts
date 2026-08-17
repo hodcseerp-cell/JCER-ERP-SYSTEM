@@ -5,7 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiUrl = env.VITE_API_URL || process.env.VITE_API_URL || 'http://localhost:5000/api';
+  const backendTarget = env.VITE_BACKEND_TARGET || process.env.VITE_BACKEND_TARGET || 'http://localhost:5000';
+  const apiUrl = env.VITE_API_URL || process.env.VITE_API_URL || '/api';
   const socketUrl = env.VITE_SOCKET_URL || process.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
   return {
@@ -112,14 +113,16 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: true,
       allowedHosts: true,
+      hmr: {
+        clientPort: 443,
+      },
       proxy: {
         '/api': {
-          target: apiUrl,
+          target: backendTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/uploads': {
-          target: socketUrl,
+          target: backendTarget,
           changeOrigin: true,
         },
       },

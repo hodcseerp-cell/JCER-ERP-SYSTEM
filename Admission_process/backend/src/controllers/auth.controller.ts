@@ -699,3 +699,139 @@ export const uploadProfileImage = async (req: Request, res: Response, next: Next
     return next(error);
   }
 };
+
+export const requestEmailChange = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const authReq = req as any;
+    const userId = authReq.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const { newEmail } = req.body;
+    if (!newEmail || typeof newEmail !== 'string') {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+
+    const normalizedNewEmail = newEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedNewEmail)) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+
+    if (normalizedNewEmail === user.email.trim().toLowerCase()) {
+      return res.status(400).json({ success: false, error: 'New email address must be different from your current email.' });
+    }
+
+    // Check whether the new email is already registered to another user
+    const existingUser = await User.findOne({ where: { email: normalizedNewEmail } });
+    if (existingUser && existingUser.id !== userId) {
+      return res.status(400).json({ success: false, error: 'This email address cannot be used for this account.' });
+    }
+
+    // Generate OTP
+    const otpResult = await otpService.generateAndSaveEmailChangeOtp(userId, normalizedNewEmail);
+    if (!otpResult.success || !otpResult.otp) {
+      return res.status(400).json({ success: false, error: otpResult.error || 'Failed to generate verification OTP.' });
+    }
+
+    // Send OTP email to NEW email address
+    const recipientName = `${user.firstName} ${user.lastName}`.trim() || 'User';
+    const emailSent = await emailService.sendEmailChangeOtp(normalizedNewEmail, recipientName, otpResult.otp, 10);
+    if (!emailSent) {
+      logger.warn(`Failed to send email-change OTP to ${normalizedNewEmail}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Verification OTP sent to the new email address.',
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const verifyEmailChange = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const authReq = req as any;
+    const userId = authReq.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { otp } = req.body;
+    if (!otp || typeof otp !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid verification code. Please try again.' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    // Verify OTP code
+    const verifyResult = await otpService.verifyEmailChangeOtp(userId, otp);
+    if (!verifyResult.success || !verifyResult.newEmail) {
+      return res.status(400).json({ success: false, error: verifyResult.error || 'Invalid verification code. Please try again.' });
+    }
+
+    const newEmail = verifyResult.newEmail;
+    const oldEmail = user.email;
+
+    // Database Transaction: Atomic update
+    const transaction = await sequelize.transaction();
+    try {
+      const existingUser = await User.findOne({ where: { email: newEmail }, transaction });
+      if (existingUser && existingUser.id !== userId) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, error: 'This email address cannot be used for this account.' });
+      }
+
+      await user.update({ email: newEmail }, { transaction });
+
+      await Otp.update(
+        { verified: true },
+        {
+          where: {
+            userId,
+            purpose: 'EMAIL_CHANGE',
+            verified: false,
+          },
+          transaction,
+        }
+      );
+
+      await transaction.commit();
+    } catch (txErr) {
+      await transaction.rollback();
+      logger.error(`Email change transaction failed for user ${userId}:`, txErr);
+      return res.status(500).json({ success: false, error: 'Unable to update email right now. Please try again.' });
+    }
+
+    const recipientName = `${user.firstName} ${user.lastName}`.trim() || 'User';
+    emailService.sendEmailChangeConfirmation(newEmail, recipientName).catch((err) => {
+      logger.error(`Failed to send email change confirmation to ${newEmail}:`, err);
+    });
+
+    if (oldEmail && oldEmail !== newEmail) {
+      emailService.sendOldEmailChangeNotification(oldEmail, recipientName, newEmail).catch((err) => {
+        logger.error(`Failed to send security notice to old email ${oldEmail}:`, err);
+      });
+    }
+
+    logger.info(`EVENT: EMAIL_UPDATED | USER_ID: ${userId} | OLD: ${oldEmail} | NEW: ${newEmail}`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email address updated successfully.',
+      email: newEmail,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};

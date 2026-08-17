@@ -645,6 +645,70 @@ class EmailService {
   public async sendAdmissionConfirmedNotification(email: string, name: string, appNumber: string, usn: string): Promise<boolean> {
     return this.sendConfirmationNotification(email, { studentName: name, applicationNumber: appNumber, applicationType: 'FRESH_ADMISSION', usn });
   }
+
+  // ─── EMAIL CHANGE NOTIFICATIONS ──────────────────────────────────────────
+  /** Send 6-digit OTP code to the requested NEW email address */
+  public async sendEmailChangeOtp(
+    newEmail: string,
+    recipientName: string,
+    otpCode: string,
+    expiryMinutes: number = 10
+  ): Promise<boolean> {
+    const subject = 'JCER ERP — Email Address Update Verification';
+    const html = getJcerCommonEmailHtml({
+      recipientName,
+      subject,
+      badgeTitle: 'Email Update OTP',
+      headingText: 'Verify Your New Email Address',
+      mainMessage: `You have requested to update your JCER ERP account email address to <strong>${escapeHtml(newEmail)}</strong>. Please enter the verification code below to authorize this change.`,
+      otpCode,
+      otpExpiryMinutes: expiryMinutes,
+      securityNote: 'If you did not initiate this email change request, please ignore this message and ensure your account password remains secure.',
+    });
+
+    return this.dispatchEmail(newEmail, subject, html);
+  }
+
+  /** Send email change confirmation to the NEW email address */
+  public async sendEmailChangeConfirmation(
+    newEmail: string,
+    recipientName: string
+  ): Promise<boolean> {
+    const subject = 'JCER ERP — Email Address Updated Successfully';
+    const html = getJcerCommonEmailHtml({
+      recipientName,
+      subject,
+      badgeTitle: 'Email Address Updated',
+      mainMessage: `Your JCER ERP account email address has been successfully updated.`,
+      details: [
+        { label: 'New Email Address', value: newEmail },
+        { label: 'Status', value: 'VERIFIED & UPDATED' },
+      ],
+      actionMessage: 'You can now use this email address to sign in to the JCER ERP portal with your existing password.',
+      securityNote: 'If you did not make this change, please contact the college administration immediately.',
+    });
+
+    return this.dispatchEmail(newEmail, subject, html);
+  }
+
+  /** Send security advisory notice to the OLD email address */
+  public async sendOldEmailChangeNotification(
+    oldEmail: string,
+    recipientName: string,
+    newEmail: string
+  ): Promise<boolean> {
+    const subject = 'JCER ERP — Your Email Address Was Changed';
+    const html = getJcerCommonEmailHtml({
+      recipientName,
+      subject,
+      badgeTitle: 'Security Alert 🔒',
+      mainMessage: `The primary email address for your JCER ERP account was recently changed to <strong>${escapeHtml(newEmail)}</strong>.`,
+      actionMessage: 'This notification was sent to your former email address as a security precaution.',
+      securityNote: 'If you authorized this change, no further action is required. If you did NOT make this change, please contact the college administration immediately to secure your account.',
+    });
+
+    return this.dispatchEmail(oldEmail, subject, html);
+  }
 }
 
 export const emailService = new EmailService();

@@ -1,13 +1,15 @@
 import { DataTypes, Model } from 'sequelize';
 import db from '../config/database';
 
-export type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'DAILY_LOGIN';
+export type OtpPurpose = 'REGISTER' | 'FORGOT_PASSWORD' | 'DAILY_LOGIN' | 'EMAIL_CHANGE';
 
 export class Otp extends Model {
   public id!: string;
   public email!: string;
   public otpHash!: string;
   public purpose!: OtpPurpose;
+  public userId?: string | null;
+  public newEmail?: string | null;
   public expiresAt!: Date;
   public verified!: boolean;
   public attempts!: number;
@@ -34,8 +36,16 @@ Otp.init(
       allowNull: false,
     },
     purpose: {
-      type: DataTypes.ENUM('REGISTER', 'FORGOT_PASSWORD', 'DAILY_LOGIN'),
+      type: DataTypes.ENUM('REGISTER', 'FORGOT_PASSWORD', 'DAILY_LOGIN', 'EMAIL_CHANGE'),
       allowNull: false,
+    },
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    newEmail: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
     },
     expiresAt: {
       type: DataTypes.DATE,
@@ -59,6 +69,9 @@ Otp.init(
     indexes: [
       {
         fields: ['email', 'purpose', 'verified'],
+      },
+      {
+        fields: ['userId', 'purpose', 'verified'],
       },
       {
         fields: ['expiresAt'],

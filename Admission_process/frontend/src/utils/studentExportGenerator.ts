@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { AdmissionApplication } from '../services/admission.service';
@@ -205,42 +206,203 @@ export function generateStudentReport(
 }
 
 // ─── Excel Exporter ──────────────────────────────────────────────────────────
-function exportToExcel(
+async function exportToExcel(
   data: Record<string, any>[],
   filenameBase: string,
   type: 'summary' | 'complete',
   meta: ExportFilterMetadata
 ) {
-  const sheetName = type === 'summary' ? 'Summary Report' : 'Complete Report';
+  const sheetTitle = type === 'summary' ? 'Summary Report' : 'Complete Report';
 
-  // Build metadata header rows
-  const metaRows = [
-    ['JAIN COLLEGE OF ENGINEERING & RESEARCH'],
-    [`Student Database Report (${type.toUpperCase()} REPORT)`],
-    [`Academic Session: ${meta.academicYear} | Generated On: ${new Date().toLocaleString('en-IN')} | Total Records: ${data.length}`],
-    [`Applied Filters: Branch=${meta.branchCode}, Status=${meta.statusLabel}, Type=${meta.admissionType}, Qual=${meta.qualification}`],
-    [] // Blank row before table
-  ];
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'JCER ERP System';
+  workbook.lastModifiedBy = 'Admin';
+  workbook.created = new Date();
+  workbook.modified = new Date();
 
-  const worksheet = XLSX.utils.aoa_to_sheet(metaRows);
-  XLSX.utils.sheet_add_json(worksheet, data, { origin: 'A6' });
-
-  // Auto column widths
-  const keys = Object.keys(data[0] || {});
-  const colWidths = keys.map((key) => {
-    let maxLen = key.length;
-    data.forEach((row) => {
-      const cellVal = row[key];
-      const val = cellVal && typeof cellVal === 'object' && 'v' in cellVal ? String(cellVal.v) : (cellVal ? String(cellVal) : '');
-      if (val.length > maxLen) maxLen = val.length;
-    });
-    return { wch: Math.min(Math.max(maxLen + 3, 12), 50) };
+  const worksheet = workbook.addWorksheet(sheetTitle, {
+    views: [{ showGridLines: true }]
   });
-  worksheet['!cols'] = colWidths;
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  XLSX.writeFile(workbook, `${filenameBase}.xlsx`);
+  if (!data || data.length === 0) {
+    return;
+  }
+
+  const columns = Object.keys(data[0]);
+  const numCols = Math.max(columns.length, 1);
+
+  // 1. Title & Metadata Header Rows (Centered across table width)
+  const titleRow = worksheet.addRow(['JAIN COLLEGE OF ENGINEERING & RESEARCH']);
+  titleRow.height = 26;
+  worksheet.mergeCells(1, 1, 1, numCols);
+  titleRow.getCell(1).font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FF0F4C81' } };
+  titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  const subtitleRow = worksheet.addRow([`Student Database Report (${type.toUpperCase()} REPORT)`]);
+  subtitleRow.height = 22;
+  worksheet.mergeCells(2, 1, 2, numCols);
+  subtitleRow.getCell(1).font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF334155' } };
+  subtitleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  const metaRow1 = worksheet.addRow([
+    `Academic Session: ${meta.academicYear} | Generated On: ${new Date().toLocaleString('en-IN')} | Total Records: ${data.length}`
+  ]);
+  metaRow1.height = 18;
+  worksheet.mergeCells(3, 1, 3, numCols);
+  metaRow1.getCell(1).font = { name: 'Segoe UI', size: 9.5, italic: true, color: { argb: 'FF64748B' } };
+  metaRow1.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  const metaRow2 = worksheet.addRow([
+    `Applied Filters: Branch=${meta.branchCode}, Status=${meta.statusLabel}, Type=${meta.admissionType}, Qual=${meta.qualification}`
+  ]);
+  metaRow2.height = 18;
+  worksheet.mergeCells(4, 1, 4, numCols);
+  metaRow2.getCell(1).font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF64748B' } };
+  metaRow2.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Empty row separator
+  worksheet.addRow([]);
+
+  // 2. Table Header Row (Row 6) - Deep Slate / Navy theme with crisp bold white text
+  const headerRow = worksheet.addRow(columns);
+  headerRow.height = 30;
+
+  headerRow.eachCell((cell) => {
+    cell.font = {
+      name: 'Segoe UI',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' } // Crisp White
+    };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F172A' } // Deep Slate / Navy (#0F172A)
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: false
+    };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF334155' } },
+      left: { style: 'thin', color: { argb: 'FF334155' } },
+      bottom: { style: 'medium', color: { argb: 'FF020617' } },
+      right: { style: 'thin', color: { argb: 'FF334155' } },
+    };
+  });
+
+  // Set of headers that should be center-aligned in data cells
+  const centerAlignedHeaders = new Set([
+    'Sl No', 'Gender', 'Admission Type', 'Qualification', 'Category', 'Seat Category',
+    'Academic Year', 'Admission Date', 'Approved Date', 'Approval Date', 'Confirmation Date',
+    'Date of Birth', 'Aadhaar Number', 'Blood Group', 'Religion', 'Nationality', 'Marital Status',
+    'PIN Code', 'SSLC Passing Year', 'SSLC Percentage', 'PUC/Diploma Passing Year',
+    'PUC/Diploma Percentage', 'Entrance Rank', 'Passport Photo', 'Signature',
+    'SSLC Marks Card', 'PUC Marks Card', 'Diploma 5th Sem Marks Card', 'Diploma 6th Sem Marks Card',
+    'Entrance Score Card', 'Aadhaar Card', 'Income Certificate', 'Study Certificate', 'Fee Receipt',
+    'Verified By', 'Principal Approval', 'Current Status', 'Created Date', 'Updated Date', 'Documents'
+  ]);
+
+  // 3. Populate Data Rows
+  data.forEach((item, index) => {
+    const rowValues = columns.map((colKey) => {
+      const val = item[colKey];
+      if (val && typeof val === 'object' && 'f' in val) {
+        return val.v || 'View Documents';
+      }
+      return val ?? 'N/A';
+    });
+
+    const dataRow = worksheet.addRow(rowValues);
+    dataRow.height = 24;
+    const isEven = index % 2 === 0;
+    const rowBgColor = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
+    dataRow.eachCell((cell, colNumber) => {
+      const headerKey = columns[colNumber - 1];
+      const rawVal = item[headerKey];
+
+      // Format document hyperlinks if present
+      if (rawVal && typeof rawVal === 'object' && 'f' in rawVal) {
+        const match = String(rawVal.f).match(/HYPERLINK\("([^"]+)"/);
+        if (match && match[1]) {
+          cell.value = {
+            text: 'View Documents',
+            hyperlink: match[1]
+          };
+          cell.font = {
+            name: 'Segoe UI',
+            size: 10,
+            color: { argb: 'FF2563EB' },
+            underline: true
+          };
+        } else {
+          cell.value = 'View Documents';
+          cell.font = { name: 'Segoe UI', size: 10, color: { argb: 'FF0F172A' } };
+        }
+      } else {
+        cell.font = {
+          name: 'Segoe UI',
+          size: 10,
+          color: { argb: 'FF0F172A' }
+        };
+      }
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: rowBgColor }
+      };
+
+      const isCenter = centerAlignedHeaders.has(headerKey);
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: isCenter ? 'center' : 'left',
+        wrapText: false
+      };
+
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+      };
+    });
+  });
+
+  // 4. Auto Column Widths with generous padding
+  worksheet.columns.forEach((column, colIdx) => {
+    let maxLen = 12;
+    const headerName = columns[colIdx] || '';
+    if (headerName.length > maxLen) {
+      maxLen = headerName.length;
+    }
+
+    data.forEach((row) => {
+      const cellVal = row[headerName];
+      const strVal = cellVal && typeof cellVal === 'object' && 'v' in cellVal
+        ? String(cellVal.v)
+        : (cellVal !== undefined && cellVal !== null ? String(cellVal) : '');
+      if (strVal.length > maxLen) {
+        maxLen = strVal.length;
+      }
+    });
+
+    column.width = Math.min(Math.max(maxLen + 5, 14), 55);
+  });
+
+  // 5. Write and download file
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filenameBase}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // ─── CSV Exporter ────────────────────────────────────────────────────────────

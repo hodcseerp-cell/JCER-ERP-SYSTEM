@@ -13,6 +13,7 @@ import {
   Loader2
 } from 'lucide-react';
 import API from '../../services/api';
+import UpdateEmailModal from '../../components/profile/UpdateEmailModal';
 
 export const PrincipalProfilePage: React.FC = () => {
   const dispatch = useDispatch();
@@ -25,6 +26,7 @@ export const PrincipalProfilePage: React.FC = () => {
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -183,12 +185,21 @@ export const PrincipalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 text-neutral-600 dark:text-neutral-300">
-              <Mail className="w-4 h-4 text-neutral-400 flex-shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</p>
-                <p className="font-bold text-neutral-800 dark:text-neutral-200">{user?.email || 'arihantdesai47@gmail.com'}</p>
+            <div className="flex items-center justify-between space-x-2 text-neutral-600 dark:text-neutral-300">
+              <div className="flex items-center space-x-2">
+                <Mail className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                <div>
+                  <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Email Address</p>
+                  <p className="font-bold text-neutral-800 dark:text-neutral-200">{user?.email || 'arihantdesai47@gmail.com'}</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsEmailModalOpen(true)}
+                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex-shrink-0 shadow-sm"
+              >
+                Update Email
+              </button>
             </div>
 
             <div className="flex items-center space-x-2 text-neutral-600 dark:text-neutral-300">
@@ -274,6 +285,15 @@ export const PrincipalProfilePage: React.FC = () => {
         </div>
 
       </div>
+
+      <UpdateEmailModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        currentEmail={user?.email || ''}
+        onSuccess={(updatedEmail) => {
+          dispatch(updateUser({ email: updatedEmail }));
+        }}
+      />
 
     </div>
   );

@@ -99,9 +99,50 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (readOnly) {
             onNext();
+            return;
+        }
+        
+        const fatherPhoneVal = data.parentMobile || data.fatherPhone;
+        const fatherOccVal = data.occupation || data.fatherOccupation;
+        const incomeVal = data.annualIncome !== undefined && data.annualIncome !== '' && data.annualIncome !== null
+            ? data.annualIncome 
+            : data.fatherAnnualIncome;
+
+        if (!data.fatherName?.trim()) {
+            toast.error("Please enter Father's Name.");
+            return;
+        }
+
+        if (!fatherPhoneVal || String(fatherPhoneVal).length !== 10) {
+            toast.error("Please enter a valid 10-digit Father's Mobile Number.");
+            return;
+        }
+
+        if (!fatherOccVal?.trim()) {
+            toast.error("Please enter Father's Occupation.");
+            return;
+        }
+
+        if (!data.motherName?.trim()) {
+            toast.error("Please enter Mother's Name.");
+            return;
+        }
+
+        if (!data.motherPhone || String(data.motherPhone).length !== 10) {
+            toast.error("Please enter a valid 10-digit Mother's Mobile Number.");
+            return;
+        }
+
+        if (!data.motherOccupation?.trim()) {
+            toast.error("Please enter Mother's Occupation.");
+            return;
+        }
+
+        if (incomeVal === undefined || incomeVal === null || incomeVal === '') {
+            toast.error("Please enter Annual Income.");
             return;
         }
 

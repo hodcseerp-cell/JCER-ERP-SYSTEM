@@ -14,6 +14,7 @@ import UsnRegistry from '../models/UsnRegistry';
 import RejectionReason from '../models/RejectionReason';
 import SystemConfiguration from '../models/SystemConfiguration';
 import AdmissionSequence from '../models/AdmissionSequence';
+import ProvisionalAdmission from '../models/ProvisionalAdmission';
 import db from '../config/database';
 import { ForbiddenException } from '../utils/error.util';
 import redisService from './redis.service';
@@ -350,6 +351,7 @@ class AdmissionService {
     if (admission.applicationStatus === 'CORRECTION_REQUIRED') {
       if (!stepName) return;
       const requestedSections = admission.correctionRequestedSections || [];
+      if (requestedSections.length === 0) return;
       const normalizedStep = stepName === 'details' ? 'admission' : stepName;
       if (!requestedSections.includes(normalizedStep)) {
         throw new ForbiddenException('This section is locked and cannot be edited.');
@@ -919,7 +921,7 @@ class AdmissionService {
     const where: any = {};
     if (status && status !== 'ALL' && status !== 'HISTORY') {
       if (status === 'QUEUE') {
-        where.applicationStatus = { [Op.in]: ['SUBMITTED', 'UNDER_REVIEW'] };
+        where.applicationStatus = { [Op.in]: ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'] };
       } else if (status === 'RESUBMITTED') {
         where.applicationStatus = 'RESUBMITTED';
       } else if (status === 'SUBMITTED') {
@@ -1579,6 +1581,7 @@ class AdmissionService {
       feeVerifiedCount,
       correctionRequiredCount,
       cancelledCount,
+      provisionalCount,
     ] = await Promise.all([
       Admission.count({ where: { applicationStatus: { [Op.ne]: 'DRAFT' } } }),
       Admission.count({ where: { applicationStatus: 'DRAFT' } }),
@@ -1606,6 +1609,7 @@ class AdmissionService {
       Promise.resolve(0), // duplicate FEE_VERIFIED count
       Admission.count({ where: { applicationStatus: 'CORRECTION_REQUIRED' } }),
       Admission.count({ where: { applicationStatus: 'CANCELLED' } }),
+      ProvisionalAdmission.count({ where: { status: { [Op.in]: ['SUBMITTED', 'RESUBMITTED', 'UNDER_REVIEW'] } } }),
     ]);
 
     const recent = await Admission.findAll({
@@ -1633,6 +1637,7 @@ class AdmissionService {
       feeReceiptUploaded: feeReceiptUploadedCount,
       feeVerified: feeVerifiedCount,
       correctionRequired: correctionRequiredCount,
+      provisionalCount,
       recent 
     };
 

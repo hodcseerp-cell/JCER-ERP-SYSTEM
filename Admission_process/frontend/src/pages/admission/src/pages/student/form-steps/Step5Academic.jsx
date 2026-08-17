@@ -421,14 +421,86 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             return;
         }
 
-        if (!isSslcFormValid()) {
-            toast.error("Please fill all subject marks correctly before continuing.");
+        if (!data.sslcSchool?.trim()) {
+            toast.error("Please enter 10th / SSLC School Name.");
             return;
         }
 
-        if (data.qualification !== 'DIPLOMA' && !isPucFormValid()) {
-            toast.error("Please correct the PUC subject marks before continuing. Marks cannot exceed 100 per subject.");
+        if (!data.sslcBoard) {
+            toast.error("Please select 10th / SSLC Board.");
             return;
+        }
+
+        if (!data.sslcYear) {
+            toast.error("Please select 10th / SSLC Passing Year.");
+            return;
+        }
+
+        if (!data.sslcRegisterNumber?.trim()) {
+            toast.error("Please enter 10th / SSLC Register Number.");
+            return;
+        }
+
+        if (data.sslcAttempts === undefined || data.sslcAttempts === null || data.sslcAttempts === '') {
+            toast.error("Please select 10th / SSLC Number of Attempts.");
+            return;
+        }
+
+        if (!isSslcFormValid()) {
+            toast.error("Please fill all 10th / SSLC subject marks correctly before continuing.");
+            return;
+        }
+
+        if (data.qualification === 'DIPLOMA') {
+            if (!data.diplomaUniversity?.trim()) {
+                toast.error("Please enter Diploma College / Board / University Name.");
+                return;
+            }
+            if (!data.diplomaYear) {
+                toast.error("Please select Diploma Passing Year.");
+                return;
+            }
+            if (!data.diplomaRegisterNumber?.trim()) {
+                toast.error("Please enter Diploma Register / Register Number.");
+                return;
+            }
+            if (!data.diplomaFinalYearMaxMarks) {
+                toast.error("Please enter Diploma Final Year Maximum Marks.");
+                return;
+            }
+            if (!data.diplomaFinalYearObtained) {
+                toast.error("Please enter Diploma Final Year Obtained Marks.");
+                return;
+            }
+            if (data.diplomaAttempts === undefined || data.diplomaAttempts === null || data.diplomaAttempts === '') {
+                toast.error("Please select Diploma Number of Attempts.");
+                return;
+            }
+        } else {
+            if (!data.pucSchool?.trim()) {
+                toast.error("Please enter PUC / 12th College Name.");
+                return;
+            }
+            if (!data.pucBoard) {
+                toast.error("Please select PUC / 12th Board.");
+                return;
+            }
+            if (!data.pucYear) {
+                toast.error("Please select PUC / 12th Passing Year.");
+                return;
+            }
+            if (!data.pucRegisterNumber?.trim()) {
+                toast.error("Please enter PUC / 12th Register Number.");
+                return;
+            }
+            if (data.pucAttempts === undefined || data.pucAttempts === null || data.pucAttempts === '') {
+                toast.error("Please select PUC / 12th Number of Attempts.");
+                return;
+            }
+            if (!isPucFormValid()) {
+                toast.error("Please correct the PUC subject marks before continuing. Marks cannot exceed 100 per subject.");
+                return;
+            }
         }
 
         setLoading(true);

@@ -189,6 +189,181 @@ class OtpService {
       success: true,
     };
   }
+
+  /**
+   * Generate OTP specifically for Email Change request associated with authenticated userId.
+   */
+  public async generateAndSaveEmailChangeOtp(
+    userId: string,
+    newEmail: string
+  ): Promise<GenerateOtpResult> {
+    const normalizedNewEmail = newEmail.trim().toLowerCase();
+    const now = new Date();
+
+    const expiryMinutes = parseInt(process.env.EMAIL_CHANGE_OTP_EXPIRY_MINUTES || '10', 10);
+    const cooldownSeconds = parseInt(process.env.EMAIL_CHANGE_OTP_RESEND_SECONDS || '45', 10);
+
+    // 1. Rate Limit: Max 5 requests per hour for this user
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const hourlyCount = await Otp.count({
+      where: {
+        userId,
+        purpose: 'EMAIL_CHANGE',
+        createdAt: {
+          [Op.gte]: oneHourAgo,
+        },
+      },
+    });
+
+    if (hourlyCount >= 5) {
+      logger.warn(`Email change OTP rate limit exceeded for user ${userId}`);
+      return {
+        success: false,
+        error: 'Too many OTP requests. Maximum 5 email-change requests allowed per hour. Please try again later.',
+      };
+    }
+
+    // 2. Cooldown Guard
+    const latestOtp = await Otp.findOne({
+      where: {
+        userId,
+        purpose: 'EMAIL_CHANGE',
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (latestOtp) {
+      const elapsedSeconds = Math.floor((now.getTime() - new Date(latestOtp.createdAt).getTime()) / 1000);
+      if (elapsedSeconds < cooldownSeconds) {
+        const remainingCooldown = cooldownSeconds - elapsedSeconds;
+        return {
+          success: false,
+          error: `Please wait ${remainingCooldown} seconds before requesting a new OTP.`,
+          cooldownSeconds: remainingCooldown,
+        };
+      }
+    }
+
+    // 3. Invalidate previous unverified email-change OTPs for this user
+    await Otp.update(
+      { verified: true },
+      {
+        where: {
+          userId,
+          purpose: 'EMAIL_CHANGE',
+          verified: false,
+        },
+      }
+    );
+
+    // 4. Generate random 6-digit numeric OTP using PRNG
+    const plainOtp = crypto.randomInt(100000, 999999).toString();
+
+    // 5. Hash OTP with bcrypt
+    const salt = await bcrypt.genSalt(10);
+    const otpHash = await bcrypt.hash(plainOtp, salt);
+
+    // 6. Expiry (e.g. 10 minutes)
+    const expiresAt = new Date(now.getTime() + expiryMinutes * 60 * 1000);
+
+    // 7. Save into Otp table with userId & newEmail
+    await Otp.create({
+      userId,
+      newEmail: normalizedNewEmail,
+      email: normalizedNewEmail,
+      otpHash,
+      purpose: 'EMAIL_CHANGE',
+      expiresAt,
+      verified: false,
+      attempts: 0,
+    });
+
+    logger.info(`Email-change OTP generated for user ${userId} -> ${normalizedNewEmail} (expires: ${expiresAt.toISOString()})`);
+
+    return {
+      success: true,
+      otp: plainOtp,
+    };
+  }
+
+  /**
+   * Verify an Email Change OTP entered by user.
+   */
+  public async verifyEmailChangeOtp(
+    userId: string,
+    plainOtp: string
+  ): Promise<{ success: boolean; newEmail?: string; error?: string; attemptsRemaining?: number }> {
+    const cleanOtp = plainOtp.trim();
+
+    if (!cleanOtp || cleanOtp.length !== 6 || isNaN(Number(cleanOtp))) {
+      return {
+        success: false,
+        error: 'Invalid OTP format. Please enter a 6-digit numerical code.',
+      };
+    }
+
+    // Find the latest active email-change OTP for user
+    const otpRecord = await Otp.findOne({
+      where: {
+        userId,
+        purpose: 'EMAIL_CHANGE',
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!otpRecord || !otpRecord.newEmail) {
+      return {
+        success: false,
+        error: 'No active email-change request found. Please request a new OTP.',
+      };
+    }
+
+    if (otpRecord.verified) {
+      if (otpRecord.attempts >= 5) {
+        return {
+          success: false,
+          error: 'Too many verification attempts. Please request a new OTP.',
+        };
+      }
+      return {
+        success: false,
+        error: 'No active email-change request found. Please request a new OTP.',
+      };
+    }
+
+    const isMatch = await bcrypt.compare(cleanOtp, otpRecord.otpHash);
+
+    if (!isMatch) {
+      const newAttempts = otpRecord.attempts + 1;
+      const attemptsLeft = 5 - newAttempts;
+
+      await otpRecord.update({ attempts: newAttempts });
+
+      if (attemptsLeft <= 0) {
+        await otpRecord.update({ verified: true });
+        return {
+          success: false,
+          error: 'Invalid verification code. Maximum attempts exceeded. Please request a new OTP.',
+          attemptsRemaining: 0,
+        };
+      }
+
+      return {
+        success: false,
+        error: `Invalid verification code. You have ${attemptsLeft} attempt(s) remaining.`,
+        attemptsRemaining: attemptsLeft,
+      };
+    }
+
+    // Mark verified
+    await otpRecord.update({ verified: true });
+
+    logger.info(`Email-change OTP verified for user ${userId}`);
+    return {
+      success: true,
+      newEmail: otpRecord.newEmail,
+    };
+  }
 }
 
 export const otpService = new OtpService();

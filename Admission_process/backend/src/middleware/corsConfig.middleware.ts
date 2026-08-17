@@ -32,12 +32,13 @@ export const corsConfig = cors({
       origin.endsWith('.ngrok-free.app') ||
       origin.endsWith('.ngrok.io');
     const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+    const isPrivateIP = /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin);
 
     if (isExplicitlyAllowed || isCloudflarePages) {
       return callback(null, true);
     }
 
-    if (process.env.NODE_ENV !== 'production' && (isTunnel || isLocalhost)) {
+    if (process.env.NODE_ENV !== 'production' && (isTunnel || isLocalhost || isPrivateIP)) {
       return callback(null, true);
     }
 

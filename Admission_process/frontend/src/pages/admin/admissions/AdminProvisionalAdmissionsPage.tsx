@@ -195,6 +195,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
         setBulkReport(res.data.data);
         setSelectedIds([]);
         fetchApplications();
+        window.dispatchEvent(new CustomEvent('admissions-updated'));
         toast.success('Bulk approval processing complete.');
       }
     } catch (err: any) {
@@ -226,6 +227,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
         if (refreshRes.data?.success) {
           setReviewData(refreshRes.data.data);
         }
+        window.dispatchEvent(new CustomEvent('admissions-updated'));
       }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Document status update failed.');
@@ -251,6 +253,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
         setReviewData(null);
         setActionRemarks('');
         fetchApplications();
+        window.dispatchEvent(new CustomEvent('admissions-updated'));
         navigate('/admin/admissions/provisional');
       }
     } catch (err: any) {

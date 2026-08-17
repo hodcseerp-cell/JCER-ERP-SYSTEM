@@ -282,6 +282,7 @@ export const AdminLayout: React.FC = () => {
   const [rejectedCount, setRejectedCount] = useState(0);
   const [verifiedCount, setVerifiedCount] = useState(0);
   const [cancellationRequestsCount, setCancellationRequestsCount] = useState(0);
+  const [provisionalCount, setProvisionalCount] = useState(0);
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
@@ -291,12 +292,13 @@ export const AdminLayout: React.FC = () => {
   useEffect(() => {
     const fetchCount = () => {
       admissionService.getStats().then(stats => {
-        setPendingCount(stats.submitted + stats.underReview);
+        setPendingCount(stats.submitted + stats.underReview + (stats.resubmitted || 0));
         setResubmittedCount(stats.resubmitted || 0);
         setCorrectionCount((stats as any).correctionRequired || 0);
         setRejectedCount(stats.rejected || 0);
         setVerifiedCount(stats.approved || 0);
         setCancellationRequestsCount(stats.cancellationRequests || 0);
+        setProvisionalCount(stats.provisionalCount || 0);
       }).catch(err => console.error('Error loading sidebar stats:', err));
     };
 
@@ -354,7 +356,7 @@ export const AdminLayout: React.FC = () => {
         { name: 'Cancellation',         path: '/admin/admissions/cancellations', icon: XCircle,         badge: cancellationRequestsCount   > 0 ? cancellationRequestsCount   : undefined },
         { name: 'USN Allocation',       path: '/admin/admissions/usn',           icon: GraduationCap },
         { name: 'Promotion',            path: '/admin/admissions/promotion',     icon: ArrowUpCircle },
-        { name: 'Provisional Admission', path: '/admin/admissions/provisional',   icon: Layers },
+        { name: 'Provisional Admission', path: '/admin/admissions/provisional',   icon: Layers,          badge: provisionalCount            > 0 ? provisionalCount            : undefined },
         { name: 'History',              path: '/admin/admissions/history',       icon: CalendarDays },
       ],
     },
@@ -492,7 +494,7 @@ export const AdminLayout: React.FC = () => {
                           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-violet-600 dark:text-violet-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
                           <span className="text-[11px] font-semibold">{item.name}</span>
                         </div>
-                        {item.badge && !isActive && (
+                        {item.badge !== undefined && item.badge > 0 && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-500 text-white leading-none scale-90">
                             {item.badge}
                           </span>

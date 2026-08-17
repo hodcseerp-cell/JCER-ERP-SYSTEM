@@ -35,4 +35,8 @@ router.post('/change-password', authMiddleware, authController.changePassword);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.post('/profile-image', authMiddleware, avatarUpload.single('avatar'), authController.uploadProfileImage);
 
+// Email Change Endpoints (Authenticated)
+router.post('/email-change/request', authMiddleware, authLimiter, authController.requestEmailChange);
+router.post('/email-change/verify', authMiddleware, authLimiter, authController.verifyEmailChange);
+
 export default router;

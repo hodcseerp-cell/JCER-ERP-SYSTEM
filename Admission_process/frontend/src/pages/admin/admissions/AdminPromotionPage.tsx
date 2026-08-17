@@ -213,7 +213,7 @@ export const AdminPromotionPage: React.FC = () => {
   const targetSemester = semesterFilter !== 'All' ? Number(semesterFilter) + 1 : null;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-900/10 min-h-screen text-slate-800 dark:text-slate-100">
+    <div className={`space-y-6 p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-900/10 min-h-screen text-slate-800 dark:text-slate-100 ${selectedStudentIds.length > 0 && semesterFilter !== 'All' ? 'pb-36' : ''}`}>
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
@@ -475,7 +475,7 @@ export const AdminPromotionPage: React.FC = () => {
 
       {/* Bulk Promotion trigger floating bar */}
       {selectedStudentIds.length > 0 && semesterFilter !== 'All' && (
-        <div className="fixed bottom-6 left-6 right-6 md:left-[316px] bg-white dark:bg-slate-950 border-2 border-blue-600 rounded-2xl p-4 shadow-xl flex items-center justify-between z-50 transition-all">
+        <div className="fixed bottom-20 left-6 right-6 md:left-[316px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-2 border-blue-600 rounded-2xl p-4 shadow-2xl flex items-center justify-between z-50 transition-all">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-black text-xs">
               {selectedStudentIds.length}

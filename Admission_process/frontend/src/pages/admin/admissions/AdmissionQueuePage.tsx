@@ -263,13 +263,13 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
   };
 
   const tabs = [
-    { name: "Queue", status: "QUEUE", count: stats.submitted + stats.underReview, color: "bg-amber-500" },
-    { name: "Resubmitted", status: "RESUBMITTED", count: stats.resubmitted || 0, color: "bg-purple-500" },
-    { name: "Corrections", status: "CORRECTION_REQUIRED", count: stats.correctionRequired || 0, color: "bg-orange-500" },
-    { name: "Verified", status: "APPROVED", count: stats.approved, color: "bg-indigo-500" },
-    { name: "Enrolled", status: "ENROLLED", count: stats.enrolled, color: "bg-emerald-500" },
-    { name: "Rejected", status: "REJECTED", count: stats.rejected, color: "bg-rose-500" },
-    { name: "History", status: "ALL", count: stats.total, color: "bg-neutral-500" }
+    { name: "Queue", status: "QUEUE", count: status === "QUEUE" && data?.total !== undefined ? data.total : (stats.submitted + stats.underReview + (stats.resubmitted || 0)), color: "bg-amber-500" },
+    { name: "Resubmitted", status: "RESUBMITTED", count: status === "RESUBMITTED" && data?.total !== undefined ? data.total : (stats.resubmitted || 0), color: "bg-purple-500" },
+    { name: "Corrections", status: "CORRECTION_REQUIRED", count: status === "CORRECTION_REQUIRED" && data?.total !== undefined ? data.total : (stats.correctionRequired || 0), color: "bg-orange-500" },
+    { name: "Verified", status: "APPROVED", count: status === "APPROVED" && data?.total !== undefined ? data.total : stats.approved, color: "bg-indigo-500" },
+    { name: "Enrolled", status: "ENROLLED", count: status === "ENROLLED" && data?.total !== undefined ? data.total : stats.enrolled, color: "bg-emerald-500" },
+    { name: "Rejected", status: "REJECTED", count: status === "REJECTED" && data?.total !== undefined ? data.total : stats.rejected, color: "bg-rose-500" },
+    { name: "History", status: "ALL", count: status === "ALL" && data?.total !== undefined ? data.total : stats.total, color: "bg-neutral-500" }
   ];
 
   return (
