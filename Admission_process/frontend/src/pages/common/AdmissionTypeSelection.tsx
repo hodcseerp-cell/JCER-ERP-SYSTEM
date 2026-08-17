@@ -233,7 +233,11 @@ export const AdmissionTypeSelection: React.FC = () => {
 
         {/* Back to Home Button */}
         <button
-          onClick={() => navigate('/')}
+          onClick={() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/';
+          }}
           className={`mt-12 flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-extrabold tracking-wide uppercase transition-all shadow-sm border cursor-pointer ${
             isDark
               ? 'bg-slate-850 hover:bg-slate-800 border-slate-700 text-slate-300'

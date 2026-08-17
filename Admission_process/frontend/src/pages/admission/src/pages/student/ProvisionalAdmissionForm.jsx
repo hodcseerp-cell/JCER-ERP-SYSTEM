@@ -61,7 +61,14 @@ export const ProvisionalAdmissionForm = () => {
       // Get my application
       const appRes = await api.get('/provisional/my-admission');
       if (appRes.data?.success) {
-        const { application: appData, studentName, usn, branchName, applicationNumber, originalPhotoUrl, semester: studentSem } = appRes.data.data;
+        const { application: appData, studentName, usn, branchName, applicationNumber, originalPhotoUrl, semester: studentSem, isInitialLateralEntry } = appRes.data.data;
+        
+        if (isInitialLateralEntry && !appData) {
+          toast.error("Provisional Admission is not applicable for your initial 3rd Semester lateral entry.");
+          navigate('/admission/dashboard');
+          return;
+        }
+
         setStudentProfile({ name: studentName, usn, branchName, applicationNumber, semester: studentSem });
         setOriginalPhoto(originalPhotoUrl);
 

@@ -279,37 +279,62 @@ export const bulkDispatchCredentials = async (
 
 /** GET /api/admin/logs - Fetch audit logs */
 export const getAuditLogs = async (
-  _req: AuthRequest, res: Response, next: NextFunction
+  req: AuthRequest, res: Response, next: NextFunction
 ): Promise<any> => {
   try {
+    const { action, startDate, endDate, limit = 300 } = req.query;
+
+    const whereClause: any = {};
+
+    if (action && action !== 'ALL') {
+      whereClause.action = action;
+    }
+
+    if (startDate || endDate) {
+      whereClause.createdAt = {};
+      if (startDate) whereClause.createdAt[Op.gte] = new Date(startDate as string);
+      if (endDate) whereClause.createdAt[Op.lte] = new Date(`${endDate}T23:59:59.999Z`);
+    }
+
     const logs = await AuditLog.findAll({
+      where: whereClause,
       order: [['createdAt', 'DESC']],
-      limit: 100, // For now limit to 100 recent
+      limit: Math.min(Number(limit) || 300, 1000),
     });
 
-    // Populate usernames (since no direct sequelize assoc might be there)
+    // Populate usernames & user details
     const userIds = logs.map(l => l.userId).filter(Boolean) as string[];
     let usersMap: Record<string, any> = {};
     if (userIds.length > 0) {
       const users = await User.findAll({
-        where: { id: { [Op.in]: userIds } },
-        attributes: ['id', 'firstName', 'lastName']
+        where: { id: { [Op.in]: Array.from(new Set(userIds)) } },
+        attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'username']
       });
       usersMap = users.reduce((acc, user) => {
-        acc[user.id] = `${user.firstName} ${user.lastName}`;
+        acc[user.id] = {
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || user.email,
+          role: user.role,
+          email: user.email,
+        };
         return acc;
-      }, {} as Record<string, string>);
+      }, {} as Record<string, any>);
     }
 
-    const data = logs.map(log => ({
-      id: log.id,
-      action: log.action,
-      userId: log.userId,
-      userName: log.userId ? usersMap[log.userId] : 'System',
-      ipAddress: log.ipAddress,
-      details: log.details,
-      createdAt: log.createdAt,
-    }));
+    const data = logs.map(log => {
+      const u = log.userId ? usersMap[log.userId] : null;
+      return {
+        id: log.id,
+        action: log.action,
+        userId: log.userId,
+        userName: u ? u.name : 'System / Guest',
+        userRole: u ? u.role : 'SYSTEM',
+        userEmail: u ? u.email : null,
+        ipAddress: log.ipAddress || '127.0.0.1',
+        userAgent: log.userAgent,
+        details: log.details,
+        createdAt: log.createdAt,
+      };
+    });
 
     return res.json({ success: true, data });
   } catch (err) {
@@ -334,6 +359,7 @@ export const getSettings = async (
         admissionCycle: config.admissionCycle,
         admissionClosingDate: config.admissionClosingDate,
         handbookUrl: config.handbookUrl,
+        copyrightYear: config.copyrightYear || '2026',
         require2FA: true,
         admissionsPortalOpen: config.admissionOpen,
         freshAdmissionOpen: config.freshAdmissionOpen,
@@ -391,6 +417,10 @@ export const updateSettings = async (
 
     if (req.body.admissionCycle || req.body.academicYear) {
       config.admissionCycle = req.body.admissionCycle || req.body.academicYear;
+    }
+
+    if (req.body.copyrightYear) {
+      config.copyrightYear = String(req.body.copyrightYear).trim();
     }
 
     if (req.body.admissionClosingDate !== undefined) {

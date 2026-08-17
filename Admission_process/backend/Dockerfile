@@ -5,9 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install && \
-    npm install -g ts-node tsx
+# Install dependencies cleanly
+RUN npm ci
 
 # Copy source code
 COPY . .

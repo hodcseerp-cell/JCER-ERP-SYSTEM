@@ -5,6 +5,7 @@ import { loginStart, loginSuccess, loginFailure } from '../../store/authSlice';
 import authService from '../../services/auth.service';
 import { RootState } from '../../store';
 import Toast from '../../components/common/Toast';
+import OtpInputBox from '../../components/common/OtpInputBox';
 import { Lock, Mail, ArrowRight, Loader2, X, ArrowLeft, ShieldCheck, KeyRound, CheckCircle2 } from 'lucide-react';
 import GlobalFooter from '../../components/common/GlobalFooter';
 
@@ -221,7 +222,11 @@ export const LoginPage: React.FC = () => {
 
         {/* Back to Home Button at top left */}
         <button
-          onClick={() => navigate('/')}
+          onClick={() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/';
+          }}
           className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white font-medium text-sm transition-all duration-200 shadow-lg cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -375,45 +380,79 @@ export const LoginPage: React.FC = () => {
 
       {/* ─── ADMIN & PRINCIPAL DAILY OTP MODAL ───────────────────────────────── */}
       {showDailyOtpModal && (
-        <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div 
+            className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-7 relative overflow-hidden"
+            style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+          >
             
+            {/* Top Close Button */}
             <button 
+              type="button"
               onClick={() => setShowDailyOtpModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer border-none z-10 hover:scale-105"
+              style={{ backgroundColor: '#f1f5f9', color: '#0f172a' }}
+              title="Close modal"
             >
-              <X className="w-4 h-4 text-neutral-600" />
+              <X className="w-5 h-5" style={{ color: '#0f172a', stroke: '#0f172a' }} />
             </button>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <ShieldCheck className="w-6 h-6" />
+            <div className="space-y-5">
+              
+              {/* Header Icon & Title */}
+              <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
+                <div 
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-inner"
+                  style={{ backgroundColor: '#eef2ff', border: '1px solid #c7d2fe' }}
+                >
+                  <ShieldCheck className="w-6 h-6" style={{ color: '#4f46e5', stroke: '#4f46e5' }} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900">Daily Login Authentication</h3>
-                  <p className="text-xs text-neutral-600">First login of calendar date for <strong className="text-neutral-900">{pendingRole}</strong> ({pendingEmail})</p>
+                  <h3 
+                    className="text-base font-extrabold uppercase tracking-wide"
+                    style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                  >
+                    Daily Login Authentication
+                  </h3>
+                  <p 
+                    className="text-xs font-semibold mt-0.5"
+                    style={{ color: '#64748b', WebkitTextFillColor: '#64748b' }}
+                  >
+                    First login of calendar date for <strong style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a', fontWeight: '800' }}>{pendingRole}</strong> ({pendingEmail})
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 font-medium" style={{ color: '#78350f' }}>
-                ⏱ A 6-digit OTP code has been sent to <strong className="text-amber-950">{pendingEmail}</strong>. Once verified, today's verification remains valid for the rest of today.
+              {/* Amber Info Box */}
+              <div 
+                className="rounded-2xl p-4 text-xs font-semibold space-y-1 shadow-sm"
+                style={{ backgroundColor: '#fffbe6', border: '1.5px solid #fef08a', color: '#78350f' }}
+              >
+                <p className="font-bold text-xs" style={{ color: '#78350f', WebkitTextFillColor: '#78350f' }}>
+                  ⏱ A 6-digit OTP code has been sent to <strong style={{ color: '#451a03', WebkitTextFillColor: '#451a03', fontWeight: '800' }}>{pendingEmail}</strong>.
+                </p>
+                <p className="text-[11px] leading-relaxed pt-0.5" style={{ color: '#92400e', WebkitTextFillColor: '#92400e' }}>
+                  Once verified, today's verification remains valid for the rest of today.
+                </p>
               </div>
 
               <form onSubmit={handleVerifyDailyOtpSubmit} className="space-y-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-neutral-700 block">
-                    Enter 6-Digit Daily OTP
+                  <label 
+                    className="text-xs font-bold uppercase tracking-wider block text-center"
+                    style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                  >
+                    Enter 6-Digit Daily OTP <span style={{ color: '#f43f5e', WebkitTextFillColor: '#f43f5e' }}>*</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
+                  <OtpInputBox
                     value={dailyOtp}
-                    onChange={(e) => setDailyOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="123456"
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 light-input-mode"
-                    style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
+                    onChange={setDailyOtp}
+                    onEnterSubmit={() => {
+                      if (dailyOtp.length === 6 && !verifyingDailyOtp) {
+                        handleVerifyDailyOtpSubmit({ preventDefault: () => {} } as any);
+                      }
+                    }}
+                    disabled={verifyingDailyOtp}
                   />
                 </div>
 
@@ -422,7 +461,8 @@ export const LoginPage: React.FC = () => {
                     type="button"
                     onClick={handleResendDailyOtp}
                     disabled={resendingDailyOtp || verifyingDailyOtp}
-                    className="text-xs font-semibold text-indigo-600 hover:underline bg-transparent border-none cursor-pointer disabled:opacity-50"
+                    className="text-xs font-bold hover:underline bg-transparent border-none cursor-pointer disabled:opacity-50"
+                    style={{ color: '#4f46e5', WebkitTextFillColor: '#4f46e5' }}
                   >
                     {resendingDailyOtp ? 'Resending...' : 'Resend Daily OTP'}
                   </button>
@@ -430,15 +470,16 @@ export const LoginPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={verifyingDailyOtp || dailyOtp.length !== 6}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="font-extrabold py-3.5 px-6 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 border-none active:scale-[0.98]"
+                    style={{ backgroundColor: '#4f46e5', color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                   >
                     {verifyingDailyOtp ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Verifying...
+                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                        <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Verifying...</span>
                       </>
                     ) : (
-                      'Verify & Sign In'
+                      <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Verify & Sign In</span>
                     )}
                   </button>
                 </div>
@@ -450,55 +491,94 @@ export const LoginPage: React.FC = () => {
 
       {/* ─── REUSABLE FORGOT PASSWORD MODAL (ALL ROLES) ────────────────────── */}
       {showForgotModal && (
-        <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-[28px] shadow-2xl p-6 relative animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div 
+            className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-7 relative overflow-hidden"
+            style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+          >
             
+            {/* Top Close Button */}
             <button 
+              type="button"
               onClick={() => { if (!forgotLoading) setShowForgotModal(false); }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center hover:scale-105 transition-all cursor-pointer border-none"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer border-none z-10 hover:scale-105"
+              style={{ backgroundColor: '#f1f5f9', color: '#0f172a' }}
+              title="Close modal"
             >
-              <X className="w-4 h-4 text-neutral-600" />
+              <X className="w-5 h-5" style={{ color: '#0f172a', stroke: '#0f172a' }} />
             </button>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <KeyRound className="w-5 h-5" />
+            <div className="space-y-5">
+              
+              {/* Header Icon & Title */}
+              <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
+                <div 
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-inner"
+                  style={{ backgroundColor: '#eef2ff', border: '1px solid #c7d2fe' }}
+                >
+                  <KeyRound className="w-6 h-6" style={{ color: '#4f46e5', stroke: '#4f46e5' }} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900">Password Recovery</h3>
-                  <p className="text-xs text-neutral-600">Secure OTP Password Reset for Student, Admin & Principal</p>
+                  <h3 
+                    className="text-base font-extrabold uppercase tracking-wide"
+                    style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                  >
+                    Password Recovery
+                  </h3>
+                  <p 
+                    className="text-xs font-semibold mt-0.5"
+                    style={{ color: '#64748b' }}
+                  >
+                    Reset your password via 6-digit email verification code
+                  </p>
                 </div>
               </div>
 
               {/* Step 1: Request OTP */}
               {forgotStep === 'EMAIL' && (
-                <form onSubmit={handleSendForgotOtp} className="space-y-4 pt-2">
+                <form onSubmit={handleSendForgotOtp} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-neutral-700 block">Registered Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="e.g. name@example.com"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
-                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
-                    />
+                    <label 
+                      className="text-xs font-bold uppercase tracking-wider block"
+                      style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                    >
+                      Registered Email Address <span style={{ color: '#f43f5e', WebkitTextFillColor: '#f43f5e' }}>*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Mail className="h-5 w-5" style={{ color: '#64748b', stroke: '#64748b' }} />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="e.g. name@example.com"
+                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-4 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
+                        style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a', WebkitTextFillColor: '#0f172a', fontSize: '15px' }}
+                      />
+                    </div>
+                    <p className="text-[11px] font-medium pt-0.5" style={{ color: '#475569', WebkitTextFillColor: '#475569' }}>
+                      We will send a 6-digit password reset code to your registered email address.
+                    </p>
                   </div>
 
                   <button
                     type="submit"
                     disabled={forgotLoading || !forgotEmail}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full font-extrabold py-3.5 px-4 rounded-2xl shadow-lg transition-all duration-200 text-xs cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 border-none active:scale-[0.98]"
+                    style={{ backgroundColor: '#4f46e5', color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                   >
                     {forgotLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Sending Password Reset OTP...
+                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                        <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Sending Verification Code...</span>
                       </>
                     ) : (
-                      'Send Verification Code'
+                      <>
+                        <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Send Verification Code</span>
+                        <ArrowRight className="w-4 h-4" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                      </>
                     )}
                   </button>
                 </form>
@@ -506,22 +586,36 @@ export const LoginPage: React.FC = () => {
 
               {/* Step 2: Verify OTP */}
               {forgotStep === 'OTP' && (
-                <form onSubmit={handleVerifyForgotOtp} className="space-y-4 pt-2">
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 text-xs text-indigo-950 font-medium" style={{ color: '#1e1b4b' }}>
-                    Enter the 6-digit OTP sent to <strong className="text-indigo-950">{forgotEmail}</strong>.
+                <form onSubmit={handleVerifyForgotOtp} className="space-y-4">
+                  <div 
+                    className="rounded-2xl p-4 text-xs font-semibold space-y-1.5 shadow-sm"
+                    style={{ backgroundColor: '#f1f5f9', border: '1.5px solid #cbd5e1', color: '#0f172a' }}
+                  >
+                    <p className="flex items-center gap-2 font-bold text-sm" style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}>
+                      <CheckCircle2 size={16} style={{ color: '#16a34a', stroke: '#16a34a' }} className="shrink-0" />
+                      <span style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a', fontWeight: '800' }}>Verification Code Sent</span>
+                    </p>
+                    <p className="text-xs leading-relaxed" style={{ color: '#334155', WebkitTextFillColor: '#334155' }}>
+                      Enter the 6-digit OTP sent to <strong style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a', fontWeight: '800' }}>{forgotEmail}</strong>
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-neutral-700 block">Enter 6-Digit Code</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
+                    <label 
+                      className="text-xs font-bold uppercase tracking-wider block text-center"
+                      style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                    >
+                      Enter 6-Digit OTP Code <span style={{ color: '#f43f5e', WebkitTextFillColor: '#f43f5e' }}>*</span>
+                    </label>
+                    <OtpInputBox
                       value={forgotOtp}
-                      onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
-                      placeholder="123456"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 px-4 text-center font-mono text-xl font-bold tracking-[8px] outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 light-input-mode"
-                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
+                      onChange={setForgotOtp}
+                      onEnterSubmit={() => {
+                        if (forgotOtp.length === 6 && !forgotLoading) {
+                          handleVerifyForgotOtp({ preventDefault: () => {} } as any);
+                        }
+                      }}
+                      disabled={forgotLoading}
                     />
                   </div>
 
@@ -529,76 +623,100 @@ export const LoginPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setForgotStep('EMAIL')}
-                      className="text-xs font-semibold text-neutral-600 hover:underline bg-transparent border-none cursor-pointer"
+                      className="text-xs font-bold hover:underline bg-transparent border-none cursor-pointer"
+                      style={{ color: '#4f46e5', WebkitTextFillColor: '#4f46e5' }}
                     >
-                      Change Email
+                      ← Change Email
                     </button>
 
                     <button
                       type="submit"
                       disabled={forgotLoading || forgotOtp.length !== 6}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="font-extrabold py-3.5 px-6 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 border-none active:scale-[0.98]"
+                      style={{ backgroundColor: '#4f46e5', color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                     >
                       {forgotLoading ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Verifying...
+                          <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                          <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Verifying Code...</span>
                         </>
                       ) : (
-                        'Verify Code'
+                        <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Verify Code</span>
                       )}
                     </button>
                   </div>
                 </form>
               )}
 
-              {/* Step 3: New Password */}
+              {/* Step 3: Set New Password */}
               {forgotStep === 'NEW_PASSWORD' && (
-                <form onSubmit={handleResetPassword} className="space-y-3 pt-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-700 block">New Password</label>
-                    <input
-                      type="password"
-                      required
-                      minLength={8}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
-                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
-                    />
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label 
+                      className="text-xs font-bold uppercase tracking-wider block"
+                      style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                    >
+                      New Password <span style={{ color: '#f43f5e', WebkitTextFillColor: '#f43f5e' }}>*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Lock className="h-5 w-5" style={{ color: '#64748b', stroke: '#64748b' }} />
+                      </div>
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Minimum 8 characters"
+                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-4 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
+                        style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a', WebkitTextFillColor: '#0f172a', fontSize: '15px' }}
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-neutral-700 block">Confirm New Password</label>
-                    <input
-                      type="password"
-                      required
-                      minLength={8}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter new password"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-2.5 px-3.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 font-medium light-input-mode"
-                      style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
-                    />
+                  <div className="space-y-1.5">
+                    <label 
+                      className="text-xs font-bold uppercase tracking-wider block"
+                      style={{ color: '#0f172a', WebkitTextFillColor: '#0f172a' }}
+                    >
+                      Confirm New Password <span style={{ color: '#f43f5e', WebkitTextFillColor: '#f43f5e' }}>*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Lock className="h-5 w-5" style={{ color: '#64748b', stroke: '#64748b' }} />
+                      </div>
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-4 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
+                        style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a', WebkitTextFillColor: '#0f172a', fontSize: '15px' }}
+                      />
+                    </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={forgotLoading || !newPassword || newPassword !== confirmPassword}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                    className="w-full font-extrabold py-3.5 px-4 rounded-2xl shadow-lg transition-all text-xs cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 border-none active:scale-[0.98]"
+                    style={{ backgroundColor: '#4f46e5', color: '#ffffff', WebkitTextFillColor: '#ffffff' }}
                   >
                     {forgotLoading ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Updating Password...
+                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+                        <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Updating Password...</span>
                       </>
                     ) : (
-                      'Set New Password & Back to Login'
+                      <span style={{ color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Set New Password & Back to Login</span>
                     )}
                   </button>
                 </form>
               )}
+
             </div>
           </div>
         </div>

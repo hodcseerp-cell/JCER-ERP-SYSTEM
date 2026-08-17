@@ -1,7 +1,19 @@
 import React, { useRef, useEffect } from 'react';
 
-export const OtpInputBox = ({ value = '', onChange, onEnterSubmit, disabled = false }) => {
-  const inputRefs = useRef([]);
+interface OtpInputBoxProps {
+  value: string;
+  onChange: (val: string) => void;
+  onEnterSubmit?: () => void;
+  disabled?: boolean;
+}
+
+export const OtpInputBox: React.FC<OtpInputBoxProps> = ({
+  value = '',
+  onChange,
+  onEnterSubmit,
+  disabled = false,
+}) => {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Create array of 6 characters
   const digits = Array.from({ length: 6 }, (_, i) => value[i] || '');
@@ -15,7 +27,7 @@ export const OtpInputBox = ({ value = '', onChange, onEnterSubmit, disabled = fa
     }
   }, [disabled]);
 
-  const handleChange = (index, e) => {
+  const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     const digit = val.substring(val.length - 1).replace(/\D/g, '');
 
@@ -30,7 +42,7 @@ export const OtpInputBox = ({ value = '', onChange, onEnterSubmit, disabled = fa
     }
   };
 
-  const handleKeyDown = (index, e) => {
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace') {
       if (!digits[index] && index > 0) {
         // Focus previous box on backspace if current is empty
@@ -47,7 +59,7 @@ export const OtpInputBox = ({ value = '', onChange, onEnterSubmit, disabled = fa
     }
   };
 
-  const handlePaste = (e) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pasteData = e.clipboardData.getData('text').trim().replace(/\D/g, '').slice(0, 6);
     if (pasteData) {

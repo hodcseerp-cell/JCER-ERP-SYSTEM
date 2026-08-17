@@ -149,7 +149,7 @@ const actionItems: SearchItem[] = [
     title: 'Export Students Data',
     description: 'Download active student records as CSV spreadsheet',
     keywords: ['export', 'csv', 'download', 'students', 'excel', 'sheet'],
-    route: '/admin/students?action=export',
+    route: '/admin/student-export',
     actionEvent: 'trigger-student-export',
     iconName: 'Download'
   },

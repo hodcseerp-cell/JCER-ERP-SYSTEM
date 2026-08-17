@@ -198,7 +198,7 @@ const TermsOfUsePage: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border space-y-1">
           <p className="font-bold">Jain College of Engineering & Research</p>
           <p className="text-slate-500 dark:text-slate-400">Industrial Estate, Udyambag, Belagavi, Karnataka - 590008</p>
-          <p>Email: <span className="font-semibold text-indigo-600 dark:text-indigo-400">principal@jcer.in</span></p>
+          <p>Email: <span className="font-semibold text-indigo-600 dark:text-indigo-400">support.collegeerp@gmail.com</span></p>
         </div>
       </section>
     </LegalPageLayout>

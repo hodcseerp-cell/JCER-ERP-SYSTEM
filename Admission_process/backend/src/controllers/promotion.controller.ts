@@ -147,8 +147,9 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
     const fromSem = Number(fromSemester);
     const toSem = Number(toSemester);
 
-    if (toSem !== fromSem + 1) {
-      return res.status(400).json({ error: `Invalid target semester. Students can only be promoted to the immediate next semester (${fromSem + 1}).` });
+    const isTargetValid = toSem === fromSem + 1 || (fromSem === 3 && toSem === 5) || (fromSem === 5 && toSem === 7);
+    if (!isTargetValid) {
+      return res.status(400).json({ error: `Invalid target semester for promotion.` });
     }
 
     const students = await Student.findAll({
@@ -229,8 +230,9 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
     const toSem = Number(toSemester);
     const acYear = academicYear || '2026-2027';
 
-    if (toSem !== fromSem + 1) {
-      return res.status(400).json({ error: `Promotion is restricted to the immediate next semester (${fromSem + 1}).` });
+    const isTargetValid = toSem === fromSem + 1 || (fromSem === 3 && toSem === 5) || (fromSem === 5 && toSem === 7);
+    if (!isTargetValid) {
+      return res.status(400).json({ error: `Invalid target semester for promotion.` });
     }
 
     // Step 1: Pre-fetch outside transaction to isolate valid records

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../../../../services/api';
 import authService from '../../../../services/auth.service';
 import { useAuth } from '../context/AuthContext';
+import OtpInputBox from '../components/OtpInputBox';
 import { registerSchema } from '../../../../utils/validation.util';
 import { getAcademicYear } from '../../../../utils/date.util';
 
@@ -312,7 +313,7 @@ const Register = () => {
                                     </span>
                                 )}
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                                 <input
                                     type="email"
                                     id="email"
@@ -320,7 +321,7 @@ const Register = () => {
                                     value={formData.email}
                                     onChange={handleChange}
                                     disabled={isEmailVerified}
-                                    className="flex-1 px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 disabled:bg-emerald-50/50 disabled:text-emerald-900 shadow-sm focus:shadow-md"
+                                    className="flex-1 min-w-0 px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 disabled:bg-emerald-50/50 disabled:text-emerald-900 shadow-sm focus:shadow-md"
                                     placeholder="student@example.com"
                                     required
                                 />
@@ -329,7 +330,7 @@ const Register = () => {
                                         type="button"
                                         onClick={handleSendOtp}
                                         disabled={sendingOtp || !formData.email}
-                                        className="px-3.5 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-400 font-bold rounded-xl text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer disabled:opacity-50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0"
+                                        className="w-full sm:w-auto shrink-0 whitespace-nowrap px-3.5 py-2.5 sm:py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-400 font-bold rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0"
                                     >
                                         {sendingOtp ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
                                         {otpSent ? 'Resend OTP' : 'Send OTP'}
@@ -340,25 +341,27 @@ const Register = () => {
 
                         {/* 6-Digit OTP Verification Box */}
                         {otpSent && !isEmailVerified && (
-                            <div className="p-3.5 bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90 rounded-2xl space-y-2 animate-fade-in transition-all duration-300 shadow-sm">
+                            <div className="p-3.5 bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90 rounded-2xl space-y-3 animate-fade-in transition-all duration-300 shadow-sm">
                                 <label className="text-xs font-bold text-indigo-950 flex items-center justify-between">
                                     <span>Enter 6-Digit Verification Code</span>
-                                    <span className="text-[10px] text-indigo-600 font-medium">Valid for 5 mins</span>
+                                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-100/70 px-2 py-0.5 rounded-md">Valid for 5 mins</span>
                                 </label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="password"
-                                        maxLength={6}
+                                <div className="space-y-3">
+                                    <OtpInputBox
                                         value={otpCode}
-                                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                                        placeholder="••••••"
-                                        className="flex-1 px-3 py-2 bg-white border border-indigo-300 rounded-xl text-center font-mono text-lg font-bold tracking-[8px] outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-sm transition-all"
+                                        onChange={setOtpCode}
+                                        onEnterSubmit={() => {
+                                            if (otpCode.length === 6 && !verifyingOtp) {
+                                                handleVerifyOtp();
+                                            }
+                                        }}
+                                        disabled={verifyingOtp}
                                     />
                                     <button
                                         type="button"
                                         onClick={handleVerifyOtp}
                                         disabled={verifyingOtp || otpCode.length !== 6}
-                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-md hover:shadow-indigo-600/30 hover:-translate-y-0.5 active:translate-y-0"
+                                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md hover:shadow-indigo-600/30 active:scale-[0.99]"
                                     >
                                         {verifyingOtp ? <Loader2 size={13} className="animate-spin" /> : 'Verify OTP'}
                                     </button>

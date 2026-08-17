@@ -98,7 +98,7 @@ class OtpService {
       attempts: 0,
     });
 
-    logger.info(`OTP generated and hashed for ${normalizedEmail} (purpose: ${purpose}, expires: ${expiresAt.toISOString()})`);
+    logger.info(`[DEV_OTP] Generated OTP for ${normalizedEmail} (purpose: ${purpose}, code: ${plainOtp}, expires: ${expiresAt.toISOString()})`);
 
     return {
       success: true,
@@ -120,53 +120,48 @@ class OtpService {
       };
     }
 
-    // Find the latest active unverified OTP for email & purpose
-    const otpRecord = await Otp.findOne({
+    const now = new Date();
+
+    // Find all active unexpired and unverified OTPs for email & purpose
+    const activeOtps = await Otp.findAll({
       where: {
         email: normalizedEmail,
         purpose,
         verified: false,
+        expiresAt: {
+          [Op.gt]: now,
+        },
       },
       order: [['createdAt', 'DESC']],
     });
 
-    if (!otpRecord) {
+    if (!activeOtps || activeOtps.length === 0) {
       return {
         success: false,
         error: 'No active OTP found. Please request a new OTP.',
       };
     }
 
-    // Check expiry
-    const now = new Date();
-    if (now > new Date(otpRecord.expiresAt)) {
-      await otpRecord.update({ verified: true });
-      return {
-        success: false,
-        error: 'OTP has expired (validity is 5 minutes). Please request a new OTP.',
-      };
+    // Try matching entered cleanOtp against active OTP records
+    let matchedRecord: Otp | null = null;
+    for (const otpRecord of activeOtps) {
+      if (otpRecord.attempts >= 5) continue;
+      const isMatch = await bcrypt.compare(cleanOtp, otpRecord.otpHash);
+      if (isMatch) {
+        matchedRecord = otpRecord;
+        break;
+      }
     }
 
-    // Check attempt count
-    if (otpRecord.attempts >= 5) {
-      await otpRecord.update({ verified: true });
-      return {
-        success: false,
-        error: 'Maximum verification attempts (5) exceeded. This OTP is now invalidated. Please request a new OTP.',
-      };
-    }
+    if (!matchedRecord) {
+      const latestRecord = activeOtps[0];
+      const newAttempts = latestRecord.attempts + 1;
+      const attemptsLeft = Math.max(0, 5 - newAttempts);
 
-    // Verify hashed OTP using bcrypt
-    const isMatch = await bcrypt.compare(cleanOtp, otpRecord.otpHash);
-
-    if (!isMatch) {
-      const newAttempts = otpRecord.attempts + 1;
-      const attemptsLeft = 5 - newAttempts;
-
-      await otpRecord.update({ attempts: newAttempts });
+      await latestRecord.update({ attempts: newAttempts });
 
       if (attemptsLeft <= 0) {
-        await otpRecord.update({ verified: true });
+        await latestRecord.update({ verified: true });
         return {
           success: false,
           error: 'Invalid OTP. Maximum attempts exceeded. Please request a new OTP.',
@@ -181,8 +176,17 @@ class OtpService {
       };
     }
 
-    // OTP is valid! Invalidate immediately after successful verification
-    await otpRecord.update({ verified: true });
+    // OTP is valid! Invalidate all unverified OTPs for this email and purpose
+    await Otp.update(
+      { verified: true },
+      {
+        where: {
+          email: normalizedEmail,
+          purpose,
+          verified: false,
+        },
+      }
+    );
 
     logger.info(`OTP successfully verified for ${normalizedEmail} (${purpose})`);
     return {

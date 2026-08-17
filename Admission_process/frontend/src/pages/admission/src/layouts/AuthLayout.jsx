@@ -30,13 +30,18 @@ const AuthLayout = () => {
             {/* Scrollable Main Content Area */}
             <main className="flex-1 overflow-y-auto w-full p-3 sm:p-5 lg:p-6 flex flex-col justify-start items-center relative z-10">
                 {/* Back to Home Button at top left of content area */}
-                <Link
-                    to="/"
+                <button
+                    type="button"
+                    onClick={() => {
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        window.location.href = '/';
+                    }}
                     className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/90 backdrop-blur-md hover:bg-white border border-slate-200/80 hover:border-primary-400 text-slate-800 hover:text-primary-600 font-bold text-xs transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 cursor-pointer"
                 >
                     <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
                     Back to Home
-                </Link>
+                </button>
 
                 <div className="group w-full max-w-[1050px] grid grid-cols-1 lg:grid-cols-2 items-stretch bg-white rounded-3xl shadow-2xl hover:shadow-[0_30px_70px_-15px_rgba(37,99,235,0.22)] border border-slate-200/80 hover:border-primary-400/60 h-auto animate-fade-in text-slate-900 my-auto transition-all duration-500 ease-out hover:-translate-y-1 overflow-hidden">
                     

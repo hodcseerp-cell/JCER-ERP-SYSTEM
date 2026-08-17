@@ -50,7 +50,7 @@ export const LandingPage: React.FC = () => {
     admissionOpen: true,
     admissionCycle: getAcademicYear(),
     maintenanceMode: false,
-    supportEmail: "admissions@jcer.org",
+    supportEmail: "support.collegeerp@gmail.com",
     supportPhone: "+91 831 2400400"
   });
 

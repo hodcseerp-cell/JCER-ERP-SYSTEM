@@ -81,7 +81,7 @@ export function generateHandbookPDFBuffer(): Buffer {
       "Nodal Admission Office : Ground Floor, Admin Block, JCER Campus, Udyambag, Belagavi",
       "Working Hours          : Monday to Saturday | 9:30 AM to 5:30 PM",
       "Contact Phone          : 099448693987 / +91 831 2400400",
-      "Contact Email          : principal@jcer.in / admissions@jcer.org",
+      "Contact Email          : principal@jcer.in / support.collegeerp@gmail.com",
       "Official Website       : https://www.jcer.in",
       "",
       "10. FREQUENTLY ASKED QUESTIONS (FAQs)",

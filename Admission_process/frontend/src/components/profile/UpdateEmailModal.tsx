@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, ShieldCheck, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import emailChangeService from '../../services/emailChange.service';
+import OtpInputBox from '../common/OtpInputBox';
 
 interface UpdateEmailModalProps {
   isOpen: boolean;
@@ -275,23 +276,12 @@ export const UpdateEmailModal: React.FC<UpdateEmailModalProps> = ({
                   Enter verification code
                 </label>
 
-                {/* 6 Digit OTP Input Grid with high text contrast */}
-                <div className="flex justify-center space-x-2" onPaste={handleOtpPaste}>
-                  {otpDigits.map((digit, idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => (otpInputRefs.current[idx] = el)}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      disabled={loading}
-                      className="w-11 h-12 text-center text-lg font-black text-neutral-900 dark:text-white bg-neutral-50 dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600 rounded-xl focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 focus:bg-white dark:focus:bg-neutral-900 transition-all shadow-sm disabled:opacity-50"
-                    />
-                  ))}
-                </div>
+                <OtpInputBox
+                  value={otpDigits.join('')}
+                  onChange={(val) => setOtpDigits(Array.from({ length: 6 }, (_, i) => val[i] || ''))}
+                  onEnterSubmit={() => handleVerifyOtp()}
+                  disabled={loading}
+                />
               </div>
 
               <div className="pt-2 space-y-3">

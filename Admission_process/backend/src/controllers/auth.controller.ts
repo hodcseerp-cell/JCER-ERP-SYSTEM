@@ -470,20 +470,30 @@ export const sendForgotPasswordOtp = async (req: Request, res: Response, next: N
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Account enumeration protection: Return generic success response whether account exists or not
     const user = await User.findOne({ where: { email: normalizedEmail } });
-    if (user && user.status === 'ACTIVE') {
-      const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'FORGOT_PASSWORD');
-      if (genResult.success && genResult.otp) {
-        await emailService.sendForgotPasswordOTP(normalizedEmail, `${user.firstName} ${user.lastName}`, genResult.otp, user.role);
-      }
-    } else {
-      logger.info(`FORGOT_PASSWORD_REQUEST: Handled with enumeration protection for ${normalizedEmail}`);
+    if (!user || user.status !== 'ACTIVE') {
+      return res.status(404).json({ error: 'No active account found registered with this email address.' });
+    }
+
+    const genResult = await otpService.generateAndSaveOtp(normalizedEmail, 'FORGOT_PASSWORD');
+    if (!genResult.success || !genResult.otp) {
+      return res.status(400).json({ error: genResult.error || 'Failed to generate OTP verification code.' });
+    }
+
+    const emailSent = await emailService.sendForgotPasswordOTP(
+      normalizedEmail,
+      `${user.firstName} ${user.lastName}`,
+      genResult.otp,
+      user.role
+    );
+
+    if (!emailSent) {
+      logger.warn(`Failed to send Forgot Password OTP email to ${normalizedEmail}`);
     }
 
     return res.status(200).json({
       success: true,
-      message: 'If an account exists for this email address, a verification code has been sent to your email.',
+      message: 'A 6-digit verification code has been sent to your email address.',
     });
   } catch (error) {
     return next(error);
@@ -498,7 +508,9 @@ export const verifyForgotPasswordOtp = async (req: Request, res: Response, next:
       return res.status(400).json({ error: 'Email address and OTP code are required.' });
     }
 
-    const verifyResult = await otpService.verifyOtp(email, otp, 'FORGOT_PASSWORD');
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const verifyResult = await otpService.verifyOtp(normalizedEmail, otp, 'FORGOT_PASSWORD');
     if (!verifyResult.success) {
       return res.status(400).json({ error: verifyResult.error || 'OTP verification failed.' });
     }
@@ -530,12 +542,16 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Check if OTP was verified for FORGOT_PASSWORD
+    // Check if OTP was verified for FORGOT_PASSWORD in past 15 minutes
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
     const verifiedOtp = await Otp.findOne({
       where: {
         email: normalizedEmail,
         purpose: 'FORGOT_PASSWORD',
         verified: true,
+        updatedAt: {
+          [Op.gte]: fifteenMinsAgo,
+        },
       },
       order: [['updatedAt', 'DESC']],
     });

@@ -51,6 +51,7 @@ import AdminUsnAllocationPage from './pages/admin/admissions/AdminUsnAllocationP
 import { AdminStudentDocumentsPage } from './pages/admin/admissions/AdminStudentDocumentsPage';
 import { BulkDocumentExportPage } from './pages/admin/admissions/BulkDocumentExportPage';
 import { AdminPromotionPage } from './pages/admin/admissions/AdminPromotionPage';
+import { StudentExportPage } from './pages/admin/admissions/StudentExportPage';
 
 import AdminNotificationsPage from './pages/admin/communications/AdminNotificationsPage';
 import AdminAnnouncementsPage from './pages/admin/communications/AdminAnnouncementsPage';
@@ -243,6 +244,7 @@ export const App: React.FC = () => (
               <Route path="documents/bulk" element={<BulkDocumentExportPage />} />
 
               <Route path="students"         element={<StudentsDashboardPage />} />
+              <Route path="student-export"   element={<StudentExportPage />} />
               <Route path="students/view/:id" element={<StudentViewPage />} />
               <Route path="users/principals" element={<PrincipalManagementPage />} />
               <Route path="credentials"      element={<CredentialManagementPage />} />
@@ -268,6 +270,7 @@ export const App: React.FC = () => (
               <Route path="admissions/history"     element={<PrincipalAdmissionQueuePage defaultStatus="ALL" />} />
               <Route path="admissions/review/:id"  element={<PrincipalAdmissionReviewPage />} />
               <Route path="students"               element={<StudentsDashboardPage readOnly={true} />} />
+              <Route path="student-export"         element={<StudentExportPage readOnly={true} />} />
               <Route path="students/view/:id"      element={<StudentViewPage />} />
               <Route path="analytics"              element={<CollegeAnalyticsPage />} />
               <Route path="reports"                element={<ReportGenerationPage />} />

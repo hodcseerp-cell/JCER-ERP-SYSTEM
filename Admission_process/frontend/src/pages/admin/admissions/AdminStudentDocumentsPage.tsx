@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../../services/api';
 import { 
-  ArrowLeft, Download, Eye, CheckCircle2, XCircle, Loader2, User, AlertTriangle, X, Layers
+  ArrowLeft, Download, Eye, CheckCircle2, Loader2, User, AlertTriangle, X, Layers
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -127,6 +127,80 @@ export const AdminStudentDocumentsPage: React.FC = () => {
 
   const { studentName, usn, applicationNumber, branch, academicYear, applicationStatus, documents, provisionalDocuments } = docData;
 
+  // ─── DEDICATED FULL-PAGE DOCUMENT VIEWER VIEW ──────────────────────────────
+  if (viewingDoc) {
+    return (
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto min-h-screen bg-neutral-50 dark:bg-neutral-950 animate-fade-in space-y-6">
+        {/* Dedicated Viewer Header Bar with Exit Buttons */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800/80 rounded-3xl p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setViewingDoc(null)}
+              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-2xl text-xs font-black transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
+              title="Exit Document Viewer"
+            >
+              <ArrowLeft size={16} /> Exit Viewer
+            </button>
+            <div>
+              <h2 className="text-lg md:text-xl font-black text-neutral-900 dark:text-white uppercase tracking-wide">
+                {viewingDoc.label}
+              </h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 font-bold mt-0.5">
+                Student: <span className="text-neutral-900 dark:text-white font-black">{studentName}</span> ({usn || applicationNumber})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            <button 
+              onClick={() => handleAction(viewingDoc.label, 'download', viewingDoc.url, viewingDoc.isPdf)}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-600/10 cursor-pointer"
+            >
+              <Download size={14} /> Download Document
+            </button>
+
+            <button 
+              onClick={() => setViewingDoc(null)}
+              className="px-4 py-2.5 bg-neutral-950 hover:bg-neutral-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <X size={14} /> Exit
+            </button>
+          </div>
+        </div>
+
+        {/* Main Full-Page Viewer Canvas */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800/80 rounded-3xl p-4 sm:p-8 shadow-sm flex flex-col items-center justify-center min-h-[75vh] relative overflow-hidden">
+          {viewingDoc.isPdf ? (
+            <iframe 
+              src={viewingDoc.url} 
+              className="w-full h-[75vh] md:h-[80vh] rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white"
+              title={`${viewingDoc.label} Preview`}
+            />
+          ) : (
+            <div className="w-full flex flex-col items-center justify-center space-y-4">
+              <img 
+                src={viewingDoc.url} 
+                alt={viewingDoc.label}
+                className="max-w-full max-h-[72vh] md:max-h-[78vh] rounded-2xl border border-neutral-200 dark:border-neutral-800 object-contain bg-neutral-50 dark:bg-neutral-950 shadow-lg"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Dedicated Viewer Bottom Exit Navigation */}
+        <div className="flex items-center justify-between pt-2">
+          <button 
+            onClick={() => setViewingDoc(null)}
+            className="px-5 py-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+          >
+            <ArrowLeft size={16} /> Exit Viewer & Return to Document Center
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── STANDARD DOCUMENT LIST VIEW ───────────────────────────────────────────
   return (
     <div className="p-6 max-w-7xl mx-auto min-h-screen bg-neutral-50 dark:bg-neutral-950">
       {/* Header Navigation */}
@@ -307,44 +381,8 @@ export const AdminStudentDocumentsPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Document Preview Modal */}
-      {viewingDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60">
-              <div>
-                <h3 className="text-sm font-black text-neutral-900 dark:text-white uppercase tracking-wider">{viewingDoc.label}</h3>
-                <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest mt-0.5">Student: {studentName} ({usn})</p>
-              </div>
-              <button 
-                onClick={() => setViewingDoc(null)}
-                className="p-2 bg-neutral-200/50 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-700 dark:text-neutral-300 rounded-xl transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 bg-neutral-100 dark:bg-neutral-950 p-6 overflow-auto flex items-center justify-center">
-              {viewingDoc.isPdf ? (
-                <iframe 
-                  src={viewingDoc.url} 
-                  className="w-full h-full rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white"
-                  title="PDF Preview"
-                />
-              ) : (
-                <img 
-                  src={viewingDoc.url} 
-                  alt={viewingDoc.label}
-                  className="max-w-full max-h-full rounded-2xl border border-neutral-200 dark:border-neutral-800 object-contain bg-white dark:bg-neutral-900 shadow-md"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
+export default AdminStudentDocumentsPage;

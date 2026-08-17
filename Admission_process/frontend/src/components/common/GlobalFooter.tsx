@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import API from '../../services/api';
 
 interface GlobalFooterProps {
   className?: string;
@@ -11,7 +12,44 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
   isDark = false,
   variant
 }) => {
-  const currentYear = 2026;
+  const [copyrightYear, setCopyrightYear] = useState<string>(() => {
+    return localStorage.getItem('jcer_copyright_year') || '2026';
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadCopyrightYear = async () => {
+      try {
+        const res = await fetch('/api/system/config');
+        if (res.ok) {
+          const json = await res.json();
+          const year = json.data?.copyrightYear || json.copyrightYear;
+          if (year && isMounted) {
+            setCopyrightYear(String(year));
+            localStorage.setItem('jcer_copyright_year', String(year));
+          }
+        }
+      } catch (err) {
+        // Fallback value remains active
+      }
+    };
+
+    loadCopyrightYear();
+
+    const handleStorageChange = () => {
+      const storedYear = localStorage.getItem('jcer_copyright_year');
+      if (storedYear) {
+        setCopyrightYear(storedYear);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   const isLightGlass = variant === 'light-glass' || variant === 'light' || (!isDark && variant !== 'dark' && variant !== 'transparent' && variant !== 'glass');
   const isDarkGlass = variant === 'glass';
 
@@ -38,7 +76,35 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
           : 'bg-slate-950/90 border-t border-slate-800/80 text-slate-400'
       } ${className}`}
     >
-      <div className="max-w-7xl mx-auto flex flex-col items-center justify-center gap-1 sm:gap-1">
+      <div className="max-w-7xl mx-auto flex flex-col items-center justify-center gap-1.5 sm:gap-2">
+        
+        {/* Footer Navigation Links */}
+        <div className="flex items-center justify-center flex-wrap gap-2.5 sm:gap-4 text-[11px] sm:text-xs font-bold tracking-wide">
+          <a
+            href="/terms-of-use"
+            style={isLightGlass ? { color: '#334155' } : isDarkGlass ? { color: '#e2e8f0' } : { color: '#cbd5e1' }}
+            className="hover:underline transition-colors cursor-pointer"
+          >
+            Terms & Conditions
+          </a>
+          <span style={{ color: isLightGlass ? '#cbd5e1' : '#475569' }}>•</span>
+          <a
+            href="/privacy-policy"
+            style={isLightGlass ? { color: '#334155' } : isDarkGlass ? { color: '#e2e8f0' } : { color: '#cbd5e1' }}
+            className="hover:underline transition-colors cursor-pointer"
+          >
+            Privacy Policy
+          </a>
+          <span style={{ color: isLightGlass ? '#cbd5e1' : '#475569' }}>•</span>
+          <a
+            href="/support"
+            style={isLightGlass ? { color: '#2563eb' } : isDarkGlass ? { color: '#60a5fa' } : { color: '#818cf8' }}
+            className="hover:underline transition-colors cursor-pointer font-extrabold"
+          >
+            Support Desk
+          </a>
+        </div>
+
         <p 
           style={isLightGlass ? { color: '#475569' } : isDarkGlass ? { color: 'rgba(255, 255, 255, 0.85)' } : undefined}
           className={
@@ -49,7 +115,7 @@ export const GlobalFooter: React.FC<GlobalFooterProps> = ({
               : 'text-slate-400 text-[11px] sm:text-xs leading-normal'
           }
         >
-          © {currentYear} Jain College of Engineering & Research, Belagavi. All rights reserved.
+          © {copyrightYear} Jain College of Engineering & Research, Belagavi. All rights reserved.
         </p>
         <p 
           style={isLightGlass ? { color: '#0f172a' } : isDarkGlass ? { color: '#ffffff' } : undefined}

@@ -11,6 +11,7 @@ import SystemConfiguration from '../models/SystemConfiguration';
 import ProvisionalAdmission from '../models/ProvisionalAdmission';
 import ProvisionalAdmissionSemesterRecord from '../models/ProvisionalAdmissionSemesterRecord';
 import ProvisionalAdmissionDocument from '../models/ProvisionalAdmissionDocument';
+import StudentPromotionHistory from '../models/StudentPromotionHistory';
 import AuditLog from '../models/AuditLog';
 import * as r2 from '../services/r2.service';
 import { buildR2Folder } from '../utils/r2Key.util';
@@ -98,6 +99,25 @@ export const getMyProvisionalAdmission = async (req: AuthenticatedRequest, res: 
       return res.status(404).json({ success: false, error: 'Student profile not found. Provisional Admission is only available for fully enrolled students.' });
     }
 
+    // Fetch original admission for branch and qualification/admissionType check
+    const originalAdmission = await Admission.findOne({
+      where: { userId },
+      include: [{ model: Department, as: 'branch' }]
+    });
+
+    const isLateral = student.admissionType === 'LATERAL' ||
+                      student.initialSemester === 3 ||
+                      originalAdmission?.admissionType === 'DCET' ||
+                      originalAdmission?.qualification === 'DIPLOMA' ||
+                      originalAdmission?.applicationType === 'LATERAL_ENTRY';
+
+    const hasPromotionFrom3 = await StudentPromotionHistory.findOne({
+      where: { studentId: student.id, fromSemester: 3 }
+    });
+
+    const isInitialLateralEntry = isLateral && student.semester === 3 && !hasPromotionFrom3;
+    const isProvisionalEligible = !isInitialLateralEntry && [3, 5, 7].includes(student.semester);
+
     const application = await ProvisionalAdmission.findOne({
       where: { 
         studentId: student.id,
@@ -111,17 +131,34 @@ export const getMyProvisionalAdmission = async (req: AuthenticatedRequest, res: 
     });
 
     if (!application) {
+      if (isInitialLateralEntry) {
+        // Initial Lateral entry in 3rd semester does not apply for provisional admission
+        const userRecord = await User.findByPk(userId, { attributes: ['firstName', 'lastName'] });
+        const studentName = userRecord ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim() : 'Student';
+        return res.status(200).json({
+          success: true,
+          data: {
+            application: null,
+            studentName,
+            usn: student.usn,
+            semester: student.semester,
+            admissionType: student.admissionType,
+            initialSemester: student.initialSemester,
+            isInitialLateralEntry: true,
+            isProvisionalEligible: false,
+            branchName: originalAdmission?.branch?.name || 'Engineering',
+            applicationNumber: originalAdmission?.applicationNumber || 'N/A',
+            originalPhotoUrl: null,
+          }
+        });
+      }
+
       const semOpen = [3, 5, 7].includes(student.semester);
       if (!semOpen) {
         return res.status(403).json({ success: false, error: 'Provisional admission is currently closed or you are not eligible.' });
       }
     }
 
-    // Fetch original admission photo for preview
-    const originalAdmission = await Admission.findOne({
-      where: { userId },
-      include: [{ model: Department, as: 'branch' }]
-    });
     const originalDocs = originalAdmission ? await AdmissionDocument.findOne({ where: { admissionId: originalAdmission.id } }) : null;
 
     const userRecord = await User.findByPk(userId, { attributes: ['firstName', 'lastName'] });
@@ -147,6 +184,10 @@ export const getMyProvisionalAdmission = async (req: AuthenticatedRequest, res: 
         studentName,
         usn: student.usn,
         semester: student.semester,
+        admissionType: student.admissionType,
+        initialSemester: student.initialSemester,
+        isInitialLateralEntry,
+        isProvisionalEligible,
         branchName: originalAdmission?.branch?.name || 'Engineering',
         applicationNumber: originalAdmission?.applicationNumber || 'N/A',
         originalPhotoUrl: originalDocs?.photoUrl || null,
@@ -168,6 +209,22 @@ export const saveProvisionalStep1 = async (req: AuthenticatedRequest, res: Respo
     }
 
     const { student, academicYear, studentName } = await resolveStudentR2Base(userId);
+
+    // Check if initial lateral entry student
+    const originalAdmission = await Admission.findOne({ where: { userId } });
+    const isLateral = student.admissionType === 'LATERAL' ||
+                      student.initialSemester === 3 ||
+                      originalAdmission?.admissionType === 'DCET' ||
+                      originalAdmission?.qualification === 'DIPLOMA' ||
+                      originalAdmission?.applicationType === 'LATERAL_ENTRY';
+
+    const hasPromotionFrom3 = await StudentPromotionHistory.findOne({
+      where: { studentId: student.id, fromSemester: 3 }
+    });
+
+    if (isLateral && student.semester === 3 && !hasPromotionFrom3) {
+      return res.status(403).json({ error: 'Provisional Admission is not applicable for your initial 3rd Semester lateral entry.' });
+    }
 
     // Verify semester is enabled OR student is already in that semester
     const enabled = await isSemesterEnabled(Number(semester));

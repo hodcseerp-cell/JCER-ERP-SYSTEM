@@ -247,21 +247,21 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
 
   useEffect(() => {
     const handleExportEvent = () => {
-      setExportModalOpen(true);
+      const prefix = location.pathname.startsWith('/principal') ? '/principal' : '/admin';
+      navigate(`${prefix}/student-export`);
     };
     window.addEventListener('trigger-student-export', handleExportEvent);
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'export') {
-      setExportModalOpen(true);
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
+      const prefix = location.pathname.startsWith('/principal') ? '/principal' : '/admin';
+      navigate(`${prefix}/student-export`);
     }
 
     return () => {
       window.removeEventListener('trigger-student-export', handleExportEvent);
     };
-  }, []);
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     fetchStudentsList();
@@ -440,7 +440,10 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             </button>
           )}
           <button 
-            onClick={() => setExportModalOpen(true)}
+            onClick={() => {
+              const prefix = location.pathname.startsWith('/principal') ? '/principal' : '/admin';
+              navigate(`${prefix}/student-export`);
+            }}
             className="px-4 py-2.5 bg-violet-600 text-white hover:bg-violet-700 transition-colors rounded-xl shadow-md flex items-center gap-2 text-xs font-bold"
           >
             <Download size={14} /> Export Students
@@ -804,7 +807,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               <thead>
                 <tr className="border-b border-neutral-200 dark:border-neutral-800 text-[10px] font-black uppercase tracking-widest text-neutral-400 bg-neutral-50/50 dark:bg-neutral-800/20">
                   <th className="py-4.5 px-3 text-center w-12">Sl No</th>
-                  <th className="py-4.5 px-3">App Number</th>
+                  <th className="py-4.5 px-3">App No / USN</th>
                   <th className="py-4.5 px-3">Student Name</th>
                   <th className="py-4.5 px-3">Branch</th>
                   <th className="py-4.5 px-3 text-center">Semester</th>

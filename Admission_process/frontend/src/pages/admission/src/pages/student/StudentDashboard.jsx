@@ -46,6 +46,8 @@ const StudentDashboard = () => {
     const [provisionalApp, setProvisionalApp] = useState(null);
     const [studentSemester, setStudentSemester] = useState(null);
     const [provisionalConfig, setProvisionalConfig] = useState(null);
+    const [isInitialLateralEntry, setIsInitialLateralEntry] = useState(false);
+    const [isProvisionalEligible, setIsProvisionalEligible] = useState(true);
     const {
         stepStatus,
         loading,
@@ -79,6 +81,12 @@ const StudentDashboard = () => {
                     }
                     if (res.data.data.semester) {
                         setStudentSemester(res.data.data.semester);
+                    }
+                    if (res.data.data.isInitialLateralEntry !== undefined) {
+                        setIsInitialLateralEntry(!!res.data.data.isInitialLateralEntry);
+                    }
+                    if (res.data.data.isProvisionalEligible !== undefined) {
+                        setIsProvisionalEligible(!!res.data.data.isProvisionalEligible);
                     }
                 }
             })
@@ -145,6 +153,8 @@ const StudentDashboard = () => {
             provisionalApp={provisionalApp}
             studentSemester={studentSemester}
             provisionalConfig={provisionalConfig}
+            isInitialLateralEntry={isInitialLateralEntry}
+            isProvisionalEligible={isProvisionalEligible}
         />;
     }
 
@@ -464,7 +474,21 @@ const DashboardFooterInfo = ({ closingDateIso, feeStatusText, isClosed }) => {
 //  SUBMITTED STATUS DASHBOARD (Inner Component)
 // ═══════════════════════════════════════════════
 
-const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate, refetch, closingDateIso, feeStatusText, isClosed, provisionalApp, studentSemester, provisionalConfig }) => {
+const SubmittedDashboard = ({
+    stepStatus,
+    applicationStatus,
+    timeline,
+    navigate,
+    refetch,
+    closingDateIso,
+    feeStatusText,
+    isClosed,
+    provisionalApp,
+    studentSemester,
+    provisionalConfig,
+    isInitialLateralEntry,
+    isProvisionalEligible
+}) => {
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [cancelReason, setCancelReason] = useState('');
     const [cancelRemarks, setCancelRemarks] = useState('');
@@ -477,6 +501,11 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
         (Number(studentSemester) === 3 && provisionalConfig?.provisionalAdmission3Open) ||
         (Number(studentSemester) === 5 && provisionalConfig?.provisionalAdmission5Open) ||
         (Number(studentSemester) === 7 && provisionalConfig?.provisionalAdmission7Open);
+
+    const showProvisionalSection = !isInitialLateralEntry && (
+        provisionalApp ||
+        (isProvisionalEligible && [3, 5, 7].includes(Number(studentSemester)))
+    );
 
     const resolveDocUrl = (path, apiField = '') => {
         if (!path || typeof path !== 'string') return '';
@@ -617,7 +646,7 @@ const SubmittedDashboard = ({ stepStatus, applicationStatus, timeline, navigate,
             </div>
 
             {/* Provisional Admission Section */}
-            {([3, 5, 7].includes(Number(studentSemester)) || provisionalApp) && (
+            {showProvisionalSection && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl p-6 sm:p-8 shadow-lg space-y-4">
                     <div className="flex items-center gap-3">
                         <GraduationCap className="w-8 h-8 text-white shrink-0" />

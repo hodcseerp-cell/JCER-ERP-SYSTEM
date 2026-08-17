@@ -38,7 +38,7 @@ const SupportPage = () => {
         },
         {
             question: 'Who should I contact for technical issues?',
-            answer: 'If you experience technical difficulties during form submission or document upload, contact the Admission Helpdesk at 099448693987 or email principal@jcer.in with your Admission/Reference Number.'
+            answer: 'If you experience technical difficulties during form submission or document upload, contact the Admission Helpdesk at 099448693987 or email support.collegeerp@gmail.com with your Admission/Reference Number.'
         }
     ];
 
@@ -85,7 +85,7 @@ const SupportPage = () => {
 
                     {/* Email */}
                     <a 
-                        href="mailto:principal@jcer.in"
+                        href="mailto:support.collegeerp@gmail.com"
                         className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-primary-400 hover:shadow-md transition-all group flex flex-col justify-between"
                     >
                         <div className="flex items-center gap-3.5 mb-3">
@@ -94,7 +94,7 @@ const SupportPage = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Email</p>
-                                <p className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-primary-700 transition-colors truncate">principal@jcer.in</p>
+                                <p className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-primary-700 transition-colors truncate">support.collegeerp@gmail.com</p>
                             </div>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">Opens your email client directly</p>

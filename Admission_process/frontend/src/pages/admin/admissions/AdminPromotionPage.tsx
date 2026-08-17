@@ -157,7 +157,7 @@ export const AdminPromotionPage: React.FC = () => {
     }
 
     const fromSem = Number(semesterFilter);
-    const toSem = fromSem + 1;
+    const toSem = fromSem === 3 ? 5 : (fromSem === 5 ? 7 : fromSem + 1);
 
     try {
       setPreviewLoading(true);
@@ -183,7 +183,7 @@ export const AdminPromotionPage: React.FC = () => {
 
   const handleExecutePromotion = async () => {
     const fromSem = Number(semesterFilter);
-    const toSem = fromSem + 1;
+    const toSem = fromSem === 3 ? 5 : (fromSem === 5 ? 7 : fromSem + 1);
 
     try {
       setPromoting(true);
@@ -210,7 +210,7 @@ export const AdminPromotionPage: React.FC = () => {
     }
   };
 
-  const targetSemester = semesterFilter !== 'All' ? Number(semesterFilter) + 1 : null;
+  const targetSemester = semesterFilter !== 'All' ? (Number(semesterFilter) === 3 ? 5 : (Number(semesterFilter) === 5 ? 7 : Number(semesterFilter) + 1)) : null;
 
   return (
     <div className={`space-y-6 p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-900/10 min-h-screen text-slate-800 dark:text-slate-100 ${selectedStudentIds.length > 0 && semesterFilter !== 'All' ? 'pb-36' : ''}`}>

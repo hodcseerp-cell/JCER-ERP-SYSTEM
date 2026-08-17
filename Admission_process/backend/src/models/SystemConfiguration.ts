@@ -19,6 +19,7 @@ class SystemConfiguration extends Model {
   public provisionalAdmission3Open!: boolean;
   public provisionalAdmission5Open!: boolean;
   public provisionalAdmission7Open!: boolean;
+  public copyrightYear!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -34,6 +35,11 @@ SystemConfiguration.init(
       type: DataTypes.STRING(255),
       allowNull: false,
       defaultValue: 'Jain College of Engineering & Research',
+    },
+    copyrightYear: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: '2026',
     },
     admissionOpen: {
       type: DataTypes.BOOLEAN,
@@ -63,7 +69,7 @@ SystemConfiguration.init(
     supportEmail: {
       type: DataTypes.STRING(255),
       allowNull: false,
-      defaultValue: 'admissions@jcer.org',
+      defaultValue: 'support.collegeerp@gmail.com',
     },
     supportPhone: {
       type: DataTypes.STRING(50),
