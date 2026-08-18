@@ -405,7 +405,22 @@ async function startServer() {
       console.log('Syncing database schema (development alter)...');
       await sequelize.sync({ alter: true });
     } else {
-      console.log('✓ Production mode: Skipping database schema sync.');
+      console.log('✓ Production mode: Ensuring database schema & tables exist...');
+      await sequelize.sync();
+
+      // Auto-seed initial Admin, Principal, Departments, and Rejection Reasons if database is fresh
+      try {
+        const User = (await import('./models/User')).default;
+        const adminCount = await User.count({ where: { role: 'ADMIN' } }).catch(() => 0);
+        if (adminCount === 0) {
+          console.log('🌱 Unseeded database detected in production. Running initial seed...');
+          const { seed } = await import('./seeds/index');
+          await seed(false);
+          console.log('✅ Initial production database seed completed!');
+        }
+      } catch (seedErr: any) {
+        console.warn('⚠️ Production auto-seed notice:', seedErr.message);
+      }
     }
     
     // Alter PostgreSQL enum values for Principal actions if they are missing
