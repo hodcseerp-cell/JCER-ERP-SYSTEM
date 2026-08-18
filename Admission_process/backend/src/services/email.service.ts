@@ -31,7 +31,7 @@ function escapeHtml(str: string): string {
  * Optimized for Gmail Mobile & Desktop, Apple Mail, Outlook, and Dark Mode compatibility.
  */
 export function getJcerCommonEmailHtml(params: CommonEmailParams): string {
-  const DEFAULT_LOGO_URL = 'https://jcer.in/wp-content/uploads/2020/09/jcer-logo.png';
+  const DEFAULT_LOGO_URL = 'https://jcererp-system.pages.dev/logo.png';
   const logoUrl = process.env.EMAIL_LOGO_URL || process.env.PUBLIC_LOGO_URL || DEFAULT_LOGO_URL;
   const currentYear = new Date().getFullYear();
   const academicYearStr = `${currentYear}–${currentYear + 1}`;
