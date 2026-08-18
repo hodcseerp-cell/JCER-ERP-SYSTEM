@@ -342,7 +342,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             }
         }
 
-        if (!data.sslcSchool || !data.sslcBoard || !data.sslcYear || !data.sslcRegisterNumber || !data.sslcAttempts) {
+        if (!data.sslcSchool || !data.sslcBoard || !data.sslcYear || !data.sslcRegisterNumber) {
             return false;
         }
 

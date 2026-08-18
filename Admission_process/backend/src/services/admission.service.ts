@@ -726,7 +726,7 @@ class AdmissionService {
       tenthMarksObtained: payload.sslcMarksObtained,
       tenthMaxMarks: payload.sslcMaxMarks,
       tenthPercentage: payload.sslcPercentage,
-      tenthAttempts: payload.sslcAttempts,
+      tenthAttempts: payload.sslcAttempts || 1,
       tenthSubjectMarks: payload.sslcSubjectMarks || null,
       
       twelfthSchool: showPUC ? payload.pucSchool || null : null,
@@ -742,7 +742,7 @@ class AdmissionService {
       twelfthMaxMarks: showPUC ? payload.pucMaxMarks || null : null,
       twelfthAggregate: showPUC ? payload.pucAggregate || null : null,
       twelfthPercentage: showPUC ? payload.pucPercentage || null : null,
-      twelfthAttempts: showPUC ? payload.pucAttempts || null : null,
+      twelfthAttempts: showPUC ? payload.pucAttempts || 1 : null,
       
       diplomaUniversity: showDiploma ? payload.diplomaUniversity || null : null,
       diplomaYear: showDiploma ? (payload.diplomaYear || null) : null,
@@ -750,7 +750,7 @@ class AdmissionService {
       diplomaFinalYearMaxMarks: showDiploma ? payload.diplomaFinalYearMaxMarks || null : null,
       diplomaFinalYearObtained: showDiploma ? payload.diplomaFinalYearObtained || null : null,
       diplomaPercentage: showDiploma ? payload.diplomaPercentage || null : null,
-      diplomaAttempts: showDiploma ? payload.diplomaAttempts || null : null,
+      diplomaAttempts: showDiploma ? payload.diplomaAttempts || 1 : null,
       
       cetScore: payload.cetScore,
       cetRank: payload.cetRank,
