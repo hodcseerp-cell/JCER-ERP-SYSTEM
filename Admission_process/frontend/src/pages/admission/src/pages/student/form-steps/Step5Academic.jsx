@@ -441,11 +441,6 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             return;
         }
 
-        if (data.sslcAttempts === undefined || data.sslcAttempts === null || data.sslcAttempts === '') {
-            toast.error("Please select 10th / SSLC Number of Attempts.");
-            return;
-        }
-
         if (!isSslcFormValid()) {
             toast.error("Please fill all 10th / SSLC subject marks correctly before continuing.");
             return;
@@ -472,10 +467,6 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 toast.error("Please enter Diploma Final Year Obtained Marks.");
                 return;
             }
-            if (data.diplomaAttempts === undefined || data.diplomaAttempts === null || data.diplomaAttempts === '') {
-                toast.error("Please select Diploma Number of Attempts.");
-                return;
-            }
         } else {
             if (!data.pucSchool?.trim()) {
                 toast.error("Please enter PUC / 12th College Name.");
@@ -491,10 +482,6 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             }
             if (!data.pucRegisterNumber?.trim()) {
                 toast.error("Please enter PUC / 12th Register Number.");
-                return;
-            }
-            if (data.pucAttempts === undefined || data.pucAttempts === null || data.pucAttempts === '') {
-                toast.error("Please select PUC / 12th Number of Attempts.");
                 return;
             }
             if (!isPucFormValid()) {
@@ -513,7 +500,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 sslcMarksObtained: parseFloat(data.sslcMarksObtained),
                 sslcMaxMarks: parseFloat(data.sslcMaxMarks),
                 sslcPercentage: parseFloat(data.sslcPercentage),
-                sslcAttempts: parseInt(data.sslcAttempts),
+                sslcAttempts: data.sslcAttempts ? parseInt(data.sslcAttempts) : 1,
                 sslcSubjectMarks: data.sslcSubjectMarks || null,
                 pucSchool: data.pucSchool || undefined,
                 pucBoard: data.pucBoard || undefined,
@@ -528,14 +515,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 pucMaxMarks: data.pucMaxMarks ? parseFloat(data.pucMaxMarks) : undefined,
                 pucAggregate: data.pucAggregate ? parseFloat(data.pucAggregate) : undefined,
                 pucPercentage: data.pucPercentage ? parseFloat(data.pucPercentage) : undefined,
-                pucAttempts: data.pucAttempts ? parseInt(data.pucAttempts) : undefined,
+                pucAttempts: data.pucAttempts ? parseInt(data.pucAttempts) : 1,
                 diplomaUniversity: data.diplomaUniversity || undefined,
                 diplomaYear: data.diplomaYear ? parseInt(data.diplomaYear) : undefined,
                 diplomaRegisterNumber: data.diplomaRegisterNumber || undefined,
                 diplomaFinalYearMaxMarks: data.diplomaFinalYearMaxMarks ? parseFloat(data.diplomaFinalYearMaxMarks) : undefined,
                 diplomaFinalYearObtained: data.diplomaFinalYearObtained ? parseFloat(data.diplomaFinalYearObtained) : undefined,
                 diplomaPercentage: data.diplomaPercentage ? parseFloat(data.diplomaPercentage) : undefined,
-                diplomaAttempts: data.diplomaAttempts ? parseInt(data.diplomaAttempts) : undefined,
+                diplomaAttempts: data.diplomaAttempts ? parseInt(data.diplomaAttempts) : 1,
             };
 
             const res = await api.put('/student/academic', payload);
@@ -688,8 +675,8 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 <SectionHeader icon={School} title="SSLC (10th Standard) Details" subtitle="Secondary education academic records" />
 
                 {/* Core Board details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-5 pb-5 border-b border-slate-100">
-                    <div className={`space-y-1.5 col-span-1 md:col-span-2 lg:col-span-4 p-3 rounded-xl transition-all ${isFieldFlagged('tenthSchool') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5 pb-5 border-b border-slate-100">
+                    <div className={`space-y-1.5 col-span-1 md:col-span-2 lg:col-span-3 p-3 rounded-xl transition-all ${isFieldFlagged('tenthSchool') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                         <label className="text-sm font-medium text-slate-700">School Name ( SSLC) <span className="text-red-500">*</span></label>
                         <input required disabled={isFieldDisabled('tenthSchool')} type="text" name="sslcSchool" className={`input-premium h-11 uppercase ${isFieldFlagged('tenthSchool') ? 'border-red-500 focus:border-red-500' : ''}`} value={data.sslcSchool || ''} onChange={handleChange} placeholder="Enter your 10th standard school name" />
                         {isFieldFlagged('tenthSchool') && (
@@ -750,13 +737,6 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                         {isSslcRegInvalid && <p className="text-[10px] text-red-500 font-medium mt-1">⚠️ {sslcRegProps.title}</p>}
-                    </div>
-                    <div className="space-y-1.5 p-3 rounded-xl">
-                        <label className="text-sm font-medium text-slate-700">No. of Attempts <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('tenthSchool')} type="number" min="1" name="sslcAttempts" className="input-premium h-11" value={data.sslcAttempts || ''} onChange={handleChange} placeholder="1" />
-                        {!data.sslcAttempts && applicationStatus === 'REJECTED' && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
-                        )}
                     </div>
                 </div>
 
