@@ -5,23 +5,34 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'college_erp_db',
-  process.env.DB_USER || 'erp_user',
-  process.env.DB_PASSWORD || 'erp_password_123',
-  {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
-    dialect: 'postgres',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
-    pool: {
-      max: 50, // Increased for production concurrency
-      min: 5,
-      acquire: 30000,
-      idle: 10000,
-    },
-  }
-);
+const sequelize = process.env.DATABASE_URL
+  ? new Sequelize(process.env.DATABASE_URL, {
+      dialect: 'postgres',
+      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      pool: {
+        max: 50,
+        min: 5,
+        acquire: 30000,
+        idle: 10000,
+      },
+    })
+  : new Sequelize(
+      process.env.DB_NAME || 'college_erp_db',
+      process.env.DB_USER || 'erp_user',
+      process.env.DB_PASSWORD || 'erp_password_123',
+      {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432', 10),
+        dialect: 'postgres',
+        logging: process.env.NODE_ENV === 'development' ? console.log : false,
+        pool: {
+          max: 50,
+          min: 5,
+          acquire: 30000,
+          idle: 10000,
+        },
+      }
+    );
 
 // RLS Hook: SET session variables before executing query
 sequelize.addHook('beforeQuery', async (options: any) => {

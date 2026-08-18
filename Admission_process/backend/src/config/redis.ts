@@ -37,9 +37,11 @@ if (process.env.NODE_ENV !== 'test') {
   const port = process.env.REDIS_PORT || '6379';
   const password = process.env.REDIS_PASSWORD || '';
   
-  const redisUrl = password 
-    ? `redis://:${password}@${host}:${port}` 
-    : `redis://${host}:${port}`;
+  const redisUrl = process.env.REDIS_URL || process.env.REDISURL || (
+    password 
+      ? `redis://:${password}@${host}:${port}` 
+      : `redis://${host}:${port}`
+  );
 
   const client = createClient({
     url: redisUrl,
