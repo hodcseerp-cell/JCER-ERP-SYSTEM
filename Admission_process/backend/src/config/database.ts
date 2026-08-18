@@ -17,12 +17,12 @@ const sequelize = process.env.DATABASE_URL
       },
     })
   : new Sequelize(
-      process.env.DB_NAME || 'college_erp_db',
-      process.env.DB_USER || 'erp_user',
-      process.env.DB_PASSWORD || 'erp_password_123',
+      process.env.DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'college_erp_db',
+      process.env.DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'erp_user',
+      process.env.DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123',
       {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432', 10),
+        host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || process.env.PGPORT || '5432', 10),
         dialect: 'postgres',
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
         pool: {
