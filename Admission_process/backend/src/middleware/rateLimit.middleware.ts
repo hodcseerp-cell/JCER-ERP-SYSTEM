@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
  * Max 1000 requests per 15 minutes per IP.
  */
 export const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 1 minute
   max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
@@ -29,7 +29,7 @@ export const authLimiter = rateLimit({
   message: {
     error: isDev
       ? 'Too many authentication attempts. Please wait 1 minute and try again.'
-      : 'Too many authentication attempts. Please try again after 15 minutes.',
+      : 'Too many authentication attempts. Please try again after 1 minutes.',
   },
   skipSuccessfulRequests: false,
 });
@@ -39,7 +39,7 @@ export const authLimiter = rateLimit({
  * Max 20 attempts per 15 minutes per IP.
  */
 export const refreshLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 15 minutes
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -56,11 +56,11 @@ export const refreshLimiter = rateLimit({
  * Max 30 attempts per 15 minutes per IP.
  */
 export const sensitiveOpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 15 minutes
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: 'Too many sensitive operations requested from this IP. Please try again after 15 minutes.',
+    error: 'Too many sensitive operations requested from this IP. Please try again after 1 minutes.',
   },
 });
