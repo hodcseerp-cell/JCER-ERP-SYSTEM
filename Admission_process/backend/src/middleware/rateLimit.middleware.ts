@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 
 /**
  * Global rate limiter applied to all `/api` routes.
- * Max 1000 requests per 15 minutes per IP.
+ * Max 1000 requests per 1 minute per IP.
  */
 export const globalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
@@ -19,27 +19,25 @@ const isDev = process.env.NODE_ENV === 'development';
 /**
  * Environment-aware rate limiter for authentication endpoints (login, register, OTP).
  * Development: Max 1000 requests per 1 minute per IP.
- * Production: Max 5 attempts per 15 minutes per IP.
+ * Production: Max 30 attempts per 1 minute per IP.
  */
 export const authLimiter = rateLimit({
-  windowMs: isDev ? 1 * 60 * 1000 : 15 * 60 * 1000,
-  max: isDev ? 1000 : 5,
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: isDev ? 1000 : 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: isDev
-      ? 'Too many authentication attempts. Please wait 1 minute and try again.'
-      : 'Too many authentication attempts. Please try again after 1 minutes.',
+    error: 'Too many authentication attempts. Please wait 1 minute and try again.',
   },
   skipSuccessfulRequests: false,
 });
 
 /**
  * Moderate rate limiter for token refresh endpoint.
- * Max 20 attempts per 15 minutes per IP.
+ * Max 20 attempts per 1 minute per IP.
  */
 export const refreshLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 1 minute
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,14 +51,15 @@ export const refreshLimiter = rateLimit({
  * - Fee payments
  * - Marks updates
  * - Credential dispatch
- * Max 30 attempts per 15 minutes per IP.
+ * Max 30 attempts per 1 minute per IP.
  */
 export const sensitiveOpLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 15 minutes
+  windowMs: 1 * 60 * 1000, // 1 minute
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    error: 'Too many sensitive operations requested from this IP. Please try again after 1 minutes.',
+    error: 'Too many sensitive operations requested from this IP. Please try again after 1 minute.',
   },
 });
+
