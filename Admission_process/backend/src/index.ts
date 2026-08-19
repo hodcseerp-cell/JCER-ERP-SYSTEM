@@ -32,8 +32,7 @@ async function startServer() {
         console.warn('Pre-cast migration for audit_logs.details skipped:', castErr.message);
       }
 
-      // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type.
-      // PostgreSQL cannot automatically cast TEXT -> DECIMAL; we must specify USING.
+      // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type to DECIMAL(38, 2).
       try {
         await sequelize.query(`
           DO $$
@@ -41,15 +40,14 @@ async function startServer() {
             IF EXISTS (
               SELECT 1 FROM information_schema.columns
               WHERE table_name = 'admission_parent_details' AND column_name = 'fatherAnnualIncome'
-                AND data_type NOT IN ('numeric', 'decimal', 'double precision', 'real')
             ) THEN
-              ALTER TABLE "admission_parent_details" ALTER COLUMN "fatherAnnualIncome" TYPE DECIMAL(12, 2)
+              ALTER TABLE "admission_parent_details" ALTER COLUMN "fatherAnnualIncome" TYPE DECIMAL(38, 2)
               USING (
                 CASE 
                   WHEN "fatherAnnualIncome" IS NULL THEN NULL
                   WHEN TRIM("fatherAnnualIncome"::text) = '' THEN NULL
                   WHEN TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                  ELSE TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(12, 2)
+                  ELSE TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
                 END
               );
             END IF;
@@ -60,7 +58,7 @@ async function startServer() {
         console.warn('Pre-cast migration for admission_parent_details.fatherAnnualIncome skipped:', castErr.message);
       }
 
-      // Pre-cast: fix parents.annualIncome column type.
+      // Pre-cast: fix parents.annualIncome column type to DECIMAL(38, 2).
       try {
         await sequelize.query(`
           DO $$
@@ -68,15 +66,14 @@ async function startServer() {
             IF EXISTS (
               SELECT 1 FROM information_schema.columns
               WHERE table_name = 'parents' AND column_name = 'annualIncome'
-                AND data_type NOT IN ('numeric', 'decimal', 'double precision', 'real')
             ) THEN
-              ALTER TABLE "parents" ALTER COLUMN "annualIncome" TYPE DECIMAL(10, 2)
+              ALTER TABLE "parents" ALTER COLUMN "annualIncome" TYPE DECIMAL(38, 2)
               USING (
                 CASE 
                   WHEN "annualIncome" IS NULL THEN NULL
                   WHEN TRIM("annualIncome"::text) = '' THEN NULL
                   WHEN TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                  ELSE TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(10, 2)
+                  ELSE TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
                 END
               );
             END IF;
@@ -403,7 +400,12 @@ async function startServer() {
       }
 
       console.log('Syncing database schema (development alter)...');
-      await sequelize.sync({ alter: true });
+      try {
+        await sequelize.sync({ alter: true });
+      } catch (alterErr: any) {
+        console.warn('Sync alter notice (falling back to standard sync):', alterErr.message);
+        await sequelize.sync();
+      }
     } else {
       console.log('✓ Production mode: Ensuring database schema & tables exist...');
       await sequelize.sync();

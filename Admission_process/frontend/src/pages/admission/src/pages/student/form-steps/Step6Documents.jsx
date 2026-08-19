@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { compressDocumentImage, validateFileType } from '../../../utils/imageCompressor';
+import MobileUploadBottomSheet from '../../../../../../components/common/MobileUploadBottomSheet';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const ACCEPTED_MIME     = 'image/jpeg,image/jpg,image/png';
@@ -278,6 +279,12 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
     const [submitAttempted,  setSubmitAttempted] = useState(false);
     const fileInputRefs = useRef({});
 
+    // Mobile document upload bottom sheet state & refs
+    const [activeMobileDoc, setActiveMobileDoc] = useState(null);
+    const cameraInputRef = useRef(null);
+    const photoInputRef  = useRef(null);
+    const activeDocIdRef = useRef(null);
+
     const [reuploadedDocs, setReuploadedDocs] = useState(() => {
         try {
             const saved = sessionStorage.getItem(`reuploaded_docs_${data?.id}`);
@@ -453,15 +460,60 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         if (file) handleFilePicked(docId, file);
     }, [handleFilePicked]);
 
+    // ── Mobile Upload Bottom Sheet Handlers ───────────────────────────────────
+    const isMobileDevice = useCallback(() => {
+        if (typeof window === 'undefined') return false;
+        return window.innerWidth < 768 || window.matchMedia('(max-width: 767px)').matches;
+    }, []);
+
+    const handleInitiateUpload = useCallback((doc, isDocDisabled = false) => {
+        if (!doc || readOnly || isDocDisabled) return;
+        if (isMobileDevice()) {
+            activeDocIdRef.current = doc.id;
+            setActiveMobileDoc(doc);
+        } else {
+            if (fileInputRefs.current[doc.id]) {
+                fileInputRefs.current[doc.id].click();
+            }
+        }
+    }, [isMobileDevice, readOnly]);
+
+    const handleBottomSheetSelectOption = (optionType) => {
+        const docId = activeDocIdRef.current;
+        if (!docId) return;
+
+        if (optionType === 'camera') {
+            if (cameraInputRef.current) {
+                cameraInputRef.current.click();
+            }
+        } else if (optionType === 'photos') {
+            if (photoInputRef.current) {
+                photoInputRef.current.click();
+            }
+        } else if (optionType === 'files') {
+            if (fileInputRefs.current[docId]) {
+                fileInputRefs.current[docId].click();
+            }
+        }
+    };
+
+    const handleMobileFileInput = (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        const docId = activeDocIdRef.current;
+        if (file && docId) {
+            handleFilePicked(docId, file);
+        }
+    };
+
     // ── Replace Action ───────────────────────────────────────────────────────
-    const handleReplaceClick = (docId) => {
+    const handleReplaceClick = (docId, isDocDisabled = false) => {
+        if (readOnly || isDocDisabled) return;
         const doc = DOCS.find(d => d.id === docId);
         if (!doc) return;
         const confirm = window.confirm(`You already uploaded a ${doc.label}.\nAre you sure you want to replace it with a new file?`);
         if (confirm) {
-            if (fileInputRefs.current[docId]) {
-                fileInputRefs.current[docId].click();
-            }
+            handleInitiateUpload(doc, isDocDisabled);
         }
     };
 
@@ -930,7 +982,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                         <div className="flex gap-2 w-full mt-auto pt-2">
                             <button
                                 type="button"
-                                onClick={() => handleReplaceClick(doc.id)}
+                                onClick={() => handleReplaceClick(doc.id, isDocDisabled)}
                                 disabled={isBusy || isDocDisabled}
                                 className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all select-none text-center disabled:opacity-50"
                             >
@@ -950,11 +1002,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                     ) : (
                         <button
                             type="button"
-                            onClick={() => {
-                                if (fileInputRefs.current[doc.id]) {
-                                    fileInputRefs.current[doc.id].click();
-                                }
-                            }}
+                            onClick={() => handleInitiateUpload(doc, isDocDisabled)}
                             disabled={isBusy || isDocDisabled}
                             className={`w-full mt-auto pt-2 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-xs font-semibold transition-all select-none text-center ${
                                 cardState === 'missing'
@@ -1029,11 +1077,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                         </div>
                         <button
                             type="button"
-                            onClick={() => {
-                                if (fileInputRefs.current[docId]) {
-                                    fileInputRefs.current[docId].click();
-                                }
-                            }}
+                            onClick={() => handleInitiateUpload(doc)}
                             disabled={isBusy || readOnly}
                             className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
                         >
@@ -1225,6 +1269,33 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
                         <span>{readOnly ? 'Continue' : 'Save & Continue'}</span> <ChevronRight size={16} />
                     </button>
                 </div>
+
+                {/* Mobile specific hidden file inputs for Camera and Photo Gallery */}
+                <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleMobileFileInput}
+                    aria-hidden="true"
+                />
+                <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleMobileFileInput}
+                    aria-hidden="true"
+                />
+
+                {/* Mobile Upload Bottom Sheet Action Sheet */}
+                <MobileUploadBottomSheet
+                    isOpen={!!activeMobileDoc}
+                    onClose={() => setActiveMobileDoc(null)}
+                    documentLabel={activeMobileDoc?.label}
+                    onSelectOption={handleBottomSheetSelectOption}
+                />
             </form>
     );
 };

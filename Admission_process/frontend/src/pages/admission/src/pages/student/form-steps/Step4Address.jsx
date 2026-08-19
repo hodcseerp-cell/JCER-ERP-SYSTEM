@@ -3,22 +3,24 @@ import api from '../../../../../../services/api';
 import { Loader2, ChevronLeft, ChevronRight, Home, MapPin, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
+const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [loading, setLoading] = useState(false);
     const [originalValues, setOriginalValues] = useState(null);
 
+    const safeData = data || {};
+
     useEffect(() => {
-        if (data && !originalValues) {
+        if (safeData && !originalValues) {
             setOriginalValues({
-                ...data,
+                ...safeData,
                 // Handle pre-mapped database names
-                Address: data.Address || data.currentAddressLine1 || '',
-                City: data.City || data.currentCity || '',
-                Pincode: data.Pincode || data.currentPincode || '',
-                permanentAddress: data.permanentAddress || data.permanentAddressLine1 || ''
+                Address: safeData.Address || safeData.currentAddressLine1 || '',
+                City: safeData.City || safeData.currentCity || '',
+                Pincode: safeData.Pincode || safeData.currentPincode || '',
+                permanentAddress: safeData.permanentAddress || safeData.permanentAddressLine1 || ''
             });
         }
-    }, [data, originalValues]);
+    }, [safeData, originalValues]);
 
     const isFieldFlagged = (fieldName) => {
         if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
@@ -56,14 +58,14 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
         if (!originalValues) return false;
         if (!isFieldFlagged(fieldName)) return false;
         
-        let currentValue = data[fieldName] || '';
+        let currentValue = safeData[fieldName] || '';
         let originalValue = originalValues[fieldName] || '';
 
         // Fallback checks for mapped values
-        if (fieldName === 'Address' && !currentValue) currentValue = data.currentAddressLine1 || '';
-        if (fieldName === 'City' && !currentValue) currentValue = data.currentCity || '';
-        if (fieldName === 'Pincode' && !currentValue) currentValue = data.currentPincode || '';
-        if (fieldName === 'permanentAddress' && !currentValue) currentValue = data.permanentAddressLine1 || '';
+        if (fieldName === 'Address' && !currentValue) currentValue = safeData.currentAddressLine1 || '';
+        if (fieldName === 'City' && !currentValue) currentValue = safeData.currentCity || '';
+        if (fieldName === 'Pincode' && !currentValue) currentValue = safeData.currentPincode || '';
+        if (fieldName === 'permanentAddress' && !currentValue) currentValue = safeData.permanentAddressLine1 || '';
         
         return String(currentValue) !== String(originalValue);
     };
@@ -103,16 +105,17 @@ const Step4Address = ({ onNext, onPrev, data, updateData, applicationStatus, adm
     };
 
     const [sameAsCurrent, setSameAsCurrent] = useState(() => {
-        if (data.sameAsCurrent !== undefined) {
-            return data.sameAsCurrent === true || data.sameAsCurrent === 'true';
+        if (!safeData) return false;
+        if (safeData.sameAsCurrent !== undefined) {
+            return safeData.sameAsCurrent === true || safeData.sameAsCurrent === 'true';
         }
-        const hasCurrent = data.Address || data.currentAddressLine1;
-        const hasPermanent = data.permanentAddress || data.permanentAddressLine1;
+        const hasCurrent = safeData.Address || safeData.currentAddressLine1;
+        const hasPermanent = safeData.permanentAddress || safeData.permanentAddressLine1;
         if (hasCurrent && hasCurrent === hasPermanent) {
-            const hasCurrentCity = data.City || data.currentCity;
-            const hasPermanentCity = data.permanentCity;
-            const hasCurrentPincode = data.Pincode || data.currentPincode;
-            const hasPermanentPincode = data.permanentPincode;
+            const hasCurrentCity = safeData.City || safeData.currentCity;
+            const hasPermanentCity = safeData.permanentCity;
+            const hasCurrentPincode = safeData.Pincode || safeData.currentPincode;
+            const hasPermanentPincode = safeData.permanentPincode;
             if (hasCurrentCity && hasCurrentCity === hasPermanentCity && hasCurrentPincode && hasCurrentPincode === hasPermanentPincode) {
                 return true;
             }

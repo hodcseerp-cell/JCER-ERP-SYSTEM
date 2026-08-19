@@ -6,6 +6,66 @@ import toast from 'react-hot-toast';
 const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [loading, setLoading] = useState(false);
     const [originalValues, setOriginalValues] = useState(null);
+    const [errors, setErrors] = useState({
+        parentMobile: '',
+        motherPhone: ''
+    });
+    const [touched, setTouched] = useState({
+        parentMobile: false,
+        motherPhone: false
+    });
+
+    const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
+
+    const validateMobileField = (fieldName, value) => {
+        const strVal = String(value || '').trim();
+        let errorMessage = '';
+
+        if (!strVal || strVal.length < 10) {
+            errorMessage = 'Please enter a valid 10-digit mobile number.';
+        } else if (strVal.length === 10 && !INDIAN_MOBILE_REGEX.test(strVal)) {
+            errorMessage = 'Please enter a valid mobile number.';
+        }
+
+        setErrors(prev => ({
+            ...prev,
+            [fieldName]: errorMessage
+        }));
+
+        return !errorMessage;
+    };
+
+    const handleMobileChange = (e) => {
+        const name = e.target.name;
+        const rawVal = e.target.value;
+        const sanitizedVal = rawVal.replace(/\D/g, '').slice(0, 10);
+
+        if (name === 'parentMobile') {
+            updateData({ parentMobile: sanitizedVal, fatherPhone: sanitizedVal });
+        } else {
+            updateData({ [name]: sanitizedVal });
+        }
+
+        if (touched[name] || errors[name]) {
+            validateMobileField(name, sanitizedVal);
+        }
+    };
+
+    const handleMobileBlur = (e) => {
+        const name = e.target.name;
+        const value = name === 'parentMobile' 
+            ? (data.parentMobile || data.fatherPhone || '') 
+            : (data.motherPhone || '');
+
+        setTouched(prev => ({ ...prev, [name]: true }));
+        validateMobileField(name, value);
+    };
+
+    const handleIncomeChange = (e) => {
+        const rawVal = e.target.value;
+        const sanitizedVal = rawVal.replace(/\D/g, '');
+        updateData({ annualIncome: sanitizedVal, fatherAnnualIncome: sanitizedVal });
+    };
 
     useEffect(() => {
         if (data && !originalValues) {
@@ -111,13 +171,19 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
             ? data.annualIncome 
             : data.fatherAnnualIncome;
 
+        setTouched({ parentMobile: true, motherPhone: true });
+        const isFatherPhoneValid = validateMobileField('parentMobile', fatherPhoneVal);
+        const isMotherPhoneValid = validateMobileField('motherPhone', data.motherPhone);
+
         if (!data.fatherName?.trim()) {
             toast.error("Please enter Father's Name.");
             return;
         }
 
-        if (!fatherPhoneVal || String(fatherPhoneVal).length !== 10) {
-            toast.error("Please enter a valid 10-digit Father's Mobile Number.");
+        if (!isFatherPhoneValid) {
+            toast.error(fatherPhoneVal && String(fatherPhoneVal).length === 10 
+                ? "Please enter a valid Father's Mobile Number." 
+                : "Please enter a valid 10-digit Father's Mobile Number.");
             return;
         }
 
@@ -131,8 +197,10 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
             return;
         }
 
-        if (!data.motherPhone || String(data.motherPhone).length !== 10) {
-            toast.error("Please enter a valid 10-digit Mother's Mobile Number.");
+        if (!isMotherPhoneValid) {
+            toast.error(data.motherPhone && String(data.motherPhone).length === 10 
+                ? "Please enter a valid Mother's Mobile Number." 
+                : "Please enter a valid 10-digit Mother's Mobile Number.");
             return;
         }
 
@@ -180,7 +248,7 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in flex flex-col">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6 animate-fade-in flex flex-col">
             <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             
             {/* Father's Details */}
@@ -208,9 +276,13 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Father Mobile */}
                     <div className={getFieldContainerClass('parentMobile')}>
                         <label className="text-sm font-medium text-slate-700">Father's Mobile No. <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('parentMobile')} type="tel" name="parentMobile" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('parentMobile')} value={data.parentMobile || data.fatherPhone || ''} onChange={handleChange} placeholder="Enter father's mobile number" />
-                        {renderFeedback('parentMobile')}
-                        {!(data.parentMobile || data.fatherPhone) && applicationStatus === 'REJECTED' && (
+                        <input required disabled={isFieldDisabled('parentMobile')} type="tel" name="parentMobile" inputMode="numeric" maxLength={10} className={getFieldInputClass('parentMobile')} value={data.parentMobile || data.fatherPhone || ''} onChange={handleMobileChange} onBlur={handleMobileBlur} placeholder="Enter father's mobile number" />
+                        {errors.parentMobile ? (
+                            <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">{errors.parentMobile}</p>
+                        ) : (
+                            renderFeedback('parentMobile')
+                        )}
+                        {!(data.parentMobile || data.fatherPhone) && applicationStatus === 'REJECTED' && !errors.parentMobile && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
@@ -246,9 +318,13 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Mother Mobile */}
                     <div className={getFieldContainerClass('motherPhone')}>
                         <label className="text-sm font-medium text-slate-700">Mother's Mobile No. <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('motherPhone')} type="tel" name="motherPhone" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} className={getFieldInputClass('motherPhone')} value={data.motherPhone || ''} onChange={handleChange} placeholder="Enter mother's mobile number" />
-                        {renderFeedback('motherPhone')}
-                        {!data.motherPhone && applicationStatus === 'REJECTED' && (
+                        <input required disabled={isFieldDisabled('motherPhone')} type="tel" name="motherPhone" inputMode="numeric" maxLength={10} className={getFieldInputClass('motherPhone')} value={data.motherPhone || ''} onChange={handleMobileChange} onBlur={handleMobileBlur} placeholder="Enter mother's mobile number" />
+                        {errors.motherPhone ? (
+                            <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">{errors.motherPhone}</p>
+                        ) : (
+                            renderFeedback('motherPhone')
+                        )}
+                        {!data.motherPhone && applicationStatus === 'REJECTED' && !errors.motherPhone && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
@@ -282,9 +358,9 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
                     {/* Annual Income */}
                     <div className={getFieldContainerClass('annualIncome', 'lg:col-span-1')}>
                         <label className="text-sm font-medium text-slate-700">Annual Income (₹) <span className="text-red-500">*</span></label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                            <input required disabled={isFieldDisabled('annualIncome')} type="number" min="0" name="annualIncome" inputMode="numeric" className={getFieldInputClass('annualIncome', '!pl-9')} value={data.annualIncome || data.fatherAnnualIncome || ''} onChange={handleChange} placeholder="Enter annual income" />
+                        <div className="relative flex items-center">
+                            <span className="absolute left-3.5 text-slate-400 text-sm font-semibold pointer-events-none z-10">₹</span>
+                            <input required disabled={isFieldDisabled('annualIncome')} type="text" inputMode="numeric" name="annualIncome" className={getFieldInputClass('annualIncome', '!pl-10')} value={data.annualIncome || data.fatherAnnualIncome || ''} onChange={handleIncomeChange} placeholder="Enter annual income" />
                         </div>
                         {renderFeedback('annualIncome')}
                         {!(data.annualIncome || data.fatherAnnualIncome) && applicationStatus === 'REJECTED' && (

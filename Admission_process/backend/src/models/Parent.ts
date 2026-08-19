@@ -37,7 +37,7 @@ Parent.init(
       allowNull: true,
     },
     annualIncome: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.DECIMAL(38, 2),
       allowNull: true,
     },
     isPrimaryContact: {

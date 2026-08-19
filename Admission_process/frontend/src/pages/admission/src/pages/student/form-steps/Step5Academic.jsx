@@ -8,6 +8,113 @@ import SelectDropdown from '../../../components/SelectDropdown';
 const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, adminRemarks, readOnly = false }) => {
     const [loading, setLoading] = useState(false);
     const [validationErrors, setValidationErrors] = useState({});
+    const [yearErrors, setYearErrors] = useState({
+        sslcYear: '',
+        pucYear: '',
+        diplomaYear: ''
+    });
+    const [yearTouched, setYearTouched] = useState({
+        sslcYear: false,
+        pucYear: false,
+        diplomaYear: false
+    });
+
+    const validateYearField = (fieldName, value, isRequired = true) => {
+        const strVal = String(value || '').trim();
+        const currentYear = new Date().getFullYear();
+        let errorMessage = '';
+
+        if (!strVal) {
+            if (isRequired) {
+                errorMessage = 'Please enter a valid 4-digit year.';
+            }
+        } else if (strVal.length < 4) {
+            errorMessage = 'Please enter a valid 4-digit year.';
+        } else {
+            const numYear = Number(strVal);
+            if (isNaN(numYear) || strVal.length !== 4) {
+                errorMessage = 'Please enter a valid 4-digit year.';
+            } else if (numYear > currentYear) {
+                errorMessage = 'Year of passing cannot be in the future.';
+            }
+        }
+
+        setYearErrors(prev => ({
+            ...prev,
+            [fieldName]: errorMessage
+        }));
+
+        return !errorMessage;
+    };
+
+    const handleYearChange = (e) => {
+        const { name, value } = e.target;
+        const sanitizedVal = value.replace(/\D/g, '').slice(0, 4);
+
+        updateData({ [name]: sanitizedVal });
+
+        if (yearTouched[name] || yearErrors[name]) {
+            const isRequired = name === 'sslcYear' || 
+                (name === 'pucYear' && data.qualification !== 'DIPLOMA') ||
+                (name === 'diplomaYear' && data.qualification === 'DIPLOMA');
+            validateYearField(name, sanitizedVal, isRequired);
+        }
+    };
+
+    const handleYearBlur = (e) => {
+        const { name, value } = e.target;
+        setYearTouched(prev => ({ ...prev, [name]: true }));
+        const isRequired = name === 'sslcYear' || 
+            (name === 'pucYear' && data.qualification !== 'DIPLOMA') ||
+            (name === 'diplomaYear' && data.qualification === 'DIPLOMA');
+        validateYearField(name, value, isRequired);
+    };
+
+    const [diplomaMarksErrors, setDiplomaMarksErrors] = useState({
+        diplomaFinalYearMaxMarks: '',
+        diplomaFinalYearObtained: ''
+    });
+
+    const handleDiplomaMarksChange = (e) => {
+        const { name, value: rawVal } = e.target;
+        const hasNonDigits = /\D/.test(rawVal);
+        const sanitizedVal = rawVal.replace(/\D/g, '');
+
+        let currentMaxErr = diplomaMarksErrors.diplomaFinalYearMaxMarks;
+        let currentObtErr = diplomaMarksErrors.diplomaFinalYearObtained;
+
+        if (hasNonDigits) {
+            if (name === 'diplomaFinalYearMaxMarks') currentMaxErr = 'Please enter marks as a whole number.';
+            if (name === 'diplomaFinalYearObtained') currentObtErr = 'Please enter marks as a whole number.';
+        } else {
+            if (name === 'diplomaFinalYearMaxMarks') currentMaxErr = '';
+            if (name === 'diplomaFinalYearObtained') currentObtErr = '';
+        }
+
+        const updatedFields = { [name]: sanitizedVal };
+        const combinedData = { ...data, ...updatedFields };
+
+        const maxMarks = parseInt(combinedData.diplomaFinalYearMaxMarks) || 0;
+        const obtainedMarks = parseInt(combinedData.diplomaFinalYearObtained) || 0;
+
+        if (combinedData.diplomaFinalYearObtained && combinedData.diplomaFinalYearMaxMarks) {
+            if (obtainedMarks > maxMarks) {
+                currentObtErr = 'Obtained marks cannot exceed maximum marks.';
+            } else if (!hasNonDigits && currentObtErr === 'Obtained marks cannot exceed maximum marks.') {
+                currentObtErr = '';
+            }
+        } else if (!hasNonDigits && currentObtErr === 'Obtained marks cannot exceed maximum marks.') {
+            currentObtErr = '';
+        }
+
+        setDiplomaMarksErrors({
+            diplomaFinalYearMaxMarks: currentMaxErr,
+            diplomaFinalYearObtained: currentObtErr
+        });
+
+        updateData(updatedFields);
+        calculateDiploma(combinedData);
+    };
 
     const isFieldFlagged = (fieldName) => {
         if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
@@ -342,7 +449,13 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             }
         }
 
+        const currentYear = new Date().getFullYear();
+        const sslcYearNum = Number(data.sslcYear);
         if (!data.sslcSchool || !data.sslcBoard || !data.sslcYear || !data.sslcRegisterNumber) {
+            return false;
+        }
+
+        if (String(data.sslcYear).length !== 4 || isNaN(sslcYearNum) || sslcYearNum > currentYear || yearErrors.sslcYear) {
             return false;
         }
 
@@ -362,7 +475,27 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
     };
 
     const isPucFormValid = () => {
-        if (data.qualification === 'DIPLOMA') return true;
+        const currentYear = new Date().getFullYear();
+        if (data.qualification === 'DIPLOMA') {
+            const diplomaYearNum = Number(data.diplomaYear);
+            if (data.diplomaYear && (String(data.diplomaYear).length !== 4 || isNaN(diplomaYearNum) || diplomaYearNum > currentYear || yearErrors.diplomaYear)) {
+                return false;
+            }
+            if (diplomaMarksErrors.diplomaFinalYearMaxMarks || diplomaMarksErrors.diplomaFinalYearObtained) {
+                return false;
+            }
+            const maxVal = parseInt(data.diplomaFinalYearMaxMarks) || 0;
+            const obtVal = parseInt(data.diplomaFinalYearObtained) || 0;
+            if (maxVal > 0 && obtVal > maxVal) {
+                return false;
+            }
+            return true;
+        }
+
+        const pucYearNum = Number(data.pucYear);
+        if (data.pucYear && (String(data.pucYear).length !== 4 || isNaN(pucYearNum) || pucYearNum > currentYear || yearErrors.pucYear)) {
+            return false;
+        }
 
         const subjectKeys = ['physicsMarks', 'chemistryMarks', 'mathsMarks', 'optionalMarks'];
         for (const key of subjectKeys) {
@@ -421,6 +554,15 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             return;
         }
 
+        setYearTouched({ sslcYear: true, pucYear: true, diplomaYear: true });
+        const isSslcYearValid = validateYearField('sslcYear', data.sslcYear, true);
+        const isDiplomaYearValid = data.qualification === 'DIPLOMA' 
+            ? validateYearField('diplomaYear', data.diplomaYear, true)
+            : true;
+        const isPucYearValid = data.qualification !== 'DIPLOMA' 
+            ? validateYearField('pucYear', data.pucYear, true)
+            : true;
+
         if (!data.sslcSchool?.trim()) {
             toast.error("Please enter 10th / SSLC School Name.");
             return;
@@ -431,8 +573,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
             return;
         }
 
-        if (!data.sslcYear) {
-            toast.error("Please select 10th / SSLC Passing Year.");
+        if (!isSslcYearValid) {
+            const strVal = String(data.sslcYear || '').trim();
+            const currentYear = new Date().getFullYear();
+            if (strVal && Number(strVal) > currentYear) {
+                toast.error("10th / SSLC Year of passing cannot be in the future.");
+            } else {
+                toast.error("Please enter a valid 4-digit 10th / SSLC Passing Year.");
+            }
             return;
         }
 
@@ -451,8 +599,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 toast.error("Please enter Diploma College / Board / University Name.");
                 return;
             }
-            if (!data.diplomaYear) {
-                toast.error("Please select Diploma Passing Year.");
+            if (!isDiplomaYearValid) {
+                const strVal = String(data.diplomaYear || '').trim();
+                const currentYear = new Date().getFullYear();
+                if (strVal && Number(strVal) > currentYear) {
+                    toast.error("Diploma Year of passing cannot be in the future.");
+                } else {
+                    toast.error("Please enter a valid 4-digit Diploma Passing Year.");
+                }
                 return;
             }
             if (!data.diplomaRegisterNumber?.trim()) {
@@ -467,6 +621,16 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 toast.error("Please enter Diploma Final Year Obtained Marks.");
                 return;
             }
+            if (diplomaMarksErrors.diplomaFinalYearMaxMarks || diplomaMarksErrors.diplomaFinalYearObtained) {
+                toast.error(diplomaMarksErrors.diplomaFinalYearMaxMarks || diplomaMarksErrors.diplomaFinalYearObtained);
+                return;
+            }
+            const maxVal = parseInt(data.diplomaFinalYearMaxMarks) || 0;
+            const obtVal = parseInt(data.diplomaFinalYearObtained) || 0;
+            if (obtVal > maxVal) {
+                toast.error("Obtained marks cannot exceed maximum marks.");
+                return;
+            }
         } else {
             if (!data.pucSchool?.trim()) {
                 toast.error("Please enter PUC / 12th College Name.");
@@ -476,8 +640,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                 toast.error("Please select PUC / 12th Board.");
                 return;
             }
-            if (!data.pucYear) {
-                toast.error("Please select PUC / 12th Passing Year.");
+            if (!isPucYearValid) {
+                const strVal = String(data.pucYear || '').trim();
+                const currentYear = new Date().getFullYear();
+                if (strVal && Number(strVal) > currentYear) {
+                    toast.error("PUC / 12th Year of passing cannot be in the future.");
+                } else {
+                    toast.error("Please enter a valid 4-digit PUC / 12th Passing Year.");
+                }
                 return;
             }
             if (!data.pucRegisterNumber?.trim()) {
@@ -668,7 +838,7 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
     const isPucRegInvalid = false;
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in flex flex-col">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6 animate-fade-in flex flex-col">
             <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             {/* SSLC Section */}
             <div>
@@ -719,11 +889,15 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                     </div>
                     <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('tenthPassingYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                         <label className="text-sm font-medium text-slate-700">Year of Passing <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('tenthPassingYear')} type="number" name="sslcYear" className={`input-premium h-11 ${isFieldFlagged('tenthPassingYear') ? 'border-red-500' : ''}`} value={data.sslcYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
-                        {isFieldFlagged('tenthPassingYear') && (
-                            <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                        <input required disabled={isFieldDisabled('tenthPassingYear')} type="text" inputMode="numeric" maxLength={4} name="sslcYear" className={`input-premium h-11 ${isFieldFlagged('tenthPassingYear') || yearErrors.sslcYear ? 'border-red-500' : ''}`} value={data.sslcYear || ''} onChange={handleYearChange} onBlur={handleYearBlur} placeholder="Enter year of passing" />
+                        {yearErrors.sslcYear ? (
+                            <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">{yearErrors.sslcYear}</p>
+                        ) : (
+                            isFieldFlagged('tenthPassingYear') && (
+                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                            )
                         )}
-                        {!data.sslcYear && applicationStatus === 'REJECTED' && (
+                        {!data.sslcYear && applicationStatus === 'REJECTED' && !yearErrors.sslcYear && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
@@ -821,10 +995,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('twelfthPassingYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
-                            <label className="text-sm font-medium text-slate-700">Year of Passing</label>
-                            <input disabled={isFieldDisabled('twelfthPassingYear')} type="number" name="pucYear" className={`input-premium h-11 ${isFieldFlagged('twelfthPassingYear') ? 'border-red-500' : ''}`} value={data.pucYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
-                            {isFieldFlagged('twelfthPassingYear') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                            <label className="text-sm font-medium text-slate-700">Year of Passing <span className="text-red-500">*</span></label>
+                            <input required={data.qualification !== 'DIPLOMA'} disabled={isFieldDisabled('twelfthPassingYear')} type="text" inputMode="numeric" maxLength={4} name="pucYear" className={`input-premium h-11 ${isFieldFlagged('twelfthPassingYear') || yearErrors.pucYear ? 'border-red-500' : ''}`} value={data.pucYear || ''} onChange={handleYearChange} onBlur={handleYearBlur} placeholder="Enter year of passing" />
+                            {yearErrors.pucYear ? (
+                                <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">{yearErrors.pucYear}</p>
+                            ) : (
+                                isFieldFlagged('twelfthPassingYear') && (
+                                    <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                                )
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('twelfthRegisterNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
@@ -940,10 +1118,14 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaYear') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
-                            <label className="text-sm font-medium text-slate-700">Year of Passing</label>
-                            <input disabled={isFieldDisabled('diplomaYear')} type="number" name="diplomaYear" className={`input-premium h-11 ${isFieldFlagged('diplomaYear') ? 'border-red-500' : ''}`} value={data.diplomaYear || ''} onChange={handleChange} placeholder="Enter year of passing" />
-                            {isFieldFlagged('diplomaYear') && (
-                                <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                            <label className="text-sm font-medium text-slate-700">Year of Passing <span className="text-red-500">*</span></label>
+                            <input required={data.qualification === 'DIPLOMA'} disabled={isFieldDisabled('diplomaYear')} type="text" inputMode="numeric" maxLength={4} name="diplomaYear" className={`input-premium h-11 ${isFieldFlagged('diplomaYear') || yearErrors.diplomaYear ? 'border-red-500' : ''}`} value={data.diplomaYear || ''} onChange={handleYearChange} onBlur={handleYearBlur} placeholder="Enter year of passing" />
+                            {yearErrors.diplomaYear ? (
+                                <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">{yearErrors.diplomaYear}</p>
+                            ) : (
+                                isFieldFlagged('diplomaYear') && (
+                                    <p className="text-red-500 text-[11px] font-bold mt-1">🔴 Requires correction / verification</p>
+                                )
                             )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaRegisterNumber') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
@@ -954,12 +1136,22 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
                             )}
                         </div>
                         <div className="space-y-1.5 p-3 rounded-xl">
-                            <label className="text-sm font-medium text-slate-700">Final Year Max Marks</label>
-                            <input disabled={isFieldDisabled('diplomaPercentage')} type="number" name="diplomaFinalYearMaxMarks" className="input-premium h-11" value={data.diplomaFinalYearMaxMarks || ''} onChange={handleChange} placeholder="Enter final year max marks" />
+                            <label className="text-sm font-medium text-slate-700">Final Year Max Marks <span className="text-red-500">*</span></label>
+                            <input disabled={isFieldDisabled('diplomaPercentage')} type="text" inputMode="numeric" name="diplomaFinalYearMaxMarks" className={`input-premium h-11 ${diplomaMarksErrors.diplomaFinalYearMaxMarks ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`} value={data.diplomaFinalYearMaxMarks || ''} onChange={handleDiplomaMarksChange} placeholder="Enter final year max marks" />
+                            {diplomaMarksErrors.diplomaFinalYearMaxMarks && (
+                                <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">
+                                    {diplomaMarksErrors.diplomaFinalYearMaxMarks}
+                                </p>
+                            )}
                         </div>
                         <div className="space-y-1.5 p-3 rounded-xl">
-                            <label className="text-sm font-medium text-slate-700">Final Year Obtained</label>
-                            <input disabled={isFieldDisabled('diplomaPercentage')} type="number" name="diplomaFinalYearObtained" className="input-premium h-11" value={data.diplomaFinalYearObtained || ''} onChange={handleChange} placeholder="Enter final year marks obtained" />
+                            <label className="text-sm font-medium text-slate-700">Final Year Obtained <span className="text-red-500">*</span></label>
+                            <input disabled={isFieldDisabled('diplomaPercentage')} type="text" inputMode="numeric" name="diplomaFinalYearObtained" className={`input-premium h-11 ${diplomaMarksErrors.diplomaFinalYearObtained ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`} value={data.diplomaFinalYearObtained || ''} onChange={handleDiplomaMarksChange} placeholder="Enter final year marks obtained" />
+                            {diplomaMarksErrors.diplomaFinalYearObtained && (
+                                <p className="text-red-500 text-xs font-semibold mt-1 animate-fade-in">
+                                    {diplomaMarksErrors.diplomaFinalYearObtained}
+                                </p>
+                            )}
                         </div>
                         <div className={`space-y-1.5 p-3 rounded-xl transition-all ${isFieldFlagged('diplomaPercentage') ? 'border-2 border-red-500 bg-red-50/10' : ''}`}>
                             <label className="text-sm font-medium text-slate-700">Percentage (%)</label>

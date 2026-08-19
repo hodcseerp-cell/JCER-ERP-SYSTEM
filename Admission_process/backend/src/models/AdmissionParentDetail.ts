@@ -48,7 +48,7 @@ AdmissionParentDetail.init(
       allowNull: true,
     },
     fatherAnnualIncome: {
-      type: DataTypes.DECIMAL(12, 2),
+      type: DataTypes.DECIMAL(38, 2),
       allowNull: true,
     },
     motherName: {
