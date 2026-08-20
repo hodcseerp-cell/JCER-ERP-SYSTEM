@@ -2846,6 +2846,34 @@ export const previewBulkExport = async (
           }
         }
       }
+
+      // Include provisional admission documents for finalized students
+      if (adm.userId) {
+        try {
+          const studentRecord = await Student.findOne({ where: { userId: adm.userId } });
+          if (studentRecord) {
+            const ProvisionalAdmission = (await import('../models/ProvisionalAdmission')).default;
+            const ProvisionalAdmissionDocument = (await import('../models/ProvisionalAdmissionDocument')).default;
+
+            const provApps = await ProvisionalAdmission.findAll({
+              where: { studentId: studentRecord.id },
+              include: [{ model: ProvisionalAdmissionDocument, as: 'documents' }]
+            });
+
+            for (const pApp of provApps) {
+              if (pApp.documents && pApp.documents.length > 0) {
+                for (const pDoc of pApp.documents) {
+                  if (pDoc.r2Key) {
+                    documentCount++;
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore provisional lookup error in preview count
+        }
+      }
     }
 
     return res.json({

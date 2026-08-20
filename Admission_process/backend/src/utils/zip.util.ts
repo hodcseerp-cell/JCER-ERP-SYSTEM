@@ -1,6 +1,10 @@
 import { Writable } from 'stream';
+import fs from 'fs';
+import archiver from 'archiver';
+import JSZip from 'jszip';
+import logger from './logger.util';
 
-// Precomputed CRC-32 table for fast checksum calculations
+// Precomputed CRC-32 table for fast checksum calculations (preserved for backward compatibility)
 const crcTable: number[] = [];
 for (let i = 0; i < 256; i++) {
   let c = i;
@@ -23,112 +27,155 @@ export function getCrc32(buf: Buffer): number {
 
 export interface ZipEntry {
   name: string;
-  crc: number;
-  size: number;
-  offset: number;
+  crc?: number;
+  size?: number;
+  offset?: number;
 }
 
 /**
- * A lightweight, dependency-free streaming ZIP archive builder.
- * Streams files sequentially to any Writable stream (e.g. Express Response or fs.WriteStream).
+ * Production-grade streaming ZIP archive builder backed by the official `archiver` library.
+ * Guarantees standard ZIP specification compliance (APPNOTE.TXT), UTF-8 filename flags,
+ * proper Central Directory, and seamless compatibility with:
+ *  1. Windows File Explorer
+ *  2. 7-Zip
+ *  3. WinRAR
+ *  4. macOS Archive Utility
+ *  5. Node.js ZIP libraries (yauzl, jszip, adm-zip)
  */
 export class StreamingZip {
+  private archive: any;
   private outStream: Writable;
-  private entries: ZipEntry[] = [];
-  private currentOffset = 0;
-  private time: number;
-  private date: number;
+  private isFinalized = false;
+  private completionPromise: Promise<void>;
+  private errorOccurred: Error | null = null;
+  private entriesCount = 0;
 
-  constructor(outStream: Writable) {
+  constructor(outStream: Writable, options: { level?: number } = {}) {
     this.outStream = outStream;
-    const now = new Date();
-    this.time = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
-    this.date = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+
+    // Use standard ZIP compression with DEFLATE (level 6) or STORE (level 0)
+    const compressionLevel = options.level !== undefined ? options.level : 6;
+    this.archive = archiver('zip', {
+      zlib: { level: compressionLevel },
+      forceZip64: false,
+    });
+
+    this.completionPromise = new Promise<void>((resolve, reject) => {
+      // The target stream will emit 'finish' or 'close' once all data & central directory are flushed to disk/network
+      this.outStream.on('finish', () => {
+        resolve();
+      });
+      this.outStream.on('close', () => {
+        resolve();
+      });
+
+      this.outStream.on('error', (err) => {
+        this.errorOccurred = err;
+        reject(err);
+      });
+
+      this.archive.on('warning', (err: any) => {
+        if (err.code === 'ENOENT') {
+          logger.warn(`[StreamingZip] Warning: ${err.message}`);
+        } else {
+          this.errorOccurred = err;
+          reject(err);
+        }
+      });
+
+      this.archive.on('error', (err: any) => {
+        this.errorOccurred = err;
+        reject(err);
+      });
+    });
+
+    this.archive.pipe(this.outStream);
   }
 
   /**
    * Appends a file entry to the ZIP archive.
-   * Immediately streams the Local File Header and data buffer to the target stream.
+   * Standardizes path separators to standard forward slashes '/'.
    */
   public async addFile(name: string, buffer: Buffer): Promise<void> {
-    const nameBuf = Buffer.from(name, 'utf-8');
-    const crc = getCrc32(buffer);
-    const size = buffer.length;
-    const offset = this.currentOffset;
-
-    // Local File Header (30 bytes)
-    const lfh = Buffer.alloc(30);
-    lfh.writeUInt32LE(0x04034b50, 0); // PK\3\4 signature
-    lfh.writeUInt16LE(10, 4);         // Version needed to extract (1.0)
-    lfh.writeUInt16LE(0, 6);          // General purpose bit flag (0)
-    lfh.writeUInt16LE(0, 8);          // Compression method (0 = stored/uncompressed)
-    lfh.writeUInt16LE(this.time, 10); // Last mod time
-    lfh.writeUInt16LE(this.date, 12); // Last mod date
-    lfh.writeUInt32LE(crc, 14);       // CRC-32 checksum
-    lfh.writeUInt32LE(size, 18);      // Compressed size
-    lfh.writeUInt32LE(size, 22);      // Uncompressed size
-    lfh.writeUInt16LE(nameBuf.length, 26); // File name length
-    lfh.writeUInt16LE(0, 28);         // Extra field length (0)
-
-    // Stream Local File Header, file name, and file data
-    this.outStream.write(lfh);
-    this.outStream.write(nameBuf);
-    this.outStream.write(buffer);
-
-    // Record central directory entry details
-    this.entries.push({ name, crc, size, offset });
-    this.currentOffset += lfh.length + nameBuf.length + size;
+    if (this.errorOccurred) {
+      throw this.errorOccurred;
+    }
+    // Normalize path separators to standard forward slashes '/'
+    const normalizedName = name.replace(/\\/g, '/').replace(/^\/+/, '');
+    this.archive.append(buffer, {
+      name: normalizedName,
+      date: new Date(),
+    });
+    this.entriesCount++;
   }
 
   /**
-   * Finalizes the ZIP archive by writing Central Directory headers and EOCD record.
-   * Flushes and terminates the output stream.
+   * Returns current count of entries queued/added to the archive.
+   */
+  public getEntryCount(): number {
+    return this.entriesCount;
+  }
+
+  /**
+   * Finalizes the ZIP archive by writing the Central Directory and End of Central Directory (EOCD).
+   * Awaits full flushing and closing of the underlying Writable stream.
    */
   public async finalize(): Promise<void> {
-    const cdOffset = this.currentOffset;
-    let cdSize = 0;
+    if (this.isFinalized) return;
+    this.isFinalized = true;
 
-    for (const entry of this.entries) {
-      const nameBuf = Buffer.from(entry.name, 'utf-8');
-
-      // Central Directory File Header (46 bytes)
-      const cdfh = Buffer.alloc(46);
-      cdfh.writeUInt32LE(0x02014b50, 0); // PK\1\2 signature
-      cdfh.writeUInt16LE(20, 4);         // Version made by (2.0)
-      cdfh.writeUInt16LE(10, 6);         // Version needed to extract (1.0)
-      cdfh.writeUInt16LE(0, 8);          // General purpose bit flag (0)
-      cdfh.writeUInt16LE(0, 10);         // Compression method (0 = stored)
-      cdfh.writeUInt16LE(this.time, 12); // Last mod time
-      cdfh.writeUInt16LE(this.date, 14); // Last mod date
-      cdfh.writeUInt32LE(entry.crc, 16); // CRC-32
-      cdfh.writeUInt32LE(entry.size, 20); // Compressed size
-      cdfh.writeUInt32LE(entry.size, 24); // Uncompressed size
-      cdfh.writeUInt16LE(nameBuf.length, 28); // File name length
-      cdfh.writeUInt16LE(0, 30);         // Extra field length (0)
-      cdfh.writeUInt16LE(0, 32);         // File comment length (0)
-      cdfh.writeUInt16LE(0, 34);         // Disk number start (0)
-      cdfh.writeUInt16LE(0, 36);         // Internal file attributes (0)
-      cdfh.writeUInt32LE(0, 38);         // External file attributes (0)
-      cdfh.writeUInt32LE(entry.offset, 42); // Local file header relative offset
-
-      // Stream Central Directory entry
-      this.outStream.write(cdfh);
-      this.outStream.write(nameBuf);
-      cdSize += cdfh.length + nameBuf.length;
+    if (this.errorOccurred) {
+      throw this.errorOccurred;
     }
 
-    // End of Central Directory Record (EOCD) (22 bytes)
-    const eocd = Buffer.alloc(22);
-    eocd.writeUInt32LE(0x06054b50, 0); // PK\5\6 signature
-    eocd.writeUInt16LE(0, 4);           // Disk number (0)
-    eocd.writeUInt16LE(0, 6);           // Disk with CD start (0)
-    eocd.writeUInt16LE(this.entries.length, 8); // CD entries on this disk
-    eocd.writeUInt16LE(this.entries.length, 10); // Total CD entries
-    eocd.writeUInt32LE(cdSize, 12);     // Size of Central Directory
-    eocd.writeUInt32LE(cdOffset, 16);   // Offset of Central Directory
-    eocd.writeUInt16LE(0, 20);          // Comment length (0)
+    await this.archive.finalize();
+    await this.completionPromise;
+  }
+}
 
-    this.outStream.write(eocd);
-    this.outStream.end();
+/**
+ * Server-side validation of a generated ZIP archive on disk.
+ * Verifies that:
+ *  - The file exists on disk
+ *  - Size > 0 (and > minimum empty ZIP header size)
+ *  - ZIP central directory exists and is intact
+ *  - Archive can be opened and parsed by standard ZIP parser without corruption
+ *  - Entry count matches expectations
+ */
+export async function validateZipArchive(
+  filePath: string,
+  minExpectedEntries: number = 1
+): Promise<{ valid: boolean; entryCount: number; error?: string }> {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { valid: false, entryCount: 0, error: 'ZIP file does not exist on disk.' };
+    }
+    const stat = fs.statSync(filePath);
+    if (stat.size <= 22) {
+      return { valid: false, entryCount: 0, error: `ZIP file is empty or truncated (${stat.size} bytes).` };
+    }
+
+    const data = fs.readFileSync(filePath);
+    const zip = await JSZip.loadAsync(data);
+    const files = Object.keys(zip.files).filter((k) => !zip.files[k].dir);
+
+    if (files.length < minExpectedEntries) {
+      return {
+        valid: false,
+        entryCount: files.length,
+        error: `ZIP archive contains ${files.length} files, expected at least ${minExpectedEntries}.`,
+      };
+    }
+
+    return {
+      valid: true,
+      entryCount: files.length,
+    };
+  } catch (err: any) {
+    return {
+      valid: false,
+      entryCount: 0,
+      error: `ZIP validation failed: ${err.message || 'Corrupted ZIP archive or missing Central Directory.'}`,
+    };
   }
 }

@@ -24,31 +24,50 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
     const [loading, setLoading] = useState(!externalDetails);
     const [submitting, setSubmitting] = useState(false);
     const [details, setDetails] = useState(externalDetails);
+    const [fetchError, setFetchError] = useState(null);
     const [isConfirmed, setIsConfirmed] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const navigate = useNavigate();
     const printFrameRef = useRef();
 
+    const fetchDetails = async () => {
+        setLoading(true);
+        setFetchError(null);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+        try {
+            const res = await api.get(`/application/full-details?_t=${Date.now()}`, {
+                signal: controller.signal,
+            });
+            if (res.data?.success && res.data?.data) {
+                setDetails(res.data.data);
+            } else {
+                setFetchError('No application details returned.');
+            }
+        } catch (error) {
+            console.error('Failed to load application details for review:', error);
+            if (error.name !== 'CanceledError' && error.name !== 'AbortError') {
+                const msg = error.response?.data?.message || 'Failed to load application details for review.';
+                setFetchError(msg);
+                toast.error(msg, { id: 'fetch-details-error' });
+            } else {
+                setFetchError('Request timed out while loading review details.');
+            }
+        } finally {
+            clearTimeout(timeoutId);
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (externalDetails) {
             setDetails(externalDetails);
+            setFetchError(null);
             setLoading(false);
             return;
         }
 
-        const fetchDetails = async () => {
-            try {
-                const res = await api.get(`/application/full-details?_t=${Date.now()}`);
-                if (res.data.success) {
-                    setDetails(res.data.data);
-                }
-            } catch (error) {
-                toast.error("Failed to load application details for review.", { id: 'fetch-details-error' });
-                console.error(error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchDetails();
     }, [externalDetails]);
 
@@ -104,6 +123,40 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
                 <Loader2 size={40} className="animate-spin text-primary-600" />
                 <p className="text-slate-500 font-medium">Preparing application review...</p>
+            </div>
+        );
+    }
+
+    if (!details) {
+        return (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 max-w-md mx-auto my-8 shadow-sm animate-fade-in">
+                <div className="size-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <AlertCircle size={28} />
+                </div>
+                <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900">Unable to load application review</h3>
+                    <p className="text-xs sm:text-sm text-slate-500">
+                        {fetchError || "We couldn't retrieve your latest application details. Please check your connection and try again."}
+                    </p>
+                </div>
+                <div className="pt-2 flex justify-center gap-3">
+                    <button
+                        type="button"
+                        onClick={fetchDetails}
+                        className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-primary-600/20 transition-all active:scale-95 cursor-pointer"
+                    >
+                        Try Again
+                    </button>
+                    {onPrev && (
+                        <button
+                            type="button"
+                            onClick={onPrev}
+                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                        >
+                            Back to Documents
+                        </button>
+                    )}
+                </div>
             </div>
         );
     }

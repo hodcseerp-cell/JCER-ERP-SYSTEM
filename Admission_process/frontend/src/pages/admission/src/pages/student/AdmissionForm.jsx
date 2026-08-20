@@ -134,9 +134,10 @@ const AdmissionForm = () => {
     };
 
     const syncApplicationState = async () => {
+        setFormLoading(true);
         try {
             const res = await api.get(`/application/full-details?_t=${Date.now()}`);
-            if (res.data.success && res.data.data) {
+            if (res.data?.success && res.data?.data) {
                 const details = res.data.data;
                 setFullDetails(details);
                 
@@ -186,6 +187,8 @@ const AdmissionForm = () => {
             }
         } catch (e) {
             console.error("Failed to sync application state:", e);
+        } finally {
+            setFormLoading(false);
         }
     };
 
@@ -260,42 +263,24 @@ const AdmissionForm = () => {
         }
     }, [statusLoading, stepStatus?.applicationStatus]);
 
-    // Force global sync on initial load/mount
-    useEffect(() => {
-        if (!statusLoading && stepStatus) {
-            syncApplicationState();
-        }
-    }, [statusLoading]);
-
-    // Redirect to dashboard if application needs correction and no specific step is requested
+    // Fetch step-specific data or full review details on step transition / mount
     useEffect(() => {
         if (statusLoading || !stepStatus) return;
 
-        const isCorrection = stepStatus.applicationStatus === 'CORRECTION_REQUIRED' || stepStatus.applicationStatus === 'REJECTED';
-        if (isCorrection) {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (!urlParams.has('step')) {
-                navigate('/admission/dashboard');
+        const isEditable = stepStatus.applicationStatus === 'DRAFT' ||
+            stepStatus.applicationStatus === 'REJECTED' ||
+            stepStatus.applicationStatus === 'CORRECTION_REQUIRED';
+
+        if (isEditable) {
+            if (currentStep >= 1 && currentStep <= 6) {
+                fetchStepData(currentStep);
+            } else if (currentStep === 7) {
+                syncApplicationState();
             }
-        }
-    }, [statusLoading, stepStatus, navigate]);
-
-    // Fetch step-specific data lazily on step transition
-    useEffect(() => {
-        const isEditable = !statusLoading && stepStatus && 
-            (stepStatus.applicationStatus === 'DRAFT' || stepStatus.applicationStatus === 'REJECTED' || stepStatus.applicationStatus === 'CORRECTION_REQUIRED');
-
-        if (isEditable && currentStep >= 1 && currentStep <= 6) {
-            fetchStepData(currentStep);
+        } else {
+            setFormLoading(false);
         }
     }, [currentStep, statusLoading, stepStatus?.applicationStatus]);
-
-    // Force a fresh sync of full details when entering Step 7 (Review)
-    useEffect(() => {
-        if (currentStep === 7) {
-            syncApplicationState();
-        }
-    }, [currentStep]);
 
     // Set initial step based on server status — only runs if URL had no ?step param
     useEffect(() => {
