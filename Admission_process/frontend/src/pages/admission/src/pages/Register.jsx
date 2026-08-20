@@ -233,12 +233,12 @@ const Register = () => {
 
     return (
         <div className="w-full animate-fade-in max-w-md mx-auto lg:mx-0">
-            <div className="mb-3 sm:mb-4 text-center lg:text-left">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-primary-100 text-primary-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-1.5 sm:mb-2">
+            <div className="mb-2 sm:mb-3 text-center lg:text-left">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-primary-100 text-primary-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-1 sm:mb-1.5">
                     <GraduationCap size={13} />
                     {isLateral ? 'Lateral Entry' : 'Fresh Admission'} {admissionCycle || getAcademicYear()}
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-0.5">
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-900 mb-0.5">
                     {isLateral ? 'Lateral Entry Registration' : 'Student Registration'}
                 </h2>
                 <p className="text-xs text-slate-500">
@@ -247,17 +247,17 @@ const Register = () => {
             </div>
 
             {admissionsClosed ? (
-                <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-6 text-center space-y-4 my-4 shadow-sm">
-                    <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                        <Lock size={22} />
+                <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-5 text-center space-y-3 my-3 shadow-sm">
+                    <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                        <Lock size={20} />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                         <h3 className="text-base font-bold text-amber-900">Admissions Closed</h3>
                         <p className="text-xs text-amber-800 leading-relaxed font-medium">
                             Admissions are currently closed. Please contact the college office for further information.
                         </p>
                     </div>
-                    <div className="pt-3 border-t border-amber-200/80">
+                    <div className="pt-2.5 border-t border-amber-200/80">
                         <Link to="/admission/login" className="inline-flex items-center text-xs font-bold text-primary-600 hover:underline">
                             Existing user? Log in to your portal &rarr;
                         </Link>
@@ -265,9 +265,9 @@ const Register = () => {
                 </div>
             ) : (
                 <>
-                    <form onSubmit={handleSubmit} className="space-y-2.5 sm:space-y-3">
+                    <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-2.5">
                         {/* Name row */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-700" htmlFor="firstName">
                                     First Name <span className="text-red-500">*</span>
@@ -278,7 +278,7 @@ const Register = () => {
                                     name="firstName"
                                     value={formData.firstName}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
+                                    className="w-full px-3 py-1.5 sm:py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="John"
                                     required
                                 />
@@ -293,7 +293,7 @@ const Register = () => {
                                     name="lastName"
                                     value={formData.lastName}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
+                                    className="w-full px-3 py-1.5 sm:py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="Doe"
                                     required
                                 />
@@ -321,7 +321,7 @@ const Register = () => {
                                     value={formData.email}
                                     onChange={handleChange}
                                     disabled={isEmailVerified}
-                                    className="flex-1 min-w-0 px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 disabled:bg-emerald-50/50 disabled:text-emerald-900 shadow-sm focus:shadow-md"
+                                    className="flex-1 min-w-0 px-3 py-1.5 sm:py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 disabled:bg-emerald-50/50 disabled:text-emerald-900 shadow-sm focus:shadow-md"
                                     placeholder="student@example.com"
                                     required
                                 />
@@ -330,7 +330,7 @@ const Register = () => {
                                         type="button"
                                         onClick={handleSendOtp}
                                         disabled={sendingOtp || !formData.email}
-                                        className="w-full sm:w-auto shrink-0 whitespace-nowrap px-3.5 py-2.5 sm:py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-400 font-bold rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0"
+                                        className="w-full sm:w-auto shrink-0 whitespace-nowrap px-3.5 py-1.5 sm:py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-400 font-bold rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0"
                                     >
                                         {sendingOtp ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
                                         {otpSent ? 'Resend OTP' : 'Send OTP'}
@@ -341,12 +341,12 @@ const Register = () => {
 
                         {/* 6-Digit OTP Verification Box */}
                         {otpSent && !isEmailVerified && (
-                            <div className="p-3.5 bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90 rounded-2xl space-y-3 animate-fade-in transition-all duration-300 shadow-sm">
+                            <div className="p-2.5 sm:p-3 bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90 rounded-2xl space-y-2.5 animate-fade-in transition-all duration-300 shadow-sm">
                                 <label className="text-xs font-bold text-indigo-950 flex items-center justify-between">
                                     <span>Enter 6-Digit Verification Code</span>
                                     <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-100/70 px-2 py-0.5 rounded-md">Valid for 5 mins</span>
                                 </label>
-                                <div className="space-y-3">
+                                <div className="space-y-2.5">
                                     <OtpInputBox
                                         value={otpCode}
                                         onChange={setOtpCode}
@@ -361,7 +361,7 @@ const Register = () => {
                                         type="button"
                                         onClick={handleVerifyOtp}
                                         disabled={verifyingOtp || otpCode.length !== 6}
-                                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md hover:shadow-indigo-600/30 active:scale-[0.99]"
+                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md hover:shadow-indigo-600/30 active:scale-[0.99]"
                                     >
                                         {verifyingOtp ? <Loader2 size={13} className="animate-spin" /> : 'Verify OTP'}
                                     </button>
@@ -385,7 +385,7 @@ const Register = () => {
                                 value={formData.phone}
                                 onChange={handleChange}
                                 maxLength={10}
-                                className={`w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${phoneError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
+                                className={`w-full px-3 py-1.5 sm:py-2 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${phoneError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
                                 placeholder="9876543210"
                                 required
                             />
@@ -393,7 +393,7 @@ const Register = () => {
                         </div>
 
                         {/* Password Grid */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5" htmlFor="password">
                                     <Lock size={14} className="text-slate-400" />
@@ -406,7 +406,7 @@ const Register = () => {
                                         name="password"
                                         value={formData.password}
                                         onChange={handleChange}
-                                        className={`w-full px-3 py-2 pr-8 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${passwordError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
+                                        className={`w-full px-3 py-1.5 sm:py-2 pr-8 bg-slate-50/80 hover:bg-slate-50 border rounded-xl focus:bg-white focus:ring-4 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md ${passwordError ? 'border-red-500 focus:ring-red-500/15' : 'border-slate-200 hover:border-primary-400 focus:ring-primary-600/15 focus:border-primary-600'}`}
                                         placeholder="••••••••"
                                         required
                                     />
@@ -431,7 +431,7 @@ const Register = () => {
                                     name="confirmPassword"
                                     value={formData.confirmPassword}
                                     onChange={handleChange}
-                                    className="w-full px-3 py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
+                                    className="w-full px-3 py-1.5 sm:py-2 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-primary-400 rounded-xl focus:bg-white focus:ring-4 focus:ring-primary-600/15 focus:border-primary-600 transition-all duration-300 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:shadow-md"
                                     placeholder="••••••••"
                                     required
                                 />
@@ -441,7 +441,7 @@ const Register = () => {
                         <button
                             type="submit"
                             disabled={loading || !isEmailVerified || !!phoneError || !!passwordError}
-                            className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-600/25 hover:shadow-xl hover:shadow-primary-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 group/btn disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm mt-2 cursor-pointer"
+                            className="w-full py-2.5 sm:py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-600/25 hover:shadow-xl hover:shadow-primary-600/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 group/btn disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm mt-1.5 sm:mt-2 cursor-pointer"
                         >
                             {loading ? (
                                 <>
@@ -459,7 +459,7 @@ const Register = () => {
                 </>
             )}
 
-            <div className="mt-3 text-center text-xs text-slate-600">
+            <div className="mt-2.5 sm:mt-3 text-center text-xs text-slate-600">
                 Already registered?{' '}
                 <Link to="/admission/login" className="font-bold text-primary-600 hover:underline">
                     Log in here

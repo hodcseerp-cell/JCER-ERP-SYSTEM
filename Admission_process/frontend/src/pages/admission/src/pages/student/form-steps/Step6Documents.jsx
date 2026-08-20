@@ -285,9 +285,13 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
     const photoInputRef  = useRef(null);
     const activeDocIdRef = useRef(null);
 
+    const cycleStamp = data?.correctionRequestedAt || '';
+    const storageKey = data?.id ? `reuploaded_docs_${data.id}_${cycleStamp}` : null;
+
     const [reuploadedDocs, setReuploadedDocs] = useState(() => {
+        if (!storageKey) return [];
         try {
-            const saved = sessionStorage.getItem(`reuploaded_docs_${data?.id}`);
+            const saved = sessionStorage.getItem(storageKey);
             return saved ? JSON.parse(saved) : [];
         } catch {
             return [];
@@ -295,10 +299,10 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
     });
 
     useEffect(() => {
-        if (data?.id) {
-            sessionStorage.setItem(`reuploaded_docs_${data.id}`, JSON.stringify(reuploadedDocs));
+        if (storageKey) {
+            sessionStorage.setItem(storageKey, JSON.stringify(reuploadedDocs));
         }
-    }, [reuploadedDocs, data?.id]);
+    }, [reuploadedDocs, storageKey]);
 
     // Cleanup object URLs on unmount
     useEffect(() => {
@@ -688,67 +692,49 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             studyCertificate: ['study', 'domicile']
         };
 
-        const isOriginalFlagged = (() => {
+        const checkIsDocFlagged = (targetDocId) => {
             if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
-            if (!adminRemarks) return false;
             
             const remarkLabels = {
-                photo: ['passport size photo', 'recent passport photo'],
-                signature: ['candidate e-signature', 'e-signature'],
-                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
-                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
-                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
-                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
-                cetScoreCard: ['entrance score card (cet/dcet)'],
-                aadhaar: ['aadhaar card copy'],
-                feesPaidReceipt: ['college fees receipt'],
-                admissionFormFeeReceipt: ['admission form fee receipt'],
-                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
-                incomeCertificate: ['income / gap year certificate', 'income certificate'],
-                studyCertificate: ['domicile / study certificate', '7 years study certificate']
+                photo: ['passport size photo', 'recent passport photo', 'passport photo', 'photo'],
+                signature: ['candidate e-signature', 'e-signature', 'signature'],
+                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card', 'sslc markscard', '10th markscard', '10th marksheet', 'tenth markscard'],
+                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card', 'puc markscard', '12th markscard', '12th marksheet', 'twelfth markscard'],
+                diplomaSemester5Marksheet: ['diploma 5th semester marks card', 'diploma 5th', 'semester 5', 'sem 5'],
+                diplomaSemester6Marksheet: ['diploma 6th semester marks card', 'diploma 6th', 'semester 6', 'sem 6'],
+                cetScoreCard: ['entrance score card (cet/dcet)', 'entrance score card', 'cet score card', 'dcet score card', 'cet/dcet', 'dcet'],
+                aadhaar: ['aadhaar card copy', 'aadhaar card', 'aadhaar copy', 'aadhaar'],
+                feesPaidReceipt: ['college fees receipt', 'college fee receipt', 'fees paid receipt', 'fees receipt'],
+                admissionFormFeeReceipt: ['admission form fee receipt', 'form fee receipt', 'admission fee receipt'],
+                casteCertificate: ['caste certificate (optional)', 'caste certificate', 'caste'],
+                incomeCertificate: ['income / gap year certificate', 'income certificate', 'gap year certificate', 'gap certificate', 'income'],
+                studyCertificate: ['domicile / study certificate', 'domicile certificate', 'study certificate', '7 years study certificate', '7 year study certificate', 'domicile', 'study']
             };
 
-            const targetLabels = remarkLabels[doc.id] || [];
-            const lines = adminRemarks.split('\n');
-            
-            return lines.some(line => {
-                const lowerLine = line.toLowerCase();
-                return lowerLine.trim().startsWith('•') && 
-                       targetLabels.some(label => lowerLine.includes(label)) &&
-                       (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
+            const targetLabels = remarkLabels[targetDocId] || [];
+
+            // 1. Check verifiedDocuments object if present
+            const verifiedDocs = data?.verifiedDocuments || {};
+            const verifiedMatch = Object.entries(verifiedDocs).some(([key, status]) => {
+                if (status !== 'REJECTED') return false;
+                const lowerKey = key.toLowerCase();
+                return targetLabels.some(label => lowerKey.includes(label) || label.includes(lowerKey));
             });
-        })();
+            if (verifiedMatch) return true;
+
+            // 2. Check adminRemarks text if present
+            if (!adminRemarks) return false;
+            const remarksLower = adminRemarks.toLowerCase();
+            return targetLabels.some(label => remarksLower.includes(label));
+        };
+
+        const isOriginalFlagged = checkIsDocFlagged(doc.id);
 
         const isDocDisabled = (() => {
             if (readOnly) return true;
             if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
 
-            const remarkLabels = {
-                photo: ['passport size photo', 'recent passport photo'],
-                signature: ['candidate e-signature', 'e-signature'],
-                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
-                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
-                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
-                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
-                cetScoreCard: ['entrance score card (cet/dcet)'],
-                aadhaar: ['aadhaar card copy'],
-                feesPaidReceipt: ['college fees receipt'],
-                admissionFormFeeReceipt: ['admission form fee receipt'],
-                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
-                incomeCertificate: ['income / gap year certificate', 'income certificate'],
-                studyCertificate: ['domicile / study certificate', '7 years study certificate']
-            };
-
-            const hasFlaggedDocs = DOCS.some(d => {
-                if (!adminRemarks) return false;
-                const targetLabels = remarkLabels[d.id] || [];
-                return adminRemarks.split('\n').some(line => {
-                    const lowerLine = line.toLowerCase();
-                    return lowerLine.trim().startsWith('•') && 
-                           targetLabels.some(label => lowerLine.includes(label)) &&
-                           (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
-                });
-            });
+            const hasFlaggedDocs = DOCS.some(d => checkIsDocFlagged(d.id));
 
             if (hasFlaggedDocs) {
                 return !isOriginalFlagged;
@@ -761,27 +747,25 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
             const lines = adminRemarks.split('\n');
             
             const remarkLabels = {
-                photo: ['passport size photo', 'recent passport photo'],
-                signature: ['candidate e-signature', 'e-signature'],
+                photo: ['passport size photo', 'recent passport photo', 'passport photo', 'photo'],
+                signature: ['candidate e-signature', 'e-signature', 'signature'],
                 sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
                 pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
-                diplomaSemester5Marksheet: ['diploma 5th semester marks card'],
-                diplomaSemester6Marksheet: ['diploma 6th semester marks card'],
-                cetScoreCard: ['entrance score card (cet/dcet)'],
-                aadhaar: ['aadhaar card copy'],
-                feesPaidReceipt: ['college fees receipt'],
-                admissionFormFeeReceipt: ['admission form fee receipt'],
-                casteCertificate: ['caste certificate (optional)', 'caste certificate'],
+                diplomaSemester5Marksheet: ['diploma 5th semester marks card', 'diploma 5th'],
+                diplomaSemester6Marksheet: ['diploma 6th semester marks card', 'diploma 6th'],
+                cetScoreCard: ['entrance score card (cet/dcet)', 'entrance score card', 'cet score card'],
+                aadhaar: ['aadhaar card copy', 'aadhaar card', 'aadhaar'],
+                feesPaidReceipt: ['college fees receipt', 'college fee receipt'],
+                admissionFormFeeReceipt: ['admission form fee receipt', 'form fee receipt'],
+                casteCertificate: ['caste certificate (optional)', 'caste certificate', 'caste'],
                 incomeCertificate: ['income / gap year certificate', 'income certificate'],
-                studyCertificate: ['domicile / study certificate', '7 years study certificate']
+                studyCertificate: ['domicile / study certificate', 'domicile certificate', 'study certificate', '7 years study certificate', 'domicile', 'study']
             };
 
             const targetLabels = remarkLabels[doc.id] || [];
             const lineIdx = lines.findIndex(line => {
                 const lowerLine = line.toLowerCase();
-                return lowerLine.trim().startsWith('•') && 
-                       targetLabels.some(label => lowerLine.includes(label)) &&
-                       (lowerLine.includes('re-upload') || lowerLine.includes('needs correction/re-upload'));
+                return targetLabels.some(label => lowerLine.includes(label));
             });
 
             if (lineIdx === -1) return null;

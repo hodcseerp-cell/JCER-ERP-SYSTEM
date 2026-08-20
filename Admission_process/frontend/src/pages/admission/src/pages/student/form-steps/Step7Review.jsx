@@ -14,7 +14,6 @@ import {
     Download,
     AlertCircle,
     ArrowRight,
-    Camera,
     Printer
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -262,9 +261,6 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
                                     ) : (
                                         <User size={36} className="text-white/40" />
                                     )}
-                                </div>
-                                <div className="absolute -bottom-1.5 -right-1.5 bg-primary-500 text-white p-1.5 rounded-full shadow-lg">
-                                    <Camera size={12} />
                                 </div>
                             </div>
                             <div className="text-left md:text-right min-w-0">

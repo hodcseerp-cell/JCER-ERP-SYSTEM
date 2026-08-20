@@ -84,19 +84,22 @@ const Step3Parent = ({ onNext, onPrev, data, updateData, applicationStatus, admi
         if (!adminRemarks) return false;
         const remarksLower = adminRemarks.toLowerCase();
         const matches = {
-            fatherName: ["father's name"],
-            parentMobile: ["father's mobile"],
-            occupation: ["father's occupation"],
-            motherName: ["mother's name"],
-            motherPhone: ["mother's mobile"],
-            motherOccupation: ["mother's occupation"],
-            annualIncome: ["annual income"]
+            fatherName: ["father's name", "father name"],
+            parentMobile: ["father's mobile", "father mobile", "parent mobile", "father's phone", "father phone"],
+            fatherPhone: ["father's mobile", "father mobile", "parent mobile", "father's phone", "father phone"],
+            occupation: ["father's occupation", "father occupation"],
+            fatherOccupation: ["father's occupation", "father occupation"],
+            motherName: ["mother's name", "mother name"],
+            motherPhone: ["mother's mobile", "mother mobile", "mother phone"],
+            motherOccupation: ["mother's occupation", "mother occupation"],
+            annualIncome: ["annual income", "father annual income", "family income"],
+            fatherAnnualIncome: ["annual income", "father annual income", "family income"]
         };
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
-    const ALL_STEP3_FIELDS = ['fatherName', 'parentMobile', 'occupation', 'motherName', 'motherPhone', 'motherOccupation', 'annualIncome'];
+    const ALL_STEP3_FIELDS = ['fatherName', 'parentMobile', 'fatherPhone', 'occupation', 'fatherOccupation', 'motherName', 'motherPhone', 'motherOccupation', 'annualIncome', 'fatherAnnualIncome'];
     const hasFlaggedFieldsInStep3 = ALL_STEP3_FIELDS.some(f => isFieldFlagged(f));
 
     const isFieldDisabled = (fieldName) => {

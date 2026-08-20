@@ -736,13 +736,15 @@ const AdmissionForm = () => {
     };
 
     const renderStep = () => {
+        const currentRemarks = stepStatus?.adminRemarks || stepStatus?.correctionRemarks || fullDetails?.adminRemarks || fullDetails?.correctionRemarks || null;
+
         const stepProps = {
             onNext: handleNext,
             onPrev: handlePrev,
             data: formData,
             updateData: updateFormData,
             applicationStatus: stepStatus?.applicationStatus,
-            adminRemarks: stepStatus?.adminRemarks,
+            adminRemarks: currentRemarks,
         };
 
         switch (currentStep) {
@@ -751,8 +753,8 @@ const AdmissionForm = () => {
             case 3: return <Step3Parent {...stepProps} readOnly={getIsStepReadOnly(3)} />;
             case 4: return <Step4Address {...stepProps} readOnly={getIsStepReadOnly(4)} />;
             case 5: return <Step5Academic {...stepProps} readOnly={getIsStepReadOnly(5)} />;
-            case 6: return <Step6Documents onNext={handleNext} onPrev={handlePrev} data={formData} onUploadSuccess={refreshFormData} applicationStatus={stepStatus?.applicationStatus} adminRemarks={stepStatus?.adminRemarks} readOnly={getIsStepReadOnly(6)} />;
-            case 7: return <Step7Review details={fullDetails} onPrev={handlePrev} applicationStatus={stepStatus?.applicationStatus} adminRemarks={stepStatus?.adminRemarks} />;
+            case 6: return <Step6Documents onNext={handleNext} onPrev={handlePrev} data={formData} onUploadSuccess={refreshFormData} applicationStatus={stepStatus?.applicationStatus} adminRemarks={currentRemarks} readOnly={getIsStepReadOnly(6)} />;
+            case 7: return <Step7Review details={fullDetails} onPrev={handlePrev} applicationStatus={stepStatus?.applicationStatus} adminRemarks={currentRemarks} />;
             default: return null;
         }
     };

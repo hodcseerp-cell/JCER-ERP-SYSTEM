@@ -307,7 +307,7 @@ function computeStepStatus(admission: any) {
     totalSteps: 7,
     progressPercent: Math.round((completedCount / 7) * 100),
     activeStepIndex,
-    adminRemarks: admission?.adminRemarks || null,
+    adminRemarks: admission?.adminRemarks || admission?.correctionRemarks || null,
     rejectionReason: admission?.rejectionReason || null,
     rejectionReasonCode: admission?.rejectionReasonCode || null,
     feeReceiptUploadedAt: admission?.feeReceiptUploadedAt || null,
@@ -322,9 +322,10 @@ function computeStepStatus(admission: any) {
     cancellationApprovedById: admission?.cancellationApprovedById || null,
     cancellationAdminRemarks: admission?.cancellationAdminRemarks || null,
     correctionRequestedSections: requested,
-    correctionRemarks: admission?.correctionRemarks || null,
+    correctionRemarks: admission?.correctionRemarks || admission?.adminRemarks || null,
     correctionDeadline: admission?.correctionDeadline || null,
     correctionRequestedAt: admission?.correctionRequestedAt || null,
+    verifiedDocuments: admission?.verifiedDocuments || null,
     timeline,
   };
 }

@@ -121,21 +121,21 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
         if (!adminRemarks) return false;
         const remarksLower = adminRemarks.toLowerCase();
         const matches = {
-            tenthSchool: ['10th school', 'sslc school', 'school name ( sslc )', 'school name (sslc)', 'school name'],
+            tenthSchool: ['10th school name', '10th school', 'sslc school name', 'sslc school', 'school name ( sslc )', 'school name (sslc)', 'school name'],
             tenthBoard: ['10th board', 'sslc board'],
-            tenthPassingYear: ['10th year of passing', 'sslc year', '10th year'],
-            tenthRegisterNumber: ['10th register number', 'sslc register number', '10th reg'],
-            tenthPercentage: ['10th percentage', 'sslc percentage', '10th marks', 'sslc marks'],
-            diplomaUniversity: ['diploma university', 'diploma college'],
-            diplomaYear: ['diploma year of passing', 'diploma year'],
+            tenthPassingYear: ['10th passing year', '10th year of passing', 'sslc passing year', 'sslc year', '10th year'],
+            tenthRegisterNumber: ['10th register number', 'sslc register number', '10th reg', 'sslc reg'],
+            tenthPercentage: ['10th marks', '10th percentage', 'sslc percentage', 'sslc marks', '10th attempts'],
+            diplomaUniversity: ['diploma university', 'diploma college', 'diploma institution'],
+            diplomaYear: ['diploma passing year', 'diploma year of passing', 'diploma year'],
             diplomaRegisterNumber: ['diploma register number', 'diploma reg'],
-            diplomaPercentage: ['diploma percentage', 'diploma marks'],
-            twelfthSchool: ['12th/puc school', 'puc school', '12th school', 'puc college'],
+            diplomaPercentage: ['diploma marks', 'diploma percentage'],
+            twelfthSchool: ['12th/puc school name', '12th/puc school', 'puc school name', 'puc school', '12th school', 'puc college'],
             twelfthStream: ['12th/puc stream', 'puc stream', '12th stream'],
             twelfthBoard: ['12th/puc board', 'puc board', '12th board'],
-            twelfthPassingYear: ['12th/puc year of passing', 'puc year', '12th year'],
+            twelfthPassingYear: ['12th/puc passing year', '12th/puc year of passing', 'puc passing year', 'puc year', '12th year'],
             twelfthRegisterNumber: ['12th/puc register number', 'puc register number', '12th register number', 'puc reg'],
-            twelfthPercentage: ['12th/puc percentage', 'puc percentage', '12th marks', 'puc marks']
+            twelfthPercentage: ['12th/puc percentage', 'puc percentage', '12th marks', 'puc marks', 'physics marks', 'maths marks', 'optional marks']
         };
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));

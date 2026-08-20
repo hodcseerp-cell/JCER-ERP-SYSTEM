@@ -26,16 +26,18 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+export const GLOBAL_JCER_EMAIL_LOGO_URL =
+  'https://jcererp-system.pages.dev/emaillogo.png';
+
 /**
  * Generate ONE unified, production-grade, JCER-branded responsive HTML email.
  * Optimized for Gmail Mobile & Desktop, Apple Mail, Outlook, and Dark Mode compatibility.
  */
 export function getJcerCommonEmailHtml(params: CommonEmailParams): string {
-  const DEFAULT_LOGO_URL = 'https://jcererp-system.pages.dev/logo.png';
   const logoUrl =
     process.env.EMAIL_LOGO_URL ||
     process.env.PUBLIC_LOGO_URL ||
-    DEFAULT_LOGO_URL;
+    GLOBAL_JCER_EMAIL_LOGO_URL;
 
   const currentYear = new Date().getFullYear();
   const academicYearStr = `${currentYear}–${currentYear + 1}`;
@@ -298,6 +300,256 @@ export function getJcerCommonEmailHtml(params: CommonEmailParams): string {
 </html>`.trim();
 }
 
+export interface AdminOtpEmailParams {
+  recipientName: string;
+  otpCode: string;
+  role: string;
+  otpExpiryMinutes?: number;
+}
+
+/**
+ * Generate a dedicated, institutional security authentication HTML email for Admin/Principal OTP.
+ * Fully compatible with Gmail, Apple Mail, Outlook, mobile clients, and dark mode.
+ */
+export function getAdminSecurityOtpEmailHtml(params: AdminOtpEmailParams): string {
+  const logoUrl =
+    process.env.EMAIL_LOGO_URL ||
+    process.env.PUBLIC_LOGO_URL ||
+    GLOBAL_JCER_EMAIL_LOGO_URL;
+
+  const safeRecipientName = escapeHtml(params.recipientName || 'Administrator');
+  const safeOtp = escapeHtml(params.otpCode || '');
+  const expiryMinutes = params.otpExpiryMinutes || 5;
+
+  const roleUpper = (params.role || 'ADMIN').toUpperCase();
+  const isPrincipal = roleUpper === 'PRINCIPAL';
+  const portalName = isPrincipal ? 'Principal Portal' : 'Admin Portal';
+  const badgeText = `${roleUpper} SECURITY AUTHENTICATION`;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeStr =
+    now.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }) + ' IST';
+
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>JCER ERP — ${portalName} Security Verification Code</title>
+  <style type="text/css">
+    body, table, td, a {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    table, td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+      display: block;
+    }
+    body {
+      height: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background-color: #f1f5f9;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .fluid-padding {
+        padding-left: 18px !important;
+        padding-right: 18px !important;
+      }
+      .otp-display {
+        font-size: 30px !important;
+        letter-spacing: 6px !important;
+      }
+    }
+  </style>
+</head>
+
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; table-layout: fixed;">
+    <tr>
+      <td align="center" style="padding: 24px 12px;">
+
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05); border-collapse: separate;">
+
+          <!-- 1. HEADER (Dark Navy Institutional Header) -->
+          <tr>
+            <td style="background-color: #0f172a; padding: 26px 26px 22px 26px; border-bottom: 3px solid #1e40af;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td width="58" valign="middle" style="width: 58px; padding-right: 16px;">
+                    <img
+                      src="${logoUrl}"
+                      alt="JCER Logo"
+                      width="50"
+                      height="50"
+                      style="display: block; width: 50px; height: 50px; border: 0; outline: none; border-radius: 50%; background-color: #ffffff; padding: 2px;"
+                    />
+                  </td>
+                  <td valign="middle" style="text-align: left;">
+                    <div style="font-size: 18px; font-weight: 800; color: #ffffff; line-height: 1.25; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                      Jain College of Engineering &amp; Research
+                    </div>
+                    <div style="font-size: 11px; font-weight: 700; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px;">
+                      OFFICIAL ERP NOTIFICATION
+                    </div>
+                    <div style="margin-top: 8px;">
+                      <span style="display: inline-block; padding: 3px 10px; background-color: rgba(30, 64, 175, 0.35); border: 1px solid rgba(147, 197, 253, 0.35); border-radius: 4px; font-size: 10px; color: #e0e7ff; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;">
+                        [ ${badgeText} ]
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- MAIN CONTENT BODY -->
+          <tr>
+            <td class="fluid-padding" style="padding: 30px 30px 24px 30px; background-color: #ffffff;">
+
+              <!-- 2. GREETING / MESSAGE -->
+              <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
+                Dear ${safeRecipientName},
+              </div>
+
+              <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+                A new login attempt was detected for your JCER ERP ${portalName} account. Please verify your identity using the one-time verification code below.
+              </div>
+
+              <!-- 3. OTP SECTION -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
+                <tr>
+                  <td align="center" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 22px 16px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px;">
+                      ONE-TIME VERIFICATION CODE
+                    </div>
+                    <div class="otp-display" style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 10px; color: #0f172a !important; margin: 0; line-height: 1.2; text-indent: 10px;">
+                      ${safeOtp}
+                    </div>
+                    <div style="font-size: 12px; font-weight: 700; color: #1d4ed8; margin-top: 12px;">
+                      Expires in ${expiryMinutes} minutes
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 4. OTP SECURITY MESSAGE -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+                <tr>
+                  <td style="background-color: #f1f5f9; border-left: 3px solid #1e40af; border-radius: 0 6px 6px 0; padding: 10px 14px; font-size: 12px; color: #334155; line-height: 1.5; font-weight: 600;">
+                    &#128274; <strong>Security Guidance:</strong> Never share this OTP with anyone, including JCER ERP staff.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 5. LOGIN REQUEST DETAILS -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; border-collapse: separate;">
+                <tr>
+                  <td style="padding: 10px 14px; background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
+                    <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; margin: 0;">
+                      LOGIN REQUEST
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="35%" style="font-size: 12px; font-weight: 600; color: #64748b; padding-bottom: 5px;">Target Portal:</td>
+                        <td style="font-size: 12px; font-weight: 700; color: #0f172a; padding-bottom: 5px;">JCER ERP ${portalName}</td>
+                      </tr>
+                      <tr>
+                        <td width="35%" style="font-size: 12px; font-weight: 600; color: #64748b; padding-bottom: 5px;">Date:</td>
+                        <td style="font-size: 12px; font-weight: 700; color: #0f172a; padding-bottom: 5px;">${dateStr}</td>
+                      </tr>
+                      <tr>
+                        <td width="35%" style="font-size: 12px; font-weight: 600; color: #64748b;">Time:</td>
+                        <td style="font-size: 12px; font-weight: 700; color: #0f172a;">${timeStr}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 6. SECURITY WARNING -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+                <tr>
+                  <td style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px;">
+                    <div style="font-size: 11px; font-weight: 800; color: #b91c1c; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">
+                      SECURITY NOTICE
+                    </div>
+                    <div style="font-size: 12px; color: #991b1b; line-height: 1.5; font-weight: 500;">
+                      If you did not initiate this login, do not share the OTP with anyone and contact the JCER ERP administrator immediately.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 7. POST-VERIFICATION MESSAGE -->
+              <div style="font-size: 12px; color: #64748b; line-height: 1.5; padding: 0 2px;">
+                After successful verification, additional OTP verification may not be required for subsequent ${portalName} logins according to the current security session policy.
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- 8. FOOTER -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 22px 26px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 3px;">
+                Jain College of Engineering &amp; Research
+              </div>
+              <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">
+                JCER ERP &mdash; Belagavi, Karnataka
+              </div>
+              <div style="font-size: 12px; color: #475569; margin-bottom: 12px;">
+                Official Website:
+                <a href="https://jcer.in" target="_blank" rel="noopener noreferrer" style="color: #1d4ed8; font-weight: 700; text-decoration: none;">
+                  jcer.in
+                </a>
+              </div>
+              <div style="font-size: 11px; color: #94a3b8; line-height: 1.4;">
+                This is an automated security notification.<br />
+                Please do not reply to this email.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+}
+
 class EmailService {
   private transporter: Transporter | null = null;
   private brevoApiKey: string | null = null;
@@ -521,31 +773,17 @@ class EmailService {
     role: 'ADMIN' | 'PRINCIPAL' | string
   ): Promise<boolean> {
     const portalName =
-      role === 'PRINCIPAL'
+      role?.toUpperCase() === 'PRINCIPAL'
         ? 'Principal Portal'
         : 'Admin Portal';
 
-    const subject = `JCER ${portalName} - Daily Login OTP`;
+    const subject = `JCER ERP ${portalName} — Security Verification Code`;
 
-    const html = getJcerCommonEmailHtml({
+    const html = getAdminSecurityOtpEmailHtml({
       recipientName: name,
-
-      subject,
-
-      badgeTitle: `${role} Security Authentication`,
-
-      mainMessage:
-        `A daily login request was initiated for your ${portalName} account. Please verify your identity using the OTP below.`,
-
       otpCode: otp,
-
+      role,
       otpExpiryMinutes: 5,
-
-      securityNote:
-        'Once verified, today\'s OTP verification remains valid for the current calendar date. You will still need your email and password for future logins today.',
-
-      actionMessage:
-        'If you did not request this OTP, please contact the IT Administrator immediately.',
     });
 
     // IMPORTANT: Admin/Principal OTP remains ENABLED.
