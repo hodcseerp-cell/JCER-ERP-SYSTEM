@@ -10,416 +10,416 @@ async function startServer() {
     console.log('Connecting to PostgreSQL database...');
     await sequelize.authenticate();
     
-    // Split lifecycle: only run schema alteration in development
+    // Run safe, non-destructive schema synchronization queries on server startup (Production & Development)
+    // Pre-cast: fix audit_logs.details column type before sync tries to alter it.
+    // PostgreSQL cannot automatically cast TEXT -> JSON; we must specify USING.
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'audit_logs' AND column_name = 'details'
+              AND data_type <> 'json' AND data_type <> 'jsonb'
+          ) THEN
+            ALTER TABLE "audit_logs" ALTER COLUMN "details" TYPE JSON USING "details"::json;
+          END IF;
+        END
+        $$;
+      `);
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for audit_logs.details skipped:', castErr.message);
+    }
+
+    // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type to DECIMAL(38, 2).
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admission_parent_details' AND column_name = 'fatherAnnualIncome'
+          ) THEN
+            ALTER TABLE "admission_parent_details" ALTER COLUMN "fatherAnnualIncome" TYPE DECIMAL(38, 2)
+            USING (
+              CASE 
+                WHEN "fatherAnnualIncome" IS NULL THEN NULL
+                WHEN TRIM("fatherAnnualIncome"::text) = '' THEN NULL
+                WHEN TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
+                ELSE TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
+              END
+            );
+          END IF;
+        END
+        $$;
+      `);
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for admission_parent_details.fatherAnnualIncome skipped:', castErr.message);
+    }
+
+    // Pre-cast: fix parents.annualIncome column type to DECIMAL(38, 2).
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'parents' AND column_name = 'annualIncome'
+          ) THEN
+            ALTER TABLE "parents" ALTER COLUMN "annualIncome" TYPE DECIMAL(38, 2)
+            USING (
+              CASE 
+                WHEN "annualIncome" IS NULL THEN NULL
+                WHEN TRIM("annualIncome"::text) = '' THEN NULL
+                WHEN TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
+                ELSE TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
+              END
+            );
+          END IF;
+        END
+        $$;
+      `);
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for parents.annualIncome skipped:', castErr.message);
+    }
+
+    // Pre-cast: fix admission_academic_details percentage columns type.
+    try {
+      const percentageCols = ['tenthPercentage', 'twelfthPercentage', 'diplomaPercentage'];
+      for (const col of percentageCols) {
+        await sequelize.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admission_academic_details' AND column_name = '${col}'
+                AND data_type NOT IN ('numeric', 'decimal', 'double precision', 'real')
+            ) THEN
+              ALTER TABLE "admission_academic_details" ALTER COLUMN "${col}" TYPE DECIMAL(5, 2)
+              USING (
+                CASE 
+                  WHEN "${col}" IS NULL THEN NULL
+                  WHEN TRIM("${col}"::text) = '' THEN NULL
+                  WHEN TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
+                  ELSE TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g'))::numeric(5, 2)
+                END
+              );
+            END IF;
+          END
+          $$;
+        `);
+      }
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for admission_academic_details percentages skipped:', castErr.message);
+    }
+
+    // Pre-cast: ensure admission_addresses has taluk and district columns
+    try {
+      const addressCols = ['currentTaluk', 'currentDistrict', 'currentDistrictId', 'permanentTaluk', 'permanentDistrict', 'permanentDistrictId'];
+      for (const col of addressCols) {
+        await sequelize.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admission_addresses' AND column_name = '${col}'
+            ) THEN
+              ALTER TABLE "admission_addresses" ADD COLUMN "${col}" VARCHAR(100);
+            END IF;
+          END
+          $$;
+        `);
+      }
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for admission_addresses columns skipped:', castErr.message);
+    }
+
+    // Pre-cast: fix admission_academic_details integer columns type.
+    try {
+      const integerCols = [
+        'tenthMarksObtained', 'tenthMaxMarks', 'tenthAttempts',
+        'physicsMarks', 'mathsMarks', 'chemistryMarks', 'optionalMarks',
+        'twelfthMaxMarks', 'twelfthAggregate', 'twelfthAttempts',
+        'diplomaFinalYearMaxMarks', 'diplomaFinalYearObtained', 'diplomaAttempts',
+        'cetScore', 'cetRank', 'cetYear'
+      ];
+      for (const col of integerCols) {
+        await sequelize.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'admission_academic_details' AND column_name = '${col}'
+                AND data_type NOT IN ('integer', 'bigint', 'smallint')
+            ) THEN
+              ALTER TABLE "admission_academic_details" ALTER COLUMN "${col}" TYPE INTEGER
+              USING (
+                CASE 
+                  WHEN "${col}" IS NULL THEN NULL
+                  WHEN TRIM("${col}"::text) = '' THEN NULL
+                  WHEN TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
+                  ELSE TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g'))::numeric::integer
+                END
+              );
+            END IF;
+          END
+          $$;
+        `);
+      }
+    } catch (castErr: any) {
+      console.warn('Pre-cast migration for admission_academic_details integers skipped:', castErr.message);
+    }
+
+    // Pre-cast: ensure admissions.qualification column and its ENUM type exist
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_admissions_qualification') THEN
+            CREATE TYPE "enum_admissions_qualification" AS ENUM ('PUC', 'DIPLOMA');
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'qualification'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "qualification" "enum_admissions_qualification";
+          END IF;
+        END
+        $$;
+      `);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for admissions.qualification skipped:', e.message);
+    }
+
+    // Pre-cast: ensure admission_documents columns exist
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admission_documents' AND column_name = 'feesPaidReceiptUrl'
+          ) THEN
+            ALTER TABLE "admission_documents" ADD COLUMN "feesPaidReceiptUrl" VARCHAR(255);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admission_documents' AND column_name = 'diplomaSemester5MarksheetUrl'
+          ) THEN
+            ALTER TABLE "admission_documents" ADD COLUMN "diplomaSemester5MarksheetUrl" VARCHAR(255);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admission_documents' AND column_name = 'diplomaSemester6MarksheetUrl'
+          ) THEN
+            ALTER TABLE "admission_documents" ADD COLUMN "diplomaSemester6MarksheetUrl" VARCHAR(255);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'admissionClosingDate'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "admissionClosingDate" TIMESTAMPTZ DEFAULT '2026-08-31 23:59:59+00';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'handbookUrl'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "handbookUrl" VARCHAR(255);
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'applicationFeeStatus'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "applicationFeeStatus" VARCHAR(50) DEFAULT 'Pending Payment';
+          END IF;
+        END
+        $$;
+      `);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for system and admission columns skipped:', e.message);
+    }
+
+    // Pre-cast: ensure admissions applicationStatus enum has CANCELLATION_REQUESTED and CANCELLED
+    try {
+      await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CANCELLATION_REQUESTED'`);
+      await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CANCELLED'`);
+      await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CORRECTION_REQUIRED'`);
+      await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'RESUBMITTED'`);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for admissions applicationStatus enum skipped:', e.message);
+    }
+
+    // Pre-cast: ensure admissions correction workflow columns exist
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'correctionRequestedSections'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "correctionRequestedSections" JSON;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'correctionRemarks'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "correctionRemarks" TEXT;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'correctionDeadline'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "correctionDeadline" TIMESTAMPTZ;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'correctionRequestedAt'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "correctionRequestedAt" TIMESTAMPTZ;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'correctionRequestedById'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "correctionRequestedById" UUID;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'verifiedDocuments'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "verifiedDocuments" JSON;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'usn'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "usn" VARCHAR(50) UNIQUE;
+          END IF;
+        END
+        $$;
+      `);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for admissions correction workflow columns skipped:', e.message);
+    }
+
+    // Provisional Admission and system settings column alterations
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'freshAdmissionOpen'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "freshAdmissionOpen" BOOLEAN DEFAULT true;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'lateralEntryOpen'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "lateralEntryOpen" BOOLEAN DEFAULT true;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmissionOpen'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmissionOpen" BOOLEAN DEFAULT true;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission3Open'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission3Open" BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission5Open'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission5Open" BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission7Open'
+          ) THEN
+            ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission7Open" BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'users' AND column_name = 'registrationType'
+          ) THEN
+            ALTER TABLE "users" ADD COLUMN "registrationType" VARCHAR(20) DEFAULT 'FRESH';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'applicationType'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "applicationType" VARCHAR(20) DEFAULT 'FRESH';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'entrySemester'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "entrySemester" INTEGER DEFAULT 1;
+          END IF;
+        END
+        $$;
+      `);
+    } catch (err: any) {
+      console.warn('Provisional admission database alterations skipped:', err.message);
+    }
+
+    // Academic promotion columns on students table
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'admissionType'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "admissionType" VARCHAR(20) DEFAULT 'FRESH';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'initialSemester'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "initialSemester" INTEGER DEFAULT 1;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'currentAcademicYear'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "currentAcademicYear" VARCHAR(30) DEFAULT '2026-2027';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'lastPromotedAt'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "lastPromotedAt" TIMESTAMP WITH TIME ZONE;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'lastPromotedBy'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "lastPromotedBy" UUID;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_name = 'students' AND constraint_name = 'students_lastPromotedBy_fkey'
+          ) THEN
+            ALTER TABLE "students" 
+            ADD CONSTRAINT "students_lastPromotedBy_fkey" 
+            FOREIGN KEY ("lastPromotedBy") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+          END IF;
+        END
+        $$;
+      `);
+    } catch (err: any) {
+      console.warn('Academic promotion database alterations skipped:', err.message);
+    }
+
     if (process.env.NODE_ENV === 'development') {
-      // Pre-cast: fix audit_logs.details column type before sync tries to alter it.
-      // PostgreSQL cannot automatically cast TEXT -> JSON; we must specify USING.
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'audit_logs' AND column_name = 'details'
-                AND data_type <> 'json' AND data_type <> 'jsonb'
-            ) THEN
-              ALTER TABLE "audit_logs" ALTER COLUMN "details" TYPE JSON USING "details"::json;
-            END IF;
-          END
-          $$;
-        `);
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for audit_logs.details skipped:', castErr.message);
-      }
-
-      // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type to DECIMAL(38, 2).
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admission_parent_details' AND column_name = 'fatherAnnualIncome'
-            ) THEN
-              ALTER TABLE "admission_parent_details" ALTER COLUMN "fatherAnnualIncome" TYPE DECIMAL(38, 2)
-              USING (
-                CASE 
-                  WHEN "fatherAnnualIncome" IS NULL THEN NULL
-                  WHEN TRIM("fatherAnnualIncome"::text) = '' THEN NULL
-                  WHEN TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                  ELSE TRIM(regexp_replace("fatherAnnualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
-                END
-              );
-            END IF;
-          END
-          $$;
-        `);
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for admission_parent_details.fatherAnnualIncome skipped:', castErr.message);
-      }
-
-      // Pre-cast: fix parents.annualIncome column type to DECIMAL(38, 2).
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'parents' AND column_name = 'annualIncome'
-            ) THEN
-              ALTER TABLE "parents" ALTER COLUMN "annualIncome" TYPE DECIMAL(38, 2)
-              USING (
-                CASE 
-                  WHEN "annualIncome" IS NULL THEN NULL
-                  WHEN TRIM("annualIncome"::text) = '' THEN NULL
-                  WHEN TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                  ELSE TRIM(regexp_replace("annualIncome"::text, '[^-0-9.]', '', 'g'))::numeric(38, 2)
-                END
-              );
-            END IF;
-          END
-          $$;
-        `);
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for parents.annualIncome skipped:', castErr.message);
-      }
-
-      // Pre-cast: fix admission_academic_details percentage columns type.
-      try {
-        const percentageCols = ['tenthPercentage', 'twelfthPercentage', 'diplomaPercentage'];
-        for (const col of percentageCols) {
-          await sequelize.query(`
-            DO $$
-            BEGIN
-              IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'admission_academic_details' AND column_name = '${col}'
-                  AND data_type NOT IN ('numeric', 'decimal', 'double precision', 'real')
-              ) THEN
-                ALTER TABLE "admission_academic_details" ALTER COLUMN "${col}" TYPE DECIMAL(5, 2)
-                USING (
-                  CASE 
-                    WHEN "${col}" IS NULL THEN NULL
-                    WHEN TRIM("${col}"::text) = '' THEN NULL
-                    WHEN TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                    ELSE TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g'))::numeric(5, 2)
-                  END
-                );
-              END IF;
-            END
-            $$;
-          `);
-        }
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for admission_academic_details percentages skipped:', castErr.message);
-      }
-
-      // Pre-cast: ensure admission_addresses has taluk and district columns
-      try {
-        const addressCols = ['currentTaluk', 'currentDistrict', 'currentDistrictId', 'permanentTaluk', 'permanentDistrict', 'permanentDistrictId'];
-        for (const col of addressCols) {
-          await sequelize.query(`
-            DO $$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'admission_addresses' AND column_name = '${col}'
-              ) THEN
-                ALTER TABLE "admission_addresses" ADD COLUMN "${col}" VARCHAR(100);
-              END IF;
-            END
-            $$;
-          `);
-        }
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for admission_addresses columns skipped:', castErr.message);
-      }
-
-      // Pre-cast: fix admission_academic_details integer columns type.
-      try {
-        const integerCols = [
-          'tenthMarksObtained', 'tenthMaxMarks', 'tenthAttempts',
-          'physicsMarks', 'mathsMarks', 'chemistryMarks', 'optionalMarks',
-          'twelfthMaxMarks', 'twelfthAggregate', 'twelfthAttempts',
-          'diplomaFinalYearMaxMarks', 'diplomaFinalYearObtained', 'diplomaAttempts',
-          'cetScore', 'cetRank', 'cetYear'
-        ];
-        for (const col of integerCols) {
-          await sequelize.query(`
-            DO $$
-            BEGIN
-              IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'admission_academic_details' AND column_name = '${col}'
-                  AND data_type NOT IN ('integer', 'bigint', 'smallint')
-              ) THEN
-                ALTER TABLE "admission_academic_details" ALTER COLUMN "${col}" TYPE INTEGER
-                USING (
-                  CASE 
-                    WHEN "${col}" IS NULL THEN NULL
-                    WHEN TRIM("${col}"::text) = '' THEN NULL
-                    WHEN TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g')) = '' THEN NULL
-                    ELSE TRIM(regexp_replace("${col}"::text, '[^-0-9.]', '', 'g'))::numeric::integer
-                  END
-                );
-              END IF;
-            END
-            $$;
-          `);
-        }
-      } catch (castErr: any) {
-        console.warn('Pre-cast migration for admission_academic_details integers skipped:', castErr.message);
-      }
-
-      // Pre-cast: ensure admissions.qualification column and its ENUM type exist
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_admissions_qualification') THEN
-              CREATE TYPE "enum_admissions_qualification" AS ENUM ('PUC', 'DIPLOMA');
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'qualification'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "qualification" "enum_admissions_qualification";
-            END IF;
-          END
-          $$;
-        `);
-      } catch (e: any) {
-        console.warn('Pre-cast migration for admissions.qualification skipped:', e.message);
-      }
-
-      // Pre-cast: ensure admission_documents.feesPaidReceiptUrl column exists
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admission_documents' AND column_name = 'feesPaidReceiptUrl'
-            ) THEN
-              ALTER TABLE "admission_documents" ADD COLUMN "feesPaidReceiptUrl" VARCHAR(255);
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admission_documents' AND column_name = 'diplomaSemester5MarksheetUrl'
-            ) THEN
-              ALTER TABLE "admission_documents" ADD COLUMN "diplomaSemester5MarksheetUrl" VARCHAR(255);
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admission_documents' AND column_name = 'diplomaSemester6MarksheetUrl'
-            ) THEN
-              ALTER TABLE "admission_documents" ADD COLUMN "diplomaSemester6MarksheetUrl" VARCHAR(255);
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'admissionClosingDate'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "admissionClosingDate" TIMESTAMPTZ DEFAULT '2026-08-31 23:59:59+00';
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'handbookUrl'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "handbookUrl" VARCHAR(255);
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'applicationFeeStatus'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "applicationFeeStatus" VARCHAR(50) DEFAULT 'Pending Payment';
-            END IF;
-          END
-          $$;
-        `);
-      } catch (e: any) {
-        console.warn('Pre-cast migration for system and admission columns skipped:', e.message);
-      }
-
-      // Pre-cast: ensure admissions applicationStatus enum has CANCELLATION_REQUESTED and CANCELLED
-      try {
-        await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CANCELLATION_REQUESTED'`);
-        await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CANCELLED'`);
-        await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'CORRECTION_REQUIRED'`);
-        await sequelize.query(`ALTER TYPE "enum_admissions_applicationStatus" ADD VALUE IF NOT EXISTS 'RESUBMITTED'`);
-      } catch (e: any) {
-        console.warn('Pre-cast migration for admissions applicationStatus enum skipped:', e.message);
-      }
-
-      // Pre-cast: ensure admissions correction workflow columns exist
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'correctionRequestedSections'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "correctionRequestedSections" JSON;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'correctionRemarks'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "correctionRemarks" TEXT;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'correctionDeadline'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "correctionDeadline" TIMESTAMPTZ;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'correctionRequestedAt'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "correctionRequestedAt" TIMESTAMPTZ;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'correctionRequestedById'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "correctionRequestedById" UUID;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'verifiedDocuments'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "verifiedDocuments" JSON;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'usn'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "usn" VARCHAR(50) UNIQUE;
-            END IF;
-          END
-          $$;
-        `);
-      } catch (e: any) {
-        console.warn('Pre-cast migration for admissions correction workflow columns skipped:', e.message);
-      }
-
-      // Provisional Admission and system settings column alterations
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'freshAdmissionOpen'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "freshAdmissionOpen" BOOLEAN DEFAULT true;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'lateralEntryOpen'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "lateralEntryOpen" BOOLEAN DEFAULT true;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmissionOpen'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmissionOpen" BOOLEAN DEFAULT true;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission3Open'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission3Open" BOOLEAN DEFAULT false;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission5Open'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission5Open" BOOLEAN DEFAULT false;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'system_configurations' AND column_name = 'provisionalAdmission7Open'
-            ) THEN
-              ALTER TABLE "system_configurations" ADD COLUMN "provisionalAdmission7Open" BOOLEAN DEFAULT false;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'users' AND column_name = 'registrationType'
-            ) THEN
-              ALTER TABLE "users" ADD COLUMN "registrationType" VARCHAR(20) DEFAULT 'FRESH';
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'applicationType'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "applicationType" VARCHAR(20) DEFAULT 'FRESH';
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'admissions' AND column_name = 'entrySemester'
-            ) THEN
-              ALTER TABLE "admissions" ADD COLUMN "entrySemester" INTEGER DEFAULT 1;
-            END IF;
-          END
-          $$;
-        `);
-      } catch (err: any) {
-        console.warn('Provisional admission database alterations skipped:', err.message);
-      }
-
-      // Academic promotion columns on students table
-      try {
-        await sequelize.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'students' AND column_name = 'admissionType'
-            ) THEN
-              ALTER TABLE "students" ADD COLUMN "admissionType" VARCHAR(20) DEFAULT 'FRESH';
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'students' AND column_name = 'initialSemester'
-            ) THEN
-              ALTER TABLE "students" ADD COLUMN "initialSemester" INTEGER DEFAULT 1;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'students' AND column_name = 'currentAcademicYear'
-            ) THEN
-              ALTER TABLE "students" ADD COLUMN "currentAcademicYear" VARCHAR(30) DEFAULT '2026-2027';
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'students' AND column_name = 'lastPromotedAt'
-            ) THEN
-              ALTER TABLE "students" ADD COLUMN "lastPromotedAt" TIMESTAMP WITH TIME ZONE;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'students' AND column_name = 'lastPromotedBy'
-            ) THEN
-              ALTER TABLE "students" ADD COLUMN "lastPromotedBy" UUID;
-            END IF;
-            IF NOT EXISTS (
-              SELECT 1 FROM information_schema.table_constraints
-              WHERE table_name = 'students' AND constraint_name = 'students_lastPromotedBy_fkey'
-            ) THEN
-              ALTER TABLE "students" 
-              ADD CONSTRAINT "students_lastPromotedBy_fkey" 
-              FOREIGN KEY ("lastPromotedBy") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
-            END IF;
-          END
-          $$;
-        `);
-      } catch (err: any) {
-        console.warn('Academic promotion database alterations skipped:', err.message);
-      }
-
       console.log('Syncing database schema (development alter)...');
       try {
         await sequelize.sync({ alter: true });
