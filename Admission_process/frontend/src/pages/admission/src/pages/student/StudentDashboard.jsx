@@ -861,8 +861,8 @@ const SubmittedDashboard = ({
 
                 {applicationStatus === 'ENROLLED' && (
                     <button
-                        onClick={() => setShowCancelModal(true)}
-                        className="w-full bg-red-50 border border-red-200 rounded-2xl p-5 flex items-center gap-4 hover:shadow-lg hover:border-red-300 transition-all group"
+                        onClick={() => navigate('/admission/cancellation')}
+                        className="w-full bg-red-50 border border-red-200 rounded-2xl p-5 flex items-center gap-4 hover:shadow-lg hover:border-red-300 transition-all group cursor-pointer"
                     >
                         <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-colors">
                             <XCircle size={22} />
@@ -896,72 +896,6 @@ const SubmittedDashboard = ({
 
 {/* Dynamic Footer */ }
 <DashboardFooterInfo closingDateIso={closingDateIso} feeStatusText={feeStatusText} isClosed={isClosed} />
-
-{/* Cancellation Request Modal */ }
-{
-    showCancelModal && (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-6 shadow-2xl animate-fade-in">
-                <div className="space-y-2">
-                    <h3 className="text-lg font-bold text-slate-900">Request Admission Cancellation</h3>
-                    <p className="text-xs text-slate-500">Please provide the reason for cancelling your admission. This request will be reviewed by the administration.</p>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Reason for Cancellation <span className="text-red-500">*</span></label>
-                        <select
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            className="w-full text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-primary-500 focus:bg-white transition-colors"
-                        >
-                            <option value="">Select a reason</option>
-                            <option value="Joined Another College">Joined Another College</option>
-                            <option value="Financial Reasons">Financial Reasons</option>
-                            <option value="Personal Reasons">Personal Reasons</option>
-                            <option value="Wrong Course Selected">Wrong Course Selected</option>
-                            <option value="Relocation">Relocation</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Remarks / Additional Details</label>
-                        <textarea
-                            value={cancelRemarks}
-                            onChange={(e) => setCancelRemarks(e.target.value)}
-                            rows={4}
-                            placeholder="Provide any additional comments here..."
-                            className="w-full text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-4 focus:outline-none focus:border-primary-500 focus:bg-white transition-colors resize-none"
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                    <button
-                        onClick={() => {
-                            setShowCancelModal(false);
-                            setCancelReason('');
-                            setCancelRemarks('');
-                        }}
-                        disabled={isSubmitting}
-                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleCancelSubmit}
-                        disabled={isSubmitting || !cancelReason}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-red-600/10 flex items-center gap-1.5"
-                    >
-                        {isSubmitting ? (
-                            <>Submitting...</>
-                        ) : (
-                            <>Submit Request</>
-                        )}
-                    </button>
-                </div>
-            </div>
-        </div>
-        )
-    }
         </div>
     );
 };

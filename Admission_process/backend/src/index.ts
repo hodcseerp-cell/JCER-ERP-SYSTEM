@@ -114,6 +114,27 @@ async function startServer() {
         console.warn('Pre-cast migration for admission_academic_details percentages skipped:', castErr.message);
       }
 
+      // Pre-cast: ensure admission_addresses has taluk and district columns
+      try {
+        const addressCols = ['currentTaluk', 'currentDistrict', 'currentDistrictId', 'permanentTaluk', 'permanentDistrict', 'permanentDistrictId'];
+        for (const col of addressCols) {
+          await sequelize.query(`
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'admission_addresses' AND column_name = '${col}'
+              ) THEN
+                ALTER TABLE "admission_addresses" ADD COLUMN "${col}" VARCHAR(100);
+              END IF;
+            END
+            $$;
+          `);
+        }
+      } catch (castErr: any) {
+        console.warn('Pre-cast migration for admission_addresses columns skipped:', castErr.message);
+      }
+
       // Pre-cast: fix admission_academic_details integer columns type.
       try {
         const integerCols = [

@@ -35,6 +35,7 @@ import AdmissionStudentDashboard from './pages/admission/src/pages/student/Stude
 import AdmissionForm from './pages/admission/src/pages/student/AdmissionForm';
 import { ProvisionalAdmissionForm } from './pages/admission/src/pages/student/ProvisionalAdmissionForm';
 import AdmissionSupportPage from './pages/admission/src/pages/student/SupportPage';
+import AdmissionCancellationPage from './pages/admission/src/pages/student/AdmissionCancellationPage';
 import './pages/admission/src/index.css';
 
 // ─── Admin Pages ──────────────────────────────────────────────────────────────
@@ -213,6 +214,7 @@ export const App: React.FC = () => (
               <Route path="application" element={<AdmissionForm />} />
               <Route path="provisional" element={<ProvisionalAdmissionForm />} />
               <Route path="support" element={<AdmissionSupportPage />} />
+              <Route path="cancellation" element={<AdmissionCancellationPage />} />
             </Route>
             <Route path="support" element={<Navigate to="/admission/support" replace />} />
 

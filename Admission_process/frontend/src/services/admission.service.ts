@@ -121,18 +121,21 @@ export interface AdmissionApplication {
     currentAddressLine1: string | null;
     currentAddressLine2: string | null;
     currentCity: string | null;
+    currentTaluk?: string | null;
+    currentDistrict?: string | null;
+    currentDistrictId?: string | null;
     currentState: string | null;
     currentPincode: string | null;
     sameAsCurrent: boolean;
     permanentAddressLine1: string | null;
     permanentCity: string | null;
+    permanentTaluk?: string | null;
+    permanentDistrict?: string | null;
+    permanentDistrictId?: string | null;
     permanentState: string | null;
     permanentPincode: string | null;
     permanentAddress?: string | null;
     currentAddress?: string | null;
-    permanentDistrict?: string | null;
-    currentDistrict?: string | null;
-    permanentTaluk?: string | null;
   } | null;
   studentacademicdetails: {
     tenthSchool: string | null;

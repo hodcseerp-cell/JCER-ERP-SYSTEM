@@ -165,6 +165,12 @@ const FormField = ({
       'annual income': ['income'],
       'current address': ['address', 'current'],
       'permanent address': ['address', 'permanent'],
+      'street address': ['street', 'address'],
+      'city / village': ['city', 'village'],
+      'taluk': ['taluk'],
+      'district': ['district'],
+      'pincode': ['pincode', 'pin code'],
+      'state': ['state'],
       '10th school name': ['sslc', '10th', 'tenth'],
       '12th/puc school name': ['puc', '12th', 'twelfth'],
       'diploma university': ['diploma'],
@@ -875,7 +881,7 @@ export const AdmissionReviewPage: React.FC = () => {
 
         // Check address
         const addressKeywords = [
-          'address', 'residence', 'pincode', 'city', 'state'
+          'address', 'residence', 'pincode', 'city', 'state', 'taluk', 'district', 'village', 'street'
         ];
         if (addressKeywords.some(kw => remarksLower.includes(kw))) {
           sectionSet.add('address');
@@ -1247,59 +1253,84 @@ export const AdmissionReviewPage: React.FC = () => {
             )}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className={`p-4 rounded-xl border transition-all relative group ${
+            {/* Current Address Card */}
+            <div className={`p-4 rounded-xl border transition-all relative group space-y-3 ${
               isFieldFlagged?.('Current Residence')
                 ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/10 shadow-[0_0_8px_rgba(239,68,68,0.08)]'
                 : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
             }`}>
-              <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Current Residence</p>
-              <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300 pr-5">
-                {[addr?.currentAddressLine1, addr?.currentAddressLine2, addr?.currentCity, addr?.currentState, addr?.currentPincode, addr?.currentCountry].filter(Boolean).join(', ') || '—'}
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Current Residence</p>
+                {isEditable && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFieldCorrection('Current Residence')}
+                    className={`transition-all duration-200 rounded-full p-0.5 ${
+                      isFieldFlagged?.('Current Residence')
+                        ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
+                        : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
+                    }`}
+                    title={isFieldFlagged?.('Current Residence') ? "Remove correction request" : "Request correction for Current Residence"}
+                  >
+                    <X size={12} className="stroke-[3]" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
+                {[addr?.currentAddressLine1, addr?.currentAddressLine2, addr?.currentCity, addr?.currentTaluk, addr?.currentDistrict || addr?.currentDistrictId, addr?.currentState, addr?.currentPincode, addr?.currentCountry].filter(Boolean).join(', ') || '—'}
               </p>
-              {isEditable && (
-                <button
-                  type="button"
-                  onClick={() => handleToggleFieldCorrection('Current Residence')}
-                  className={`absolute top-1.5 right-1.5 transition-all duration-200 rounded-full p-0.5 ${
-                    isFieldFlagged?.('Current Residence')
-                      ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
-                      : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
-                  }`}
-                  title={isFieldFlagged?.('Current Residence') ? "Remove correction request" : "Request correction for Current Residence"}
-                >
-                  <X size={12} className="stroke-[3]" />
-                </button>
-              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                <FormField label="Street Address" value={addr?.currentAddressLine1} remarkText="Current Residence" />
+                <FormField label="City / Village" value={addr?.currentCity} remarkText="Current City" />
+                <FormField label="Taluk" value={addr?.currentTaluk} remarkText="Taluk" />
+                <FormField label="District" value={addr?.currentDistrict || addr?.currentDistrictId} remarkText="District" />
+                <FormField label="Pincode" value={addr?.currentPincode} remarkText="Current Pincode" />
+                <FormField label="State" value={addr?.currentState} remarkText="Current State" />
+              </div>
             </div>
-            <div className={`p-4 rounded-xl border transition-all relative group ${
+
+            {/* Permanent Address Card */}
+            <div className={`p-4 rounded-xl border transition-all relative group space-y-3 ${
               isFieldFlagged?.('Permanent Residence')
                 ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/10 shadow-[0_0_8px_rgba(239,68,68,0.08)]'
                 : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
             }`}>
-              <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest mb-2">Permanent Residence</p>
-              <div className="pr-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Permanent Residence</p>
+                {isEditable && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFieldCorrection('Permanent Residence')}
+                    className={`transition-all duration-200 rounded-full p-0.5 ${
+                      isFieldFlagged?.('Permanent Residence')
+                        ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
+                        : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
+                    }`}
+                    title={isFieldFlagged?.('Permanent Residence') ? "Remove correction request" : "Request correction for Permanent Residence"}
+                  >
+                    <X size={12} className="stroke-[3]" />
+                  </button>
+                )}
+              </div>
+              <div>
                 {addr?.sameAsCurrent ? (
                   <p className="text-xs italic text-neutral-400">Same as current address</p>
                 ) : (
-                  <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
-                    {[addr?.permanentAddressLine1, addr?.permanentAddressLine2, addr?.permanentCity, addr?.permanentState, addr?.permanentPincode, addr?.permanentCountry].filter(Boolean).join(', ') || '—'}
-                  </p>
+                  <>
+                    <p className="text-xs font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300 mb-2">
+                      {[addr?.permanentAddressLine1, addr?.permanentAddressLine2, addr?.permanentCity, addr?.permanentTaluk, addr?.permanentDistrict || addr?.permanentDistrictId, addr?.permanentState, addr?.permanentPincode, addr?.permanentCountry].filter(Boolean).join(', ') || '—'}
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                      <FormField label="Street Address" value={addr?.permanentAddressLine1} remarkText="Permanent Residence" />
+                      <FormField label="City / Village" value={addr?.permanentCity} remarkText="Permanent City" />
+                      <FormField label="Taluk" value={addr?.permanentTaluk} remarkText="Taluk" />
+                      <FormField label="District" value={addr?.permanentDistrict || addr?.permanentDistrictId} remarkText="District" />
+                      <FormField label="Pincode" value={addr?.permanentPincode} remarkText="Permanent Pincode" />
+                      <FormField label="State" value={addr?.permanentState} remarkText="Permanent State" />
+                    </div>
+                  </>
                 )}
               </div>
-              {isEditable && (
-                <button
-                  type="button"
-                  onClick={() => handleToggleFieldCorrection('Permanent Residence')}
-                  className={`absolute top-1.5 right-1.5 transition-all duration-200 rounded-full p-0.5 ${
-                    isFieldFlagged?.('Permanent Residence')
-                      ? 'opacity-100 text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-950/40 hover:scale-105'
-                      : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-rose-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:scale-105'
-                  }`}
-                  title={isFieldFlagged?.('Permanent Residence') ? "Remove correction request" : "Request correction for Permanent Residence"}
-                >
-                  <X size={12} className="stroke-[3]" />
-                </button>
-              )}
             </div>
           </div>
         </div>

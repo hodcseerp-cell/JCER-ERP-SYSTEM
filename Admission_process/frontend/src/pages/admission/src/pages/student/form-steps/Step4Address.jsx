@@ -16,8 +16,16 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                 // Handle pre-mapped database names
                 Address: safeData.Address || safeData.currentAddressLine1 || '',
                 City: safeData.City || safeData.currentCity || '',
+                Taluk: safeData.Taluk || safeData.currentTaluk || '',
+                DistrictId: safeData.DistrictId || safeData.currentDistrictId || safeData.currentDistrict || '',
                 Pincode: safeData.Pincode || safeData.currentPincode || '',
-                permanentAddress: safeData.permanentAddress || safeData.permanentAddressLine1 || ''
+                currentState: safeData.currentState || '',
+                permanentAddress: safeData.permanentAddress || safeData.permanentAddressLine1 || '',
+                permanentCity: safeData.permanentCity || '',
+                permanentTaluk: safeData.permanentTaluk || '',
+                permanentDistrictId: safeData.permanentDistrictId || safeData.permanentDistrict || '',
+                permanentPincode: safeData.permanentPincode || '',
+                permanentState: safeData.permanentState || ''
             });
         }
     }, [safeData, originalValues]);
@@ -27,22 +35,24 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
         if (!adminRemarks) return false;
         const remarksLower = adminRemarks.toLowerCase();
         const matches = {
-            Address: ['current address', 'address'],
-            City: ['current city', 'city'],
+            Address: ['current address', 'street address', 'address line 1', 'address'],
+            City: ['current city', 'city', 'village', 'town'],
             Taluk: ['current taluk', 'taluk'],
             DistrictId: ['current district', 'district'],
-            Pincode: ['current pincode', 'pincode'],
-            permanentAddress: ['permanent address'],
-            permanentCity: ['permanent city'],
+            Pincode: ['current pincode', 'pincode', 'pin code'],
+            currentState: ['current state', 'state'],
+            permanentAddress: ['permanent address', 'permanent street'],
+            permanentCity: ['permanent city', 'permanent village'],
             permanentTaluk: ['permanent taluk'],
             permanentDistrictId: ['permanent district'],
-            permanentPincode: ['permanent pincode']
+            permanentPincode: ['permanent pincode', 'permanent pin code'],
+            permanentState: ['permanent state']
         };
         const keywords = matches[fieldName] || [];
         return keywords.some(kw => remarksLower.includes(kw));
     };
 
-    const ALL_STEP4_FIELDS = ['Address', 'City', 'Taluk', 'DistrictId', 'Pincode', 'permanentAddress', 'permanentCity', 'permanentTaluk', 'permanentDistrictId', 'permanentPincode'];
+    const ALL_STEP4_FIELDS = ['Address', 'City', 'Taluk', 'DistrictId', 'Pincode', 'currentState', 'permanentAddress', 'permanentCity', 'permanentTaluk', 'permanentDistrictId', 'permanentPincode', 'permanentState'];
     const hasFlaggedFieldsInStep4 = ALL_STEP4_FIELDS.some(f => isFieldFlagged(f));
 
     const isFieldDisabled = (fieldName) => {
@@ -64,10 +74,17 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
         // Fallback checks for mapped values
         if (fieldName === 'Address' && !currentValue) currentValue = safeData.currentAddressLine1 || '';
         if (fieldName === 'City' && !currentValue) currentValue = safeData.currentCity || '';
+        if (fieldName === 'Taluk' && !currentValue) currentValue = safeData.currentTaluk || '';
+        if (fieldName === 'DistrictId' && !currentValue) currentValue = safeData.currentDistrictId || safeData.currentDistrict || '';
         if (fieldName === 'Pincode' && !currentValue) currentValue = safeData.currentPincode || '';
+        if (fieldName === 'currentState' && !currentValue) currentValue = safeData.currentState || '';
         if (fieldName === 'permanentAddress' && !currentValue) currentValue = safeData.permanentAddressLine1 || '';
+        if (fieldName === 'permanentTaluk' && !currentValue) currentValue = safeData.permanentTaluk || '';
+        if (fieldName === 'permanentDistrictId' && !currentValue) currentValue = safeData.permanentDistrictId || safeData.permanentDistrict || '';
+        if (fieldName === 'permanentPincode' && !currentValue) currentValue = safeData.permanentPincode || '';
+        if (fieldName === 'permanentState' && !currentValue) currentValue = safeData.permanentState || '';
         
-        return String(currentValue) !== String(originalValue);
+        return String(currentValue).trim() !== String(originalValue).trim();
     };
 
     const getFieldContainerClass = (fieldName, extra = "") => {
@@ -200,15 +217,17 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
             const payload = {
                 currentAddressLine1: data.Address || data.currentAddressLine1 || '',
                 currentCity: data.City || data.currentCity || '',
-                currentTaluk: data.Taluk || '',
-                currentDistrictId: data.DistrictId || null,
+                currentTaluk: data.Taluk || data.currentTaluk || '',
+                currentDistrictId: data.DistrictId || data.currentDistrictId || data.currentDistrict || '',
+                currentDistrict: data.DistrictId || data.currentDistrictId || data.currentDistrict || '',
                 currentPincode: data.Pincode || data.currentPincode || '',
                 currentState: data.currentState || '',
                 sameAsCurrent: sameAsCurrent,
                 permanentAddressLine1: sameAsCurrent ? (data.Address || data.currentAddressLine1 || '') : (data.permanentAddress || data.permanentAddressLine1 || ''),
                 permanentCity: sameAsCurrent ? (data.City || data.currentCity || '') : (data.permanentCity || ''),
-                permanentTaluk: sameAsCurrent ? (data.Taluk || '') : (data.permanentTaluk || ''),
-                permanentDistrictId: sameAsCurrent ? (data.DistrictId || null) : (data.permanentDistrictId || null),
+                permanentTaluk: sameAsCurrent ? (data.Taluk || data.currentTaluk || '') : (data.permanentTaluk || ''),
+                permanentDistrictId: sameAsCurrent ? (data.DistrictId || data.currentDistrictId || data.currentDistrict || '') : (data.permanentDistrictId || data.permanentDistrict || ''),
+                permanentDistrict: sameAsCurrent ? (data.DistrictId || data.currentDistrictId || data.currentDistrict || '') : (data.permanentDistrictId || data.permanentDistrict || ''),
                 permanentPincode: sameAsCurrent ? (data.Pincode || data.currentPincode || '') : (data.permanentPincode || ''),
                 permanentState: sameAsCurrent ? (data.currentState || '') : (data.permanentState || '')
             };
@@ -233,16 +252,25 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
         if (checked) {
             updates.permanentAddress = data.Address || data.currentAddressLine1 || '';
             updates.permanentCity = data.City || data.currentCity || '';
-            updates.permanentTaluk = data.Taluk || '';
-            updates.permanentDistrictId = data.DistrictId || '';
+            updates.permanentTaluk = data.Taluk || data.currentTaluk || '';
+            updates.permanentDistrictId = data.DistrictId || data.currentDistrictId || data.currentDistrict || '';
+            updates.permanentDistrict = data.DistrictId || data.currentDistrictId || data.currentDistrict || '';
             updates.permanentPincode = data.Pincode || data.currentPincode || '';
+            updates.permanentState = data.currentState || '';
         }
         updateData(updates);
     };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        updateData({ [name]: value });
+        const updates = { [name]: value };
+        if (name === 'Taluk') updates.currentTaluk = value;
+        if (name === 'DistrictId') {
+            updates.currentDistrictId = value;
+            updates.currentDistrict = value;
+        }
+        if (name === 'permanentDistrictId') updates.permanentDistrict = value;
+        updateData(updates);
     };
 
     const handlePincodeChange = (e) => {
@@ -262,6 +290,16 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
 
     return (
         <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-1 h-6 bg-primary-600 rounded-full"></div>
+                    <h2 className="text-lg font-semibold text-slate-900">Step 4: Address Details</h2>
+                </div>
+                <span className="px-3 py-1 bg-primary-50 text-primary-700 rounded text-xs font-semibold">
+                    Residential Details
+                </span>
+            </div>
+
             <div className="space-y-8 flex flex-col p-0 m-0 border-0 w-full">
             {/* Current Address */}
             <div className="space-y-5">
@@ -270,7 +308,7 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                         <MapPin size={18} />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Current Address</h2>
+                        <h3 className="text-base font-semibold text-slate-900">Current Address</h3>
                         <p className="text-xs text-slate-500">Present residential details</p>
                     </div>
                 </div>
@@ -299,9 +337,9 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                     {/* Taluk */}
                     <div className={getFieldContainerClass('Taluk')}>
                         <label className="text-sm font-medium text-slate-700">Taluk <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('Taluk')} type="text" name="Taluk" className={getFieldInputClass('Taluk')} value={data.Taluk || ''} onChange={handleChange} placeholder="Enter taluk" />
+                        <input required disabled={isFieldDisabled('Taluk')} type="text" name="Taluk" className={getFieldInputClass('Taluk')} value={data.Taluk || data.currentTaluk || ''} onChange={handleChange} placeholder="Enter taluk" />
                         {renderFeedback('Taluk')}
-                        {!data.Taluk && applicationStatus === 'REJECTED' && (
+                        {!(data.Taluk || data.currentTaluk) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
@@ -309,9 +347,9 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                     {/* District */}
                     <div className={getFieldContainerClass('DistrictId')}>
                         <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                        <input required disabled={isFieldDisabled('DistrictId')} type="text" name="DistrictId" className={getFieldInputClass('DistrictId')} value={data.DistrictId || ''} onChange={handleChange} placeholder="Enter district" />
+                        <input required disabled={isFieldDisabled('DistrictId')} type="text" name="DistrictId" className={getFieldInputClass('DistrictId')} value={data.DistrictId || data.currentDistrictId || data.currentDistrict || ''} onChange={handleChange} placeholder="Enter district" />
                         {renderFeedback('DistrictId')}
-                        {!data.DistrictId && applicationStatus === 'REJECTED' && (
+                        {!(data.DistrictId || data.currentDistrictId || data.currentDistrict) && applicationStatus === 'REJECTED' && (
                             <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                         )}
                     </div>
@@ -327,9 +365,11 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                         {pincodeError && <p className="text-red-500 text-[11px] font-semibold mt-1">⚠ {pincodeError}</p>}
                     </div>
 
-                    <div className="space-y-1.5 p-3 rounded-xl">
+                    {/* State */}
+                    <div className={getFieldContainerClass('currentState')}>
                         <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                        <input required disabled={readOnly} type="text" name="currentState" className="input-premium h-11 uppercase" value={data.currentState || ''} onChange={handleChange} placeholder="Enter state" />
+                        <input required disabled={isFieldDisabled('currentState')} type="text" name="currentState" className={getFieldInputClass('currentState')} value={data.currentState || ''} onChange={handleChange} placeholder="Enter state" />
+                        {renderFeedback('currentState')}
                     </div>
                 </div>
             </div>
@@ -390,9 +430,9 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                         {/* Permanent District */}
                         <div className={getFieldContainerClass('permanentDistrictId')}>
                             <label className="text-sm font-medium text-slate-700">District <span className="text-red-500">*</span></label>
-                            <input required disabled={isFieldDisabled('permanentDistrictId')} type="text" name="permanentDistrictId" className={getFieldInputClass('permanentDistrictId')} value={data.permanentDistrictId || ''} onChange={handleChange} placeholder="Enter permanent district" />
+                            <input required disabled={isFieldDisabled('permanentDistrictId')} type="text" name="permanentDistrictId" className={getFieldInputClass('permanentDistrictId')} value={data.permanentDistrictId || data.permanentDistrict || ''} onChange={handleChange} placeholder="Enter permanent district" />
                             {renderFeedback('permanentDistrictId')}
-                            {!data.permanentDistrictId && applicationStatus === 'REJECTED' && (
+                            {!(data.permanentDistrictId || data.permanentDistrict) && applicationStatus === 'REJECTED' && (
                                 <p className="text-red-500 text-[11px] font-bold mt-1">Please fill this field mandatorily</p>
                             )}
                         </div>
@@ -410,9 +450,11 @@ const Step4Address = ({ onNext, onPrev, data = {}, updateData, applicationStatus
                             )}
                         </div>
 
-                        <div className="space-y-1.5 p-3 rounded-xl">
+                        {/* Permanent State */}
+                        <div className={getFieldContainerClass('permanentState')}>
                             <label className="text-sm font-medium text-slate-700">State <span className="text-red-500">*</span></label>
-                            <input required disabled={readOnly} type="text" name="permanentState" className="input-premium h-11 uppercase" value={data.permanentState || ''} onChange={handleChange} placeholder="Enter state" />
+                            <input required disabled={isFieldDisabled('permanentState')} type="text" name="permanentState" className={getFieldInputClass('permanentState')} value={data.permanentState || ''} onChange={handleChange} placeholder="Enter state" />
+                            {renderFeedback('permanentState')}
                         </div>
                     </div>
                 )}

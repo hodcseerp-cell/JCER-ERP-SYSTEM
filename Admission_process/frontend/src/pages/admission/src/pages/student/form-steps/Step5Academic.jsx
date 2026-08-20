@@ -839,6 +839,16 @@ const Step5Academic = ({ onNext, onPrev, data, updateData, applicationStatus, ad
 
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-6 animate-fade-in flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-1 h-6 bg-primary-600 rounded-full"></div>
+                    <h2 className="text-lg font-semibold text-slate-900">Step 5: Academic Details</h2>
+                </div>
+                <span className="px-3 py-1 bg-primary-50 text-primary-700 rounded text-xs font-semibold">
+                    Academic Qualifications
+                </span>
+            </div>
+
             <div className="space-y-6 flex flex-col p-0 m-0 border-0 w-full">
             {/* SSLC Section */}
             <div>

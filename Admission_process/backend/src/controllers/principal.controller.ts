@@ -310,20 +310,28 @@ export const decideAdmission = async (
       }
     }
 
-    const validDecisions = ['APPROVED', 'REJECTED'];
+    const validDecisions = ['APPROVED', 'REJECTED', 'CORRECTION_REQUIRED', 'REJECT'];
     if (!validDecisions.includes(decision)) {
       return res.status(400).json({ error: 'Invalid decision type.' });
     }
 
-    const targetStatus = decision === 'APPROVED' ? 'ENROLLED' : 'REJECTED';
+    let targetStatus: 'ENROLLED' | 'REJECTED' | 'CORRECTION_REQUIRED' = 'REJECTED';
+    if (decision === 'APPROVED') {
+      targetStatus = 'ENROLLED';
+    } else if (decision === 'CORRECTION_REQUIRED') {
+      targetStatus = 'CORRECTION_REQUIRED';
+    } else {
+      targetStatus = 'REJECTED';
+    }
 
     const enrollmentNumber = await admissionService.updateStatus(
       id,
       targetStatus,
       req.user!.id,
-      remarks,
+      remarks || rejectionReason,
       rejectionReason || remarks,
-      rejectReasonCode
+      rejectReasonCode,
+      req.body.sections
     );
 
     // Save principal audit accountability
@@ -336,9 +344,11 @@ export const decideAdmission = async (
         principalReviewedBy: req.user!.id,
         principalReviewedAt: new Date(),
         principalRemarks: remarks || rejectionReason || null,
+        adminRemarks: remarks || rejectionReason || admission.adminRemarks || null,
+        rejectionReason: rejectionReason || remarks || admission.rejectionReason || null,
       });
 
-      if (targetStatus === 'REJECTED') {
+      if (targetStatus === 'REJECTED' || targetStatus === 'CORRECTION_REQUIRED') {
         try {
           const user = await User.findByPk(admission.userId);
           if (user) {
@@ -348,13 +358,13 @@ export const decideAdmission = async (
                 studentName: `${user.firstName} ${user.lastName}`.trim(),
                 applicationNumber: admission.applicationNumber || '',
                 applicationType: 'FRESH_ADMISSION',
-                reason: rejectionReason || remarks || 'Correction Required',
-                remarks
+                reason: rejectionReason || remarks || (targetStatus === 'REJECTED' ? 'Application Rejected by Principal' : 'Correction Required'),
+                remarks: remarks || rejectionReason || ''
               }
             );
           }
         } catch (err: any) {
-          console.error('Failed to send correction required email:', err.message);
+          console.error('Failed to send notification email:', err.message);
         }
       }
     }

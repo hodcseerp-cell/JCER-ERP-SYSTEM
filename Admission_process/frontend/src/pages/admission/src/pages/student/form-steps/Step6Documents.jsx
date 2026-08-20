@@ -101,7 +101,7 @@ const getFilenameFromUrl = (url) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStatus, adminRemarks, readOnly = false }) => {
+const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, applicationStatus, adminRemarks, readOnly = false }) => {
     const isDiploma    = data?.qualification === 'DIPLOMA';
     const isManagement = data?.admissionType === 'MANAGEMENT';
 
@@ -285,24 +285,7 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
     const photoInputRef  = useRef(null);
     const activeDocIdRef = useRef(null);
 
-    const cycleStamp = data?.correctionRequestedAt || '';
-    const storageKey = data?.id ? `reuploaded_docs_${data.id}_${cycleStamp}` : null;
-
-    const [reuploadedDocs, setReuploadedDocs] = useState(() => {
-        if (!storageKey) return [];
-        try {
-            const saved = sessionStorage.getItem(storageKey);
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
-        }
-    });
-
-    useEffect(() => {
-        if (storageKey) {
-            sessionStorage.setItem(storageKey, JSON.stringify(reuploadedDocs));
-        }
-    }, [reuploadedDocs, storageKey]);
+    const [reuploadedDocs, setReuploadedDocs] = useState([]);
 
     // Cleanup object URLs on unmount
     useEffect(() => {
@@ -678,61 +661,79 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         const isDragging = dragOver === doc.id;
         const isBusy     = cardState === 'processing' || cardState === 'uploading';
         
-        const matches = {
-            photo: ['passport', 'photo'],
-            signature: ['signature'],
-            sslcMarkscard: ['sslc', '10th', 'tenth'],
-            pucMarkscard: ['puc', '12th', 'twelfth'],
-            diplomaSemester5Marksheet: ['diploma 5th', 'semester 5', 'sem 5'],
-            diplomaSemester6Marksheet: ['diploma 6th', 'semester 6', 'sem 6'],
-            cetScoreCard: ['cet', 'dcet', 'entrance'],
-            feesPaidReceipt: ['fees paid', 'receipt', 'fees verified'],
-            casteCertificate: ['caste'],
-            incomeCertificate: ['income', 'gap'],
-            studyCertificate: ['study', 'domicile']
+        const getDocSearchKeywords = (targetDoc) => {
+            const list = [
+                targetDoc.id,
+                targetDoc.apiField,
+                targetDoc.dbKey,
+                targetDoc.label,
+                targetDoc.id.toLowerCase(),
+                targetDoc.apiField.toLowerCase(),
+                targetDoc.dbKey.toLowerCase(),
+                targetDoc.label.toLowerCase()
+            ];
+
+            const extraMap = {
+                photo: ['passport', 'passport photo', 'recent passport photo', 'passport size photo', 'photo'],
+                signature: ['e-signature', 'scanned signature', 'candidate e-signature', 'signature'],
+                sslcMarkscard: ['sslc', '10th', 'tenth', 'sslc marks card', '10th marks card', '10th marksheet', 'sslc / 10th marks card', 'tenth markscard'],
+                pucMarkscard: ['puc', '12th', 'twelfth', 'puc marks card', '12th marks card', '12th marksheet', 'puc / 12th marks card', 'twelfth markscard'],
+                diplomaSemester5Marksheet: ['diploma 5th', 'semester 5', 'sem 5', 'diploma 5th semester marks card'],
+                diplomaSemester6Marksheet: ['diploma 6th', 'semester 6', 'sem 6', 'diploma 6th semester marks card'],
+                cetScoreCard: ['cet', 'dcet', 'entrance', 'entrance score card', 'cet score card', 'dcet score card', 'entrance score card (cet/dcet)'],
+                aadhaar: ['aadhaar', 'aadhaar card', 'aadhaar card copy', 'aadhaar copy'],
+                feesPaidReceipt: ['college fees', 'fees paid', 'fees receipt', 'college fee receipt', 'college fees receipt', 'fees paid receipt'],
+                admissionFormFeeReceipt: ['admission form fee', 'form fee receipt', 'admission fee receipt', 'admission form fee receipt'],
+                casteCertificate: ['caste', 'caste certificate', 'caste certificate (optional)'],
+                incomeCertificate: ['income', 'gap', 'income certificate', 'gap year certificate', 'income / gap year certificate'],
+                studyCertificate: ['study', 'domicile', 'study certificate', 'domicile certificate', 'domicile / study certificate', '7 years study certificate', '7 year study certificate']
+            };
+
+            if (extraMap[targetDoc.id]) {
+                list.push(...extraMap[targetDoc.id]);
+            }
+
+            return Array.from(new Set(list.map(k => k.toLowerCase())));
         };
 
         const checkIsDocFlagged = (targetDocId) => {
-            if (applicationStatus !== 'CORRECTION_REQUIRED' && applicationStatus !== 'REJECTED') return false;
+            const statusUpper = String(applicationStatus || stepStatus?.applicationStatus || '').toUpperCase();
+            if (statusUpper !== 'CORRECTION_REQUIRED' && statusUpper !== 'REJECTED') return false;
             
-            const remarkLabels = {
-                photo: ['passport size photo', 'recent passport photo', 'passport photo', 'photo'],
-                signature: ['candidate e-signature', 'e-signature', 'signature'],
-                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card', 'sslc markscard', '10th markscard', '10th marksheet', 'tenth markscard'],
-                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card', 'puc markscard', '12th markscard', '12th marksheet', 'twelfth markscard'],
-                diplomaSemester5Marksheet: ['diploma 5th semester marks card', 'diploma 5th', 'semester 5', 'sem 5'],
-                diplomaSemester6Marksheet: ['diploma 6th semester marks card', 'diploma 6th', 'semester 6', 'sem 6'],
-                cetScoreCard: ['entrance score card (cet/dcet)', 'entrance score card', 'cet score card', 'dcet score card', 'cet/dcet', 'dcet'],
-                aadhaar: ['aadhaar card copy', 'aadhaar card', 'aadhaar copy', 'aadhaar'],
-                feesPaidReceipt: ['college fees receipt', 'college fee receipt', 'fees paid receipt', 'fees receipt'],
-                admissionFormFeeReceipt: ['admission form fee receipt', 'form fee receipt', 'admission fee receipt'],
-                casteCertificate: ['caste certificate (optional)', 'caste certificate', 'caste'],
-                incomeCertificate: ['income / gap year certificate', 'income certificate', 'gap year certificate', 'gap certificate', 'income'],
-                studyCertificate: ['domicile / study certificate', 'domicile certificate', 'study certificate', '7 years study certificate', '7 year study certificate', 'domicile', 'study']
-            };
+            const targetDoc = DOCS.find(d => d.id === targetDocId);
+            if (!targetDoc) return false;
 
-            const targetLabels = remarkLabels[targetDocId] || [];
+            const targetKeywords = getDocSearchKeywords(targetDoc);
 
             // 1. Check verifiedDocuments object if present
-            const verifiedDocs = data?.verifiedDocuments || {};
+            const verifiedDocs = data?.verifiedDocuments || stepStatus?.verifiedDocuments || {};
             const verifiedMatch = Object.entries(verifiedDocs).some(([key, status]) => {
-                if (status !== 'REJECTED') return false;
-                const lowerKey = key.toLowerCase();
-                return targetLabels.some(label => lowerKey.includes(label) || label.includes(lowerKey));
+                const statusStr = String(status || '').toUpperCase();
+                if (statusStr !== 'REJECTED' && statusStr !== 'CORRECTION_REQUIRED') return false;
+                const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return targetKeywords.some(kw => {
+                    const cleanKw = kw.replace(/[^a-z0-9]/g, '');
+                    return cleanKey.includes(cleanKw) || cleanKw.includes(cleanKey);
+                });
             });
             if (verifiedMatch) return true;
 
             // 2. Check adminRemarks text if present
-            if (!adminRemarks) return false;
-            const remarksLower = adminRemarks.toLowerCase();
-            return targetLabels.some(label => remarksLower.includes(label));
+            const remarksText = adminRemarks || stepStatus?.adminRemarks || stepStatus?.correctionRemarks || '';
+            if (!remarksText) return false;
+            const remarksLower = remarksText.toLowerCase();
+            return targetKeywords.some(kw => {
+                const cleanKw = kw.toLowerCase().trim();
+                return cleanKw.length > 2 && remarksLower.includes(cleanKw);
+            });
         };
 
         const isOriginalFlagged = checkIsDocFlagged(doc.id);
 
         const isDocDisabled = (() => {
             if (readOnly) return true;
-            if (applicationStatus !== 'CORRECTION_REQUIRED') return false;
+            const statusUpper = String(applicationStatus || stepStatus?.applicationStatus || '').toUpperCase();
+            if (statusUpper !== 'CORRECTION_REQUIRED') return false;
 
             const hasFlaggedDocs = DOCS.some(d => checkIsDocFlagged(d.id));
 
@@ -743,29 +744,17 @@ const Step6Documents = ({ onNext, onPrev, data, onUploadSuccess, applicationStat
         })();
 
         const docRemarks = (() => {
-            if (!adminRemarks) return null;
-            const lines = adminRemarks.split('\n');
-            
-            const remarkLabels = {
-                photo: ['passport size photo', 'recent passport photo', 'passport photo', 'photo'],
-                signature: ['candidate e-signature', 'e-signature', 'signature'],
-                sslcMarkscard: ['sslc / 10th marks card', 'sslc marks card', '10th marks card'],
-                pucMarkscard: ['puc / 12th marks card', 'puc marks card', '12th marks card'],
-                diplomaSemester5Marksheet: ['diploma 5th semester marks card', 'diploma 5th'],
-                diplomaSemester6Marksheet: ['diploma 6th semester marks card', 'diploma 6th'],
-                cetScoreCard: ['entrance score card (cet/dcet)', 'entrance score card', 'cet score card'],
-                aadhaar: ['aadhaar card copy', 'aadhaar card', 'aadhaar'],
-                feesPaidReceipt: ['college fees receipt', 'college fee receipt'],
-                admissionFormFeeReceipt: ['admission form fee receipt', 'form fee receipt'],
-                casteCertificate: ['caste certificate (optional)', 'caste certificate', 'caste'],
-                incomeCertificate: ['income / gap year certificate', 'income certificate'],
-                studyCertificate: ['domicile / study certificate', 'domicile certificate', 'study certificate', '7 years study certificate', 'domicile', 'study']
-            };
+            const remarksText = adminRemarks || stepStatus?.adminRemarks || stepStatus?.correctionRemarks || '';
+            if (!remarksText) return null;
+            const lines = remarksText.split('\n');
+            const targetKeywords = getDocSearchKeywords(doc);
 
-            const targetLabels = remarkLabels[doc.id] || [];
             const lineIdx = lines.findIndex(line => {
                 const lowerLine = line.toLowerCase();
-                return targetLabels.some(label => lowerLine.includes(label));
+                return targetKeywords.some(kw => {
+                    const cleanKw = kw.toLowerCase().trim();
+                    return cleanKw.length > 2 && lowerLine.includes(cleanKw);
+                });
             });
 
             if (lineIdx === -1) return null;

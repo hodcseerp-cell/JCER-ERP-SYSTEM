@@ -206,7 +206,7 @@ function computeStepStatus(admission: any) {
       return keywords.some(kw => remarksLower.includes(kw));
     }
     if (sectionKey === 'address') {
-      const keywords = ['address', 'residence', 'pincode', 'city', 'state'];
+      const keywords = ['address', 'residence', 'pincode', 'city', 'state', 'taluk', 'district', 'village', 'street'];
       return keywords.some(kw => remarksLower.includes(kw));
     }
     if (sectionKey === 'academic') {
@@ -473,8 +473,7 @@ class AdmissionService {
       }
       case 'address': {
         const data = await AdmissionAddress.findOne({
-          where: { admissionId: admission.id },
-          attributes: ['id', 'admissionId', 'currentAddressLine1', 'currentCity', 'currentState', 'currentPincode', 'permanentAddressLine1', 'permanentCity', 'permanentState', 'permanentPincode']
+          where: { admissionId: admission.id }
         });
         return data;
       }

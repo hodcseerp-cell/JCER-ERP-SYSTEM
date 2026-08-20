@@ -191,32 +191,33 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
     }
   };
 
-  const handleSendBackSubmit = async () => {
+  const handleDecisionSubmit = async (targetDecision: 'CORRECTION_REQUIRED' | 'REJECTED' = 'CORRECTION_REQUIRED') => {
     if (!id || !correctionReason) {
-      toast.error('Please select a correction reason.');
+      toast.error('Please select a reason.');
       return;
     }
     if (correctionReason === 'Other' && !customRemarks.trim()) {
-      toast.error('Please specify the correction required.');
+      toast.error('Please specify the required details.');
       return;
     }
     setSubmitting(true);
     try {
       const finalRemarks = correctionReason === 'Other' ? customRemarks.trim() : correctionReason;
       const res = await API.post(`/principal/admissions/${id}/reject`, {
+        decision: targetDecision,
         rejectionReason: correctionReason,
         remarks: finalRemarks,
-        status: 'CORRECTION_REQUIRED'
+        status: targetDecision
       });
       if (res.data.success) {
-        toast.success('Application returned for correction successfully.');
+        toast.success(targetDecision === 'REJECTED' ? 'Application rejected successfully.' : 'Application returned for correction successfully.');
         window.dispatchEvent(new CustomEvent('admissions-updated'));
         setSendBackCardOpen(false);
         navigate('/principal/admissions/pending');
       }
     } catch (err: any) {
-      console.error('Send back failed', err);
-      toast.error(err.response?.data?.error || 'Failed to send back application for correction.');
+      console.error('Decision failed', err);
+      toast.error(err.response?.data?.error || 'Failed to process decision.');
     } finally {
       setSubmitting(false);
     }
@@ -754,7 +755,19 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={handleSendBackSubmit}
+                      onClick={() => handleDecisionSubmit('CORRECTION_REQUIRED')}
+                      disabled={
+                        submitting ||
+                        !correctionReason ||
+                        (correctionReason === 'Other' && !customRemarks.trim())
+                      }
+                      className="py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                    >
+                      {submitting ? 'Processing...' : 'Return for Correction'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDecisionSubmit('REJECTED')}
                       disabled={
                         submitting ||
                         !correctionReason ||
@@ -762,7 +775,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
                       }
                       className="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
                     >
-                      {submitting ? 'Processing...' : 'Return for Correction'}
+                      {submitting ? 'Processing...' : 'Reject Application'}
                     </button>
                   </div>
                 </div>

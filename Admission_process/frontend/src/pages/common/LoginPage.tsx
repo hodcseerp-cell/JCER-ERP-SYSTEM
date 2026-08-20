@@ -6,7 +6,7 @@ import authService from '../../services/auth.service';
 import { RootState } from '../../store';
 import Toast from '../../components/common/Toast';
 import OtpInputBox from '../../components/common/OtpInputBox';
-import { Lock, Mail, ArrowRight, Loader2, X, ArrowLeft, ShieldCheck, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Loader2, X, ArrowLeft, ShieldCheck, KeyRound, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import GlobalFooter from '../../components/common/GlobalFooter';
 
 export const LoginPage: React.FC = () => {
@@ -17,6 +17,9 @@ export const LoginPage: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Daily OTP Modal State for Admin & Principal
@@ -342,14 +345,27 @@ export const LoginPage: React.FC = () => {
                   <Lock className="h-5 w-5 dark-input-icon !text-slate-800" style={{ color: '#0F172A', stroke: '#0F172A' }} />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-slate-900 light-input-mode shadow-sm"
+                  className="w-full bg-white/90 border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-3.5 pl-11 pr-11 text-sm font-medium focus:outline-none transition-all duration-200 placeholder:text-neutral-400 text-slate-900 light-input-mode shadow-sm"
                   style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A' }}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center transition-colors bg-transparent border-none cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} />
+                  ) : (
+                    <Eye className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -663,15 +679,23 @@ export const LoginPage: React.FC = () => {
                         <Lock className="h-5 w-5" style={{ color: '#64748b', stroke: '#64748b' }} />
                       </div>
                       <input
-                        type="password"
+                        type={showNewPassword ? 'text' : 'password'}
                         required
                         minLength={8}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="Minimum 8 characters"
-                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-4 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
+                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-11 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
                         style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a', WebkitTextFillColor: '#0f172a', fontSize: '15px' }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center transition-colors bg-transparent border-none cursor-pointer"
+                        aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showNewPassword ? <EyeOff className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} /> : <Eye className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} />}
+                      </button>
                     </div>
                   </div>
 
@@ -687,15 +711,23 @@ export const LoginPage: React.FC = () => {
                         <Lock className="h-5 w-5" style={{ color: '#64748b', stroke: '#64748b' }} />
                       </div>
                       <input
-                        type="password"
+                        type={showConfirmPassword ? 'text' : 'password'}
                         required
                         minLength={8}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Re-enter new password"
-                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-4 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
+                        className="w-full border rounded-2xl py-3.5 pl-[52px] pr-11 font-bold outline-none transition-all placeholder:text-slate-400 shadow-sm"
                         style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', color: '#0f172a', WebkitTextFillColor: '#0f172a', fontSize: '15px' }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center transition-colors bg-transparent border-none cursor-pointer"
+                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} /> : <Eye className="h-5 w-5 !text-slate-900" style={{ color: '#0F172A', stroke: '#0F172A' }} />}
+                      </button>
                     </div>
                   </div>
 

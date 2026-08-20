@@ -726,7 +726,7 @@ const AdmissionForm = () => {
             if (stepIndex === 1 && ['admission type', 'preferred branch', 'branch', 'aadhaar', 'qualification', 'cet number', 'dcet number'].some(kw => remarksLower.includes(kw))) return false;
             if (stepIndex === 2 && ['first name', 'middle name', 'last name', 'gender', 'birth', 'dob', 'nationality', 'religion', 'caste', 'category', 'area type', 'email', 'mobile number', 'phone'].some(kw => remarksLower.includes(kw))) return false;
             if (stepIndex === 3 && ['father', 'mother', 'parent', 'guardian', 'annual income'].some(kw => remarksLower.includes(kw))) return false;
-            if (stepIndex === 4 && ['address', 'residence', 'pincode', 'city', 'state'].some(kw => remarksLower.includes(kw))) return false;
+            if (stepIndex === 4 && ['address', 'residence', 'pincode', 'city', 'state', 'taluk', 'district', 'village', 'street'].some(kw => remarksLower.includes(kw))) return false;
             if (stepIndex === 5 && ['school', 'board', 'passing year', 'register number', 'marks', 'attempts', 'percentage', 'university', 'puc', 'diploma', 'cet', 'dcet'].some(kw => remarksLower.includes(kw))) return false;
             if (stepIndex === 6 && ['document', 'upload', 'certificate', 'card', 'photo', 'signature', 'marks card', 'income', 'caste'].some(kw => remarksLower.includes(kw))) return false;
 
@@ -753,7 +753,7 @@ const AdmissionForm = () => {
             case 3: return <Step3Parent {...stepProps} readOnly={getIsStepReadOnly(3)} />;
             case 4: return <Step4Address {...stepProps} readOnly={getIsStepReadOnly(4)} />;
             case 5: return <Step5Academic {...stepProps} readOnly={getIsStepReadOnly(5)} />;
-            case 6: return <Step6Documents onNext={handleNext} onPrev={handlePrev} data={formData} onUploadSuccess={refreshFormData} applicationStatus={stepStatus?.applicationStatus} adminRemarks={currentRemarks} readOnly={getIsStepReadOnly(6)} />;
+            case 6: return <Step6Documents onNext={handleNext} onPrev={handlePrev} data={{...formData, verifiedDocuments: stepStatus?.verifiedDocuments || fullDetails?.verifiedDocuments}} stepStatus={stepStatus} onUploadSuccess={refreshFormData} applicationStatus={stepStatus?.applicationStatus} adminRemarks={currentRemarks} readOnly={getIsStepReadOnly(6)} />;
             case 7: return <Step7Review details={fullDetails} onPrev={handlePrev} applicationStatus={stepStatus?.applicationStatus} adminRemarks={currentRemarks} />;
             default: return null;
         }

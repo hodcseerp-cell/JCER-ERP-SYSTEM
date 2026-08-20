@@ -7,10 +7,16 @@ class AdmissionAddress extends Model {
   public admissionId!: string;
   public currentAddressLine1!: string;
   public currentCity!: string;
+  public currentTaluk?: string;
+  public currentDistrict?: string;
+  public currentDistrictId?: string;
   public currentState!: string;
   public currentPincode!: string;
   public permanentAddressLine1!: string;
   public permanentCity!: string;
+  public permanentTaluk?: string;
+  public permanentDistrict?: string;
+  public permanentDistrictId?: string;
   public permanentState!: string;
   public permanentPincode!: string;
   public readonly createdAt!: Date;
@@ -39,6 +45,18 @@ AdmissionAddress.init(
       type: DataTypes.STRING(100),
       allowNull: false,
     },
+    currentTaluk: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    currentDistrict: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    currentDistrictId: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
     currentState: {
       type: DataTypes.STRING(100),
       allowNull: false,
@@ -54,6 +72,18 @@ AdmissionAddress.init(
     permanentCity: {
       type: DataTypes.STRING(100),
       allowNull: false,
+    },
+    permanentTaluk: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    permanentDistrict: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    permanentDistrictId: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
     },
     permanentState: {
       type: DataTypes.STRING(100),
