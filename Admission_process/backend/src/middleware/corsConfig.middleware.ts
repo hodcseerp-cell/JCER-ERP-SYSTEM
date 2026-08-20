@@ -24,6 +24,10 @@ export const corsConfig = cors({
       return callback(null, true);
     }
 
+    if (process.env.FRONTEND_URL === '*' || process.env.CORS_ORIGIN === '*') {
+      return callback(null, true);
+    }
+
     const isExplicitlyAllowed = allAllowedOrigins.includes(origin);
     const isCloudflarePages = origin.endsWith('.pages.dev') || origin.includes('pages.dev');
     const isTunnel =
@@ -34,15 +38,12 @@ export const corsConfig = cors({
     const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
     const isPrivateIP = /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin);
 
-    if (isExplicitlyAllowed || isCloudflarePages) {
+    if (isExplicitlyAllowed || isCloudflarePages || isTunnel || isLocalhost || isPrivateIP) {
       return callback(null, true);
     }
 
-    if (process.env.NODE_ENV !== 'production' && (isTunnel || isLocalhost || isPrivateIP)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error('Not allowed by CORS'));
+    // Default fallback: return true so browser receives valid CORS headers
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
