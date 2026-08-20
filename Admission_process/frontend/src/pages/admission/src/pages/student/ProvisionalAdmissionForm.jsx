@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Loader2, 
-  GraduationCap, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Upload, 
-  Eye, 
-  Check, 
+import {
+  Loader2,
+  GraduationCap,
+  AlertTriangle,
+  CheckCircle2,
+  Upload,
+  Eye,
+  Check,
   Printer,
   ChevronLeft,
   ChevronRight,
@@ -69,7 +69,7 @@ export const ProvisionalAdmissionForm = () => {
       const appRes = await api.get('/provisional/my-admission');
       if (appRes.data?.success) {
         const { application: appData, studentName, usn, branchName, applicationNumber, originalPhotoUrl, semester: studentSem, isInitialLateralEntry, isLateral: latFlag, admissionType, initialSemester } = appRes.data.data;
-        
+
         if (isInitialLateralEntry && !appData) {
           toast.error("Provisional Admission is not applicable for your initial 3rd Semester lateral entry.");
           navigate('/admission/dashboard');
@@ -118,8 +118,8 @@ export const ProvisionalAdmissionForm = () => {
           if (appData.documents && appData.documents.length > 0) {
             const upMap = {};
             appData.documents.forEach(doc => {
-              const key = doc.documentType === 'FEE_RECEIPT' 
-                ? 'FEE_RECEIPT' 
+              const key = doc.documentType === 'FEE_RECEIPT'
+                ? 'FEE_RECEIPT'
                 : `MARKS_CARD_${doc.semesterNumber}`;
               upMap[key] = doc;
             });
@@ -308,12 +308,12 @@ export const ProvisionalAdmissionForm = () => {
       return;
     }
 
-    const docKey = documentType === 'FEE_RECEIPT' 
-      ? 'FEE_RECEIPT' 
+    const docKey = documentType === 'FEE_RECEIPT'
+      ? 'FEE_RECEIPT'
       : `MARKS_CARD_${semesterNumber}`;
 
     const isImage = ['image/jpeg', 'image/jpg', 'image/png'].includes(file.type);
-    
+
     // Auto compression for images
     if (isImage) {
       try {
@@ -439,7 +439,7 @@ export const ProvisionalAdmissionForm = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col font-sans">
-      
+
       {/* Header */}
       <header className="sticky top-0 z-30 w-full bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-850 px-4 sm:px-6 py-4 transition-all">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -464,7 +464,7 @@ export const ProvisionalAdmissionForm = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-8 flex flex-col gap-6">
-        
+
         {/* Student Details Card */}
         {studentProfile && (
           <div className="bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700/80 rounded-2xl p-5 shadow-sm space-y-4">
@@ -485,13 +485,12 @@ export const ProvisionalAdmissionForm = () => {
             <div className="flex items-center justify-between max-w-md mx-auto relative">
               {[1, 2, 3].map(num => (
                 <div key={num} className="flex flex-col items-center z-10">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-extrabold border transition-all ${
-                    step === num 
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-extrabold border transition-all ${step === num
                       ? 'bg-blue-600 border-blue-600 text-white shadow-md'
                       : step > num
-                      ? 'bg-emerald-600 border-emerald-600 text-white'
-                      : 'bg-white dark:bg-slate-800 border-slate-350 dark:border-slate-700 text-slate-500'
-                  }`}>
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-800 border-slate-350 dark:border-slate-700 text-slate-500'
+                    }`}>
                     {step > num ? <Check className="w-4 h-4" /> : num}
                   </div>
                   <span className="text-[10px] font-bold mt-2 uppercase tracking-wide">
@@ -500,7 +499,7 @@ export const ProvisionalAdmissionForm = () => {
                 </div>
               ))}
               <div className="absolute top-4.5 left-6 right-6 h-[2px] bg-slate-200 dark:bg-slate-800 z-0">
-                <div 
+                <div
                   className="h-full bg-emerald-500 transition-all duration-300"
                   style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '100%' }}
                 />
@@ -511,7 +510,7 @@ export const ProvisionalAdmissionForm = () => {
 
         {/* Render Form panels */}
         <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-880 rounded-2xl p-6 sm:p-8 shadow-sm flex-grow">
-          
+
           {/* STEP 1: Basic details selection */}
           {step === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-6">
@@ -524,18 +523,17 @@ export const ProvisionalAdmissionForm = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[3, 5, 7].map(sem => {
                     const isOpen = sem === Number(studentProfile?.semester) ||
-                                   (sem === 3 && config?.provisionalAdmission3Open) ||
-                                   (sem === 5 && config?.provisionalAdmission5Open) ||
-                                   (sem === 7 && config?.provisionalAdmission7Open);
+                      (sem === 3 && config?.provisionalAdmission3Open) ||
+                      (sem === 5 && config?.provisionalAdmission5Open) ||
+                      (sem === 7 && config?.provisionalAdmission7Open);
                     return (
-                      <label 
+                      <label
                         key={sem}
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          !isOpen ? 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-200' :
-                          selectedSemester === String(sem)
-                          ? 'border-blue-650 bg-blue-50/30'
-                          : 'border-slate-250 dark:border-slate-80 border-slate-200 hover:border-slate-350'
-                        }`}
+                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${!isOpen ? 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-200' :
+                            selectedSemester === String(sem)
+                              ? 'border-blue-650 bg-blue-50/30'
+                              : 'border-slate-250 dark:border-slate-80 border-slate-200 hover:border-slate-350'
+                          }`}
                       >
                         <input
                           type="radio"
@@ -712,13 +710,12 @@ export const ProvisionalAdmissionForm = () => {
                     const isLocked = isCorrectionMode && (hasAnyRejected || isAnyHistoricalDocRejected) && !isRejected;
 
                     return (
-                      <div className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
-                        isRejected
+                      <div className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${isRejected
                           ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
                           : isLocked
                             ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
                             : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
-                      }`}>
+                        }`}>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">College Fee Receipt *</h4>
@@ -743,11 +740,10 @@ export const ProvisionalAdmissionForm = () => {
                         <div className="flex items-center gap-3">
                           {uploads[key] ? (
                             <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
-                                isRejected
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${isRejected
                                   ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
                                   : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
-                              }`}>
+                                }`}>
                                 <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
                               </span>
                               <a
@@ -801,13 +797,12 @@ export const ProvisionalAdmissionForm = () => {
                       const isVerified = effectiveDoc?.verificationStatus === 'VERIFIED';
 
                       return (
-                        <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
-                          isHistRejected
+                        <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${isHistRejected
                             ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
                             : !effectiveDoc
                               ? 'border-amber-300 dark:border-amber-800 bg-amber-50/10 dark:bg-amber-950/5'
                               : 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/10 dark:bg-emerald-950/5'
-                        }`}>
+                          }`}>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">Semester {sem} Marks Card</h4>
@@ -888,13 +883,12 @@ export const ProvisionalAdmissionForm = () => {
                     const isLocked = isCorrectionMode && (hasAnyRejected || isAnyHistoricalDocRejected) && !isRejected;
 
                     return (
-                      <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
-                        isRejected
+                      <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${isRejected
                           ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
                           : isLocked
                             ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
                             : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
-                      }`}>
+                        }`}>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">Semester {sem} Marks Card *</h4>
@@ -919,11 +913,10 @@ export const ProvisionalAdmissionForm = () => {
                         <div className="flex items-center gap-3">
                           {uploads[key] ? (
                             <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
-                                isRejected
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${isRejected
                                   ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
                                   : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
-                              }`}>
+                                }`}>
                                 <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
                               </span>
                               <a
@@ -1065,7 +1058,7 @@ export const ProvisionalAdmissionForm = () => {
           {/* STEP 5: Success screen */}
           {step === 5 && (
             <div className="text-center space-y-6 py-8">
-              
+
               {application?.status === 'SUBMITTED' || application?.status === 'UNDER_REVIEW' || application?.status === 'RESUBMITTED' ? (
                 <>
                   <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/30 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner border border-blue-100 dark:border-blue-900 animate-pulse">
