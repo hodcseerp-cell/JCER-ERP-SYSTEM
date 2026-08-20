@@ -116,8 +116,6 @@ jobs:
             echo "============================================================"
             echo "🩺 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
             echo "============================================================"
-            sleep 5
-            
             HEALTH_URL="http://127.0.0.1/health"
             MAX_RETRIES=12
             COUNT=0
