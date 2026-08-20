@@ -307,6 +307,14 @@ export async function getFile(key: string): Promise<Buffer> {
 }
 
 /**
+ * Fetch file stream from Cloudflare R2 for memory-efficient streaming.
+ */
+export function getFileStream(key: string): NodeJS.ReadableStream {
+  const cleanKey = key.replace(/^\/+/, '');
+  return s3.getObject({ Bucket: BUCKET, Key: cleanKey }).createReadStream();
+}
+
+/**
  * Resolve an object key or local path to a fully qualified or static URL.
  */
 export function resolveFileUrl(keyOrPath: string): string {

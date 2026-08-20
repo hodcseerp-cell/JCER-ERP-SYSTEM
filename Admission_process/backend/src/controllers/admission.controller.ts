@@ -3286,34 +3286,26 @@ export const downloadBulkExportZipFile = async (
       return res.status(404).json({ success: false, error: 'Export file key is missing or expired.' });
     }
 
-    // Retrieve object metadata from R2
-    let r2Size = 0;
-    try {
-      const head = await r2.headFile(job.zipObjectKey);
-      r2Size = Number(head.ContentLength || 0);
-    } catch (headErr: any) {
-      logger.warn(`[BULK DOWNLOAD] headFile notice: ${headErr.message}`);
-    }
-
-    // Retrieve file buffer from R2
-    const buffer = await r2.getFile(job.zipObjectKey);
-    logger.info(`[BULK DOWNLOAD] r2Size=${r2Size} bufferSize=${buffer.length}`);
-
-    // Validate ZIP magic bytes
-    const isMagicValid = (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b);
-    logger.info(`[BULK DOWNLOAD] ZIP validation: magic=${isMagicValid}, bufferSize=${buffer.length}`);
-
-    if (!isMagicValid || buffer.length === 0) {
-      logger.error(`[BULK DOWNLOAD] Stored ZIP buffer is invalid or empty`);
-      return res.status(500).json({ success: false, error: 'Stored ZIP archive failed integrity check.' });
-    }
-
     const filename = `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`;
 
+    // 1. If signed direct download URL is available, redirect to Cloudflare R2 directly (fast, resilient, no backend RAM load)
+    try {
+      const signedDownloadUrl = await r2.getSignedUrl(job.zipObjectKey, 3600, filename);
+      if (signedDownloadUrl && (signedDownloadUrl.startsWith('http://') || signedDownloadUrl.startsWith('https://'))) {
+        logger.info(`[BULK DOWNLOAD] Redirecting jobId=${jobId} to direct R2 signed download URL`);
+        return res.redirect(signedDownloadUrl);
+      }
+    } catch (urlErr: any) {
+      logger.warn(`[BULK DOWNLOAD] Signed URL redirect fallback: ${urlErr.message}`);
+    }
+
+    // 2. Stream fallback from R2 to client response without buffering whole file in RAM
     res.status(200);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', String(buffer.length));
+    if (job.zipSize) {
+      res.setHeader('Content-Length', String(job.zipSize));
+    }
     res.setHeader('Cache-Control', 'no-transform, no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -3322,7 +3314,7 @@ export const downloadBulkExportZipFile = async (
     res.setHeader('x-no-compression', '1');
 
     res.on('finish', () => {
-      logger.info(`[BULK DOWNLOAD] response completed successfully for job ${jobId} (${buffer.length} bytes sent)`);
+      logger.info(`[BULK DOWNLOAD] response completed successfully for job ${jobId}`);
     });
     res.on('close', () => {
       logger.info(`[BULK DOWNLOAD] response connection closed for job ${jobId}`);
@@ -3331,8 +3323,15 @@ export const downloadBulkExportZipFile = async (
       logger.error(`[BULK DOWNLOAD] response error for job ${jobId}:`, resErr);
     });
 
-    logger.info(`[BULK DOWNLOAD] starting response for job ${jobId}`);
-    return res.end(buffer);
+    logger.info(`[BULK DOWNLOAD] streaming response for job ${jobId}`);
+    const stream = r2.getFileStream(job.zipObjectKey);
+    stream.on('error', (streamErr) => {
+      logger.error(`[BULK DOWNLOAD] R2 stream error for job ${jobId}:`, streamErr);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Failed to stream ZIP archive from storage.' });
+      }
+    });
+    return stream.pipe(res);
   } catch (err: any) {
     logger.error(`[BULK DOWNLOAD] response error: ${err.message}`, err);
     return next(err);
