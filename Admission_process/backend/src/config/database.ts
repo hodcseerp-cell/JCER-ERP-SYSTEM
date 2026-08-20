@@ -5,8 +5,8 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true' || process.env.DB_SSL === 'true';
-const dialectOptions = (isProduction || (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com')))
+const useSSL = process.env.DB_SSL === 'true';
+const dialectOptions = useSSL
   ? {
       ssl: {
         require: true,
