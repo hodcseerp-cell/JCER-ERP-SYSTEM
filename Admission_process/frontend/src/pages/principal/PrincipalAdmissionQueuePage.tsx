@@ -4,13 +4,29 @@ import API from '../../services/api';
 import { AdmissionApplication, AdmissionListResult } from '../../services/admission.service';
 import {
   Search, ChevronLeft, ChevronRight, CheckCircle2, Clock, XCircle, FileText,
-  RefreshCw, Eye, Filter, Calendar, User, GraduationCap, ShieldCheck, Inbox
+  RefreshCw, Eye, Filter, Calendar, User, GraduationCap, ShieldCheck, Inbox,
+  CheckCheck, AlertCircle, X, Loader2, Info
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 
 interface PrincipalAdmissionQueuePageProps {
   defaultStatus?: string;
+}
+
+interface BulkConfirmSummary {
+  requested: number;
+  confirmed: number;
+  skipped: number;
+  failed: number;
+  results?: Array<{
+    admissionId: string;
+    admissionNumber?: string;
+    studentName?: string;
+    previousStatus?: string;
+    newStatus?: string;
+    result: 'CONFIRMED' | 'SKIPPED' | 'FAILED';
+    reason?: string;
+  }>;
 }
 
 export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePageProps> = ({ defaultStatus = 'APPROVED' }) => {
@@ -29,6 +45,12 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
   const [data, setData] = useState<AdmissionListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
+
+  // Selection & Bulk Approval States
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [summaryData, setSummaryData] = useState<BulkConfirmSummary | null>(null);
 
   // Filters & Pagination
   const [page, setPage] = useState(1);
@@ -101,6 +123,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
   useEffect(() => {
     setStatus(defaultStatus);
     setPage(1);
+    setSelectedIds([]);
   }, [defaultStatus]);
 
   useEffect(() => {
@@ -126,12 +149,96 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
     setPage(1);
   };
 
+  const isEligibleForApproval = (app: AdmissionApplication) => {
+    return app.applicationStatus === 'APPROVED' || app.applicationStatus === 'FEE_VERIFIED';
+  };
+
+  const eligibleAppsOnPage = data?.applications.filter(isEligibleForApproval) || [];
+  const isAllEligibleSelected = eligibleAppsOnPage.length > 0 && eligibleAppsOnPage.every(a => selectedIds.includes(a.id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllEligibleSelected) {
+      // Deselect all on this page
+      const pageEligibleIds = new Set(eligibleAppsOnPage.map(a => a.id));
+      setSelectedIds(prev => prev.filter(id => !pageEligibleIds.has(id)));
+    } else {
+      // Add all eligible on this page
+      const newIds = new Set([...selectedIds, ...eligibleAppsOnPage.map(a => a.id)]);
+      setSelectedIds(Array.from(newIds));
+    }
+  };
+
+  const handleToggleSelectRow = (id: string, isEligible: boolean) => {
+    if (!isEligible) return;
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleOpenConfirmModal = () => {
+    if (selectedIds.length === 0) {
+      toast.info('Please select at least one admission to confirm.');
+      return;
+    }
+    setConfirmModalOpen(true);
+  };
+
+  const handleExecuteBulkConfirm = async () => {
+    if (selectedIds.length === 0) return;
+    setConfirming(true);
+
+    try {
+      const res = await API.post('/principal/admissions/bulk-confirm', {
+        admissionIds: selectedIds
+      });
+
+      if (res.data.success) {
+        const summary = res.data.summary || {
+          requested: selectedIds.length,
+          confirmed: res.data.data?.filter((r: any) => r.success)?.length || selectedIds.length,
+          skipped: 0,
+          failed: res.data.data?.filter((r: any) => !r.success)?.length || 0,
+        };
+
+        setConfirmModalOpen(false);
+        setSummaryData({
+          ...summary,
+          results: res.data.results
+        });
+
+        // Single clean notification
+        if (summary.confirmed > 0 && summary.failed === 0) {
+          toast.success(`${summary.confirmed} admission${summary.confirmed > 1 ? 's' : ''} successfully confirmed.`);
+        } else if (summary.confirmed > 0 && summary.failed > 0) {
+          toast.warning(`${summary.confirmed} confirmed, ${summary.failed} failed.`);
+        } else if (summary.confirmed === 0 && summary.skipped > 0) {
+          toast.info(`Selected admission${summary.skipped > 1 ? 's are' : ' is'} already confirmed.`);
+        } else {
+          toast.error('Bulk confirmation could not be processed.');
+        }
+
+        // Automatic refresh of queue, counts, and active state
+        setSelectedIds([]);
+        fetchApplications();
+        loadInitialData();
+        window.dispatchEvent(new CustomEvent('admissions-updated'));
+      }
+    } catch (err: any) {
+      console.error('Bulk confirm error:', err);
+      toast.error(err.response?.data?.error || 'Failed to confirm selected admissions.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const getStatusBadge = (appStatus: string) => {
     switch (appStatus) {
       case 'APPROVED':
+      case 'FEE_VERIFIED':
         return <span className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-bold border border-amber-200">Awaiting Principal Approval</span>;
-      case 'ENROLLED':
+      case 'PRINCIPAL_APPROVED':
       case 'ADMISSION_CONFIRMED':
+      case 'ENROLLED':
         return <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold border border-emerald-200">Admission Confirmed</span>;
       case 'REJECTED':
         return <span className="px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-bold border border-rose-200">Returned / Rejected</span>;
@@ -158,14 +265,31 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
           </p>
         </div>
 
-        {/* Refresh Button */}
-        <button
-          onClick={() => fetchApplications()}
-          className="flex items-center gap-2 px-4 py-2 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-2xl text-xs font-bold transition-all self-start md:self-auto"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh Queue
-        </button>
+        {/* Action Buttons: Bulk Approve / Confirm + Refresh */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          <button
+            onClick={handleOpenConfirmModal}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 active:scale-95"
+            title="Approve & Confirm Selected Admissions"
+          >
+            <CheckCheck size={15} />
+            Bulk Approve / Confirm
+            {selectedIds.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">
+                {selectedIds.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => fetchApplications()}
+            className="flex items-center gap-2 px-4 py-2 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-2xl text-xs font-bold transition-all"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh Queue
+          </button>
+        </div>
       </div>
 
       {/* ═══ QUEUE TABS (Card Style) ═══ */}
@@ -343,6 +467,41 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
         </div>
       </div>
 
+      {/* ═══ SELECTION / ACTION BAR ═══ */}
+      {selectedIds.length > 0 && (
+        <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="size-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+              {selectedIds.length}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                {selectedIds.length} student{selectedIds.length > 1 ? 's' : ''} selected
+              </p>
+              <p className="text-[10px] text-indigo-700/80 dark:text-indigo-400 font-medium">
+                Ready for Principal Confirmation
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-3.5 py-1.5 bg-white dark:bg-neutral-800 hover:bg-neutral-50 text-neutral-700 dark:text-neutral-200 rounded-xl text-xs font-bold border border-neutral-200 dark:border-neutral-700 transition-all"
+            >
+              Cancel Selection
+            </button>
+            <button
+              onClick={handleOpenConfirmModal}
+              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+            >
+              <CheckCheck size={14} />
+              Approve & Confirm Selected
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ═══ TABLE / EMPTY QUEUE ═══ */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-sm">
         {loading ? (
@@ -370,13 +529,23 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-extrabold uppercase text-[10px] tracking-wider bg-neutral-50/50 dark:bg-neutral-800/50">
-                    <th className="py-4 px-6">Admission No</th>
+                    <th className="py-4 px-4 w-12 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllEligibleSelected}
+                        onChange={handleToggleSelectAll}
+                        disabled={eligibleAppsOnPage.length === 0}
+                        className="size-4 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={eligibleAppsOnPage.length === 0 ? 'No eligible admissions to select on this page' : 'Select all eligible on this page'}
+                      />
+                    </th>
+                    <th className="py-4 px-4">Admission No</th>
                     <th className="py-4 px-6">Student Name</th>
-                    <th className="py-4 px-6">Branch</th>
-                    <th className="py-4 px-6">Quota</th>
-                    <th className="py-4 px-6">CET / DCET No</th>
+                    <th className="py-4 px-4">Branch</th>
+                    <th className="py-4 px-4">Quota</th>
+                    <th className="py-4 px-4">CET / DCET No</th>
                     <th className="py-4 px-6">Status</th>
-                    <th className="py-4 px-6">Date</th>
+                    <th className="py-4 px-4">Date</th>
                     <th className="py-4 px-6 text-right">Action</th>
                   </tr>
                 </thead>
@@ -388,12 +557,30 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                       : app.user
                         ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
                         : 'Guest Applicant';
+                    const isEligible = isEligibleForApproval(app);
+                    const isSelected = selectedIds.includes(app.id);
+
                     return (
-                      <tr key={app.id} className="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors">
-                        <td className="py-4 px-6 font-black">
+                      <tr 
+                        key={app.id} 
+                        className={`hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors ${
+                          isSelected ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''
+                        }`}
+                      >
+                        <td className="py-4 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectRow(app.id, isEligible)}
+                            disabled={!isEligible}
+                            className="size-4 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={isEligible ? 'Select for bulk approval' : 'Not eligible for Principal approval'}
+                          />
+                        </td>
+                        <td className="py-4 px-4 font-black">
                           <button
                             onClick={() => navigate(`/principal/admissions/review/${app.id}`)}
-                            className="hover:underline text-left text-neutral-900 hover:text-orange-600 dark:text-white dark:hover:text-orange-400 transition-colors"
+                            className="hover:underline text-left text-neutral-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 transition-colors"
                           >
                             {app.applicationNumber}
                           </button>
@@ -401,24 +588,24 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                         <td className="py-4 px-6 font-bold">
                           <button
                             onClick={() => navigate(`/principal/admissions/review/${app.id}`)}
-                            className="hover:underline text-left text-neutral-800 hover:text-orange-600 dark:text-neutral-200 dark:hover:text-orange-400 transition-colors"
+                            className="hover:underline text-left text-neutral-800 hover:text-indigo-600 dark:text-neutral-200 dark:hover:text-indigo-400 transition-colors"
                           >
                             {studentName}
                           </button>
                         </td>
-                        <td className="py-4 px-6 font-extrabold text-indigo-600 dark:text-indigo-400">
+                        <td className="py-4 px-4 font-extrabold text-indigo-600 dark:text-indigo-400">
                           {app.branch?.code || 'N/A'}
                         </td>
-                        <td className="py-4 px-6 font-bold text-neutral-600">
+                        <td className="py-4 px-4 font-bold text-neutral-600">
                           {app.admissionType || 'N/A'}
                         </td>
-                        <td className="py-4 px-6 text-neutral-500 font-medium">
+                        <td className="py-4 px-4 text-neutral-500 font-medium">
                           {app.cetNumber || app.dcetNumber || 'N/A'}
                         </td>
                         <td className="py-4 px-6">
                           {getStatusBadge(app.applicationStatus)}
                         </td>
-                        <td className="py-4 px-6 text-neutral-400 font-medium">
+                        <td className="py-4 px-4 text-neutral-400 font-medium">
                           {app.updatedAt ? new Date(app.updatedAt).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="py-4 px-6 text-right">
@@ -464,6 +651,131 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
           </>
         )}
       </div>
+
+      {/* ═══ CONFIRMATION DIALOG MODAL ═══ */}
+      {confirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-slate-200 dark:border-neutral-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scale-up">
+            <div className="flex items-start justify-between">
+              <div className="size-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <ShieldCheck size={26} />
+              </div>
+              <button
+                onClick={() => !confirming && setConfirmModalOpen(false)}
+                disabled={confirming}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                Approve & Confirm Selected Admissions?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                You are about to confirm <strong className="text-slate-800 dark:text-slate-200">{selectedIds.length}</strong> selected admission{selectedIds.length > 1 ? 's' : ''}.
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 dark:bg-neutral-800/60 rounded-2xl border border-slate-100 dark:border-neutral-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-bold text-slate-700 dark:text-slate-300">
+                <span className="text-[11px] uppercase tracking-wider text-slate-400">Status Transition</span>
+                <span className="text-indigo-600 font-extrabold">AWAITING → CONFIRMED</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                This will approve the selected admissions and change their status to <strong>CONFIRMED</strong>. Enrollment and USN allocation will not be performed.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModalOpen(false)}
+                disabled={confirming}
+                className="px-5 py-2.5 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBulkConfirm}
+                disabled={confirming}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 flex items-center gap-2"
+              >
+                {confirming ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Confirming...
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck size={14} />
+                    Approve & Confirm
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SUMMARY / RESULTS MODAL ═══ */}
+      {summaryData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-slate-200 dark:border-neutral-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scale-up">
+            <div className="flex items-start justify-between">
+              <div className="size-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <CheckCircle2 size={26} />
+              </div>
+              <button
+                onClick={() => setSummaryData(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                Bulk Confirmation Completed
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                The Principal approval queue has been updated.
+              </p>
+            </div>
+
+            <div className="space-y-2 bg-slate-50 dark:bg-neutral-800/60 p-4 rounded-2xl border border-slate-100 dark:border-neutral-800 text-xs">
+              <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-bold">
+                <span>✓ Confirmed</span>
+                <span className="font-extrabold text-sm">{summaryData.confirmed}</span>
+              </div>
+              {summaryData.skipped > 0 && (
+                <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 font-bold">
+                  <span>○ Already Confirmed / Skipped</span>
+                  <span className="font-extrabold text-sm">{summaryData.skipped}</span>
+                </div>
+              )}
+              {summaryData.failed > 0 && (
+                <div className="flex items-center justify-between text-rose-700 dark:text-rose-400 font-bold">
+                  <span>✕ Failed</span>
+                  <span className="font-extrabold text-sm">{summaryData.failed}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSummaryData(null)}
+                className="w-full px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

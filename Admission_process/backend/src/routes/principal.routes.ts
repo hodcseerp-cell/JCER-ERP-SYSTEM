@@ -7,7 +7,7 @@ import * as admissionController from '../controllers/admission.controller';
 const router = express.Router();
 
 router.use(authMiddleware);
-router.use(authorizeRoles('PRINCIPAL'));
+router.use(authorizeRoles('PRINCIPAL', 'SUPER_ADMIN'));
 
 // Overview
 router.get('/dashboard', principalController.getDashboardData);
@@ -23,7 +23,9 @@ router.get('/admissions/:id', principalController.getAdmissionById);
 router.put('/admissions/:id/decide', principalController.decideAdmission);
 router.post('/admissions/:id/approve', principalController.decideAdmission);
 router.post('/admissions/:id/reject', principalController.decideAdmission);
-router.put('/admissions/bulk/approve', principalController.bulkApproveAdmissions);
+router.post('/admissions/bulk-confirm', principalController.bulkConfirmAdmissions);
+router.post('/admissions/bulk/approve', principalController.bulkConfirmAdmissions);
+router.put('/admissions/bulk/approve', principalController.bulkConfirmAdmissions);
 
 // Budget Requests
 router.get('/budget/pending', principalController.getPendingBudgets);
