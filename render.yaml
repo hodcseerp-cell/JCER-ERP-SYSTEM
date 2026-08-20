@@ -2,6 +2,7 @@ services:
   - type: web
     name: jcer-erp-backend
     runtime: node
+    plan: free
     region: singapore
     rootDir: Admission_process/backend
     buildCommand: npm install && npm run build
