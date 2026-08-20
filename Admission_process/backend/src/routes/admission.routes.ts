@@ -64,6 +64,10 @@ adminAdmissionRouter.delete('/usn/:id', admissionController.removeUsn);
 
 adminAdmissionRouter.get('/documents/export/preview', admissionController.previewBulkExport);
 adminAdmissionRouter.get('/documents/export', admissionController.bulkExportDocuments);
+adminAdmissionRouter.post('/documents/bulk-export', admissionController.startBulkExportJob);
+adminAdmissionRouter.get('/documents/bulk-export/active', admissionController.getActiveBulkExportJob);
+adminAdmissionRouter.get('/documents/bulk-export/:jobId/download', admissionController.getBulkExportDownloadUrl);
+adminAdmissionRouter.get('/documents/bulk-export/:jobId', admissionController.getBulkExportJobStatus);
 adminAdmissionRouter.get('/students/:studentId/documents', admissionController.getStudentDocuments);
 adminAdmissionRouter.get('/admissions/:id/documents/zip', admissionController.exportSingleStudentZip);
 

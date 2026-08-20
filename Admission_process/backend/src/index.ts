@@ -419,6 +419,55 @@ async function startServer() {
       console.warn('Academic promotion database alterations skipped:', err.message);
     }
 
+    // Pre-cast: ensure bulk_export_jobs table exists
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'bulk_export_jobs'
+          ) THEN
+            CREATE TABLE IF NOT EXISTS "bulk_export_jobs" (
+              "id" UUID PRIMARY KEY,
+              "createdBy" UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
+              "academicYear" VARCHAR(50) NOT NULL,
+              "branchId" VARCHAR(100) NOT NULL DEFAULT 'ALL',
+              "status" VARCHAR(50) NOT NULL DEFAULT 'QUEUED',
+              "totalStudents" INTEGER NOT NULL DEFAULT 0,
+              "totalDocuments" INTEGER NOT NULL DEFAULT 0,
+              "processedDocuments" INTEGER NOT NULL DEFAULT 0,
+              "failedDocuments" INTEGER NOT NULL DEFAULT 0,
+              "progress" INTEGER NOT NULL DEFAULT 0,
+              "zipObjectKey" VARCHAR(500),
+              "zipSize" BIGINT,
+              "error" TEXT,
+              "failureSummary" JSON,
+              "startedAt" TIMESTAMP WITH TIME ZONE,
+              "completedAt" TIMESTAMP WITH TIME ZONE,
+              "expiresAt" TIMESTAMP WITH TIME ZONE,
+              "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+              "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+            );
+          END IF;
+        END
+        $$;
+      `);
+    } catch (err: any) {
+      console.warn('Pre-cast migration for bulk_export_jobs skipped:', err.message);
+    }
+
+    // Initialize worker and trigger retention cleanup periodically (every 1 hour)
+    try {
+      const bulkExportWorker = (await import('./services/bulkExportWorker.service')).default;
+      bulkExportWorker.cleanupExpiredJobs();
+      setInterval(() => {
+        bulkExportWorker.cleanupExpiredJobs();
+      }, 60 * 60 * 1000);
+    } catch (err: any) {
+      console.warn('Bulk export worker retention cleanup init notice:', err.message);
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log('Syncing database schema (development alter)...');
       try {

@@ -3050,3 +3050,180 @@ export const bulkExportDocuments = async (
     return next(err);
   }
 };
+
+/** POST /api/admin/documents/bulk-export — Start asynchronous export job */
+export const startBulkExportJob = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { academicYear, branchId } = req.body;
+    if (!academicYear) {
+      return res.status(400).json({ success: false, error: 'Academic Year is required.' });
+    }
+
+    const adminUserId = req.user!.id;
+
+    // Check for an existing QUEUED or PROCESSING job with identical filters
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+    const bulkExportWorker = (await import('../services/bulkExportWorker.service')).default;
+
+    const activeJob = await BulkExportJob.findOne({
+      where: {
+        createdBy: adminUserId,
+        academicYear,
+        branchId: branchId || 'ALL',
+        status: { [Op.in]: ['QUEUED', 'PROCESSING'] }
+      }
+    });
+
+    if (activeJob) {
+      return res.json({
+        success: true,
+        jobId: activeJob.id,
+        status: activeJob.status,
+        message: 'An active export job is already running with these filters.',
+      });
+    }
+
+    const newJob = await BulkExportJob.create({
+      createdBy: adminUserId,
+      academicYear,
+      branchId: branchId || 'ALL',
+      status: 'QUEUED',
+      progress: 0,
+    });
+
+    // Trigger worker asynchronously
+    bulkExportWorker.triggerWorker();
+
+    await AuditLog.create({
+      userId: adminUserId,
+      action: 'BULK_EXPORT_JOB_CREATED',
+      ipAddress: req.ip || null,
+      userAgent: req.headers['user-agent'] || null,
+      details: { jobId: newJob.id, academicYear, branchId }
+    });
+
+    return res.status(201).json({
+      success: true,
+      jobId: newJob.id,
+      status: newJob.status,
+      message: 'Export job queued successfully.'
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/admin/documents/bulk-export/active — Check for active job */
+export const getActiveBulkExportJob = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const adminUserId = req.user!.id;
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+
+    const job = await BulkExportJob.findOne({
+      where: {
+        createdBy: adminUserId,
+        status: { [Op.in]: ['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS'] }
+      },
+      order: [['createdAt', 'DESC']]
+    });
+
+    if (!job) {
+      return res.json({ success: true, job: null });
+    }
+
+    return res.json({
+      success: true,
+      job: {
+        id: job.id,
+        academicYear: job.academicYear,
+        branchId: job.branchId,
+        status: job.status,
+        totalStudents: job.totalStudents,
+        totalDocuments: job.totalDocuments,
+        processedDocuments: job.processedDocuments,
+        failedDocuments: job.failedDocuments,
+        progress: job.progress,
+        zipSize: job.zipSize ? Number(job.zipSize) : null,
+        error: job.error,
+        completedAt: job.completedAt,
+        expiresAt: job.expiresAt,
+      }
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/admin/documents/bulk-export/:jobId — Poll job progress */
+export const getBulkExportJobStatus = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { jobId } = req.params;
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+
+    const job = await BulkExportJob.findByPk(jobId);
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Export job not found.' });
+    }
+
+    return res.json({
+      success: true,
+      job: {
+        id: job.id,
+        academicYear: job.academicYear,
+        branchId: job.branchId,
+        status: job.status,
+        totalStudents: job.totalStudents,
+        totalDocuments: job.totalDocuments,
+        processedDocuments: job.processedDocuments,
+        failedDocuments: job.failedDocuments,
+        progress: job.progress,
+        zipSize: job.zipSize ? Number(job.zipSize) : null,
+        error: job.error,
+        completedAt: job.completedAt,
+        expiresAt: job.expiresAt,
+      }
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/admin/documents/bulk-export/:jobId/download — Secure R2 signed download URL */
+export const getBulkExportDownloadUrl = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { jobId } = req.params;
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+
+    const job = await BulkExportJob.findByPk(jobId);
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Export job not found.' });
+    }
+
+    if (!['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(job.status)) {
+      return res.status(400).json({ success: false, error: `Export package is not ready. Current status: ${job.status}` });
+    }
+
+    if (!job.zipObjectKey) {
+      return res.status(404).json({ success: false, error: 'Export file key is missing or expired.' });
+    }
+
+    const downloadUrl = r2.getSignedUrlSync(job.zipObjectKey);
+
+    return res.json({
+      success: true,
+      downloadUrl,
+      filename: `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+

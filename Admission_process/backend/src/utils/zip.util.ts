@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Writable } from 'stream';
 
 // Precomputed CRC-32 table for fast checksum calculations
 const crcTable: number[] = [];
@@ -30,17 +30,17 @@ export interface ZipEntry {
 
 /**
  * A lightweight, dependency-free streaming ZIP archive builder.
- * Streams files sequentially with constant O(1) memory overhead.
+ * Streams files sequentially to any Writable stream (e.g. Express Response or fs.WriteStream).
  */
 export class StreamingZip {
-  private res: Response;
+  private outStream: Writable;
   private entries: ZipEntry[] = [];
   private currentOffset = 0;
   private time: number;
   private date: number;
 
-  constructor(res: Response) {
-    this.res = res;
+  constructor(outStream: Writable) {
+    this.outStream = outStream;
     const now = new Date();
     this.time = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
     this.date = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
@@ -48,7 +48,7 @@ export class StreamingZip {
 
   /**
    * Appends a file entry to the ZIP archive.
-   * Immediately streams the Local File Header and data buffer to the client.
+   * Immediately streams the Local File Header and data buffer to the target stream.
    */
   public async addFile(name: string, buffer: Buffer): Promise<void> {
     const nameBuf = Buffer.from(name, 'utf-8');
@@ -71,9 +71,9 @@ export class StreamingZip {
     lfh.writeUInt16LE(0, 28);         // Extra field length (0)
 
     // Stream Local File Header, file name, and file data
-    this.res.write(lfh);
-    this.res.write(nameBuf);
-    this.res.write(buffer);
+    this.outStream.write(lfh);
+    this.outStream.write(nameBuf);
+    this.outStream.write(buffer);
 
     // Record central directory entry details
     this.entries.push({ name, crc, size, offset });
@@ -82,7 +82,7 @@ export class StreamingZip {
 
   /**
    * Finalizes the ZIP archive by writing Central Directory headers and EOCD record.
-   * Flushes and terminates the HTTP response stream.
+   * Flushes and terminates the output stream.
    */
   public async finalize(): Promise<void> {
     const cdOffset = this.currentOffset;
@@ -112,8 +112,8 @@ export class StreamingZip {
       cdfh.writeUInt32LE(entry.offset, 42); // Local file header relative offset
 
       // Stream Central Directory entry
-      this.res.write(cdfh);
-      this.res.write(nameBuf);
+      this.outStream.write(cdfh);
+      this.outStream.write(nameBuf);
       cdSize += cdfh.length + nameBuf.length;
     }
 
@@ -128,7 +128,7 @@ export class StreamingZip {
     eocd.writeUInt32LE(cdOffset, 16);   // Offset of Central Directory
     eocd.writeUInt16LE(0, 20);          // Comment length (0)
 
-    this.res.write(eocd);
-    this.res.end();
+    this.outStream.write(eocd);
+    this.outStream.end();
   }
 }
