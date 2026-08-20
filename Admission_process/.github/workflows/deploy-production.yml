@@ -76,7 +76,34 @@ jobs:
             docker compose up -d postgres redis
 
             echo "============================================================"
-            echo "🔄 5. EXECUTING DATABASE MIGRATIONS (STRICT)"
+            echo "⏳ 5. WAITING UNTIL POSTGRESQL AND REDIS BECOME HEALTHY"
+            echo "============================================================"
+            for service in postgres redis; do
+              echo "Polling health status of service: ${service}..."
+              TIMEOUT=60
+              ELAPSED=0
+              while [ $ELAPSED -lt $TIMEOUT ]; do
+                CONTAINER_ID=$(docker compose ps -q "$service" || echo "")
+                if [ -n "$CONTAINER_ID" ]; then
+                  HEALTH_STATE=$(docker inspect --format='{{json .State.Health.Status}}' "$CONTAINER_ID" 2>/dev/null || echo '"starting"')
+                  if [ "$HEALTH_STATE" = '"healthy"' ]; then
+                    echo "✅ Service ${service} is HEALTHY!"
+                    break
+                  fi
+                fi
+                sleep 2
+                ELAPSED=$((ELAPSED + 2))
+              done
+
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "❌ TIMEOUT: Service ${service} failed to become healthy within ${TIMEOUT}s!"
+                docker compose logs --tail=50 "$service"
+                exit 1
+              fi
+            done
+
+            echo "============================================================"
+            echo "🔄 6. EXECUTING DATABASE MIGRATIONS (STRICT)"
             echo "============================================================"
             # Migration failures will strictly fail the deployment step
             docker compose run --rm backend npm run migrate
