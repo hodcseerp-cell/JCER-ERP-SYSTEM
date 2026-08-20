@@ -12,11 +12,15 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  Lock
+  Lock,
+  Clock,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../../../../services/api';
 import toast from 'react-hot-toast';
 import { compressDocumentImage } from '../../utils/imageCompressor';
+import { getSemesterRules } from '../../utils/semesterDocumentRules';
 
 export const ProvisionalAdmissionForm = () => {
   const navigate = useNavigate();
@@ -37,6 +41,9 @@ export const ProvisionalAdmissionForm = () => {
 
   // Step 3 states - file uploads progress & state
   const [uploads, setUploads] = useState({}); // map of docKey -> docRecord
+  const [historicalDocs, setHistoricalDocs] = useState({}); // map of semNum -> doc (from prior applications)
+  const [isLateral, setIsLateral] = useState(false);
+  const [loadingHistorical, setLoadingHistorical] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -134,6 +141,26 @@ export const ProvisionalAdmissionForm = () => {
       navigate('/admission/dashboard');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchHistoricalDocs = async () => {
+    try {
+      setLoadingHistorical(true);
+      const res = await api.get('/provisional/historical-docs');
+      if (res.data?.success) {
+        // Build a map: semesterNumber -> doc
+        const histMap = {};
+        (res.data.data || []).forEach(doc => {
+          histMap[doc.semesterNumber] = doc;
+        });
+        setHistoricalDocs(histMap);
+        setIsLateral(!!res.data.isLateral);
+      }
+    } catch (err) {
+      console.warn('Could not load historical semester docs:', err);
+    } finally {
+      setLoadingHistorical(false);
     }
   };
 
@@ -240,6 +267,8 @@ export const ProvisionalAdmissionForm = () => {
       });
       if (res.data?.success) {
         localStorage.removeItem(`prov_exam_records_${application.id}`);
+        // Fetch historical docs when transitioning to Step 3
+        await fetchHistoricalDocs();
         setStep(3);
         toast.success('Academic records saved.');
       }
@@ -310,16 +339,32 @@ export const ProvisionalAdmissionForm = () => {
   };
 
   const handleStep3Submit = () => {
-    const expectedSems = Number(selectedSemester) === 3 ? [1, 2] :
-                         Number(selectedSemester) === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
+    const { previousSemesters, requiredNow } = getSemesterRules(isLateral, Number(selectedSemester));
 
     if (!uploads['FEE_RECEIPT']) {
       toast.error('Please upload your College Fee Receipt.');
       return;
     }
-    for (const sem of expectedSems) {
+
+    // Validate all requiredNow sems exist in current uploads
+    for (const sem of requiredNow) {
       if (!uploads[`MARKS_CARD_${sem}`]) {
         toast.error(`Please upload Semester ${sem} Marks Card.`);
+        return;
+      }
+    }
+
+    // Validate all previousSemesters exist either as current uploads (re-upload) or historical docs
+    for (const sem of previousSemesters) {
+      const hasCurrentUpload = !!uploads[`MARKS_CARD_${sem}`];
+      const histDoc = historicalDocs[sem];
+      const histOk = histDoc && histDoc.verificationStatus !== 'REJECTED';
+      if (!hasCurrentUpload && !histOk) {
+        toast.error(
+          histDoc && histDoc.verificationStatus === 'REJECTED'
+            ? `Semester ${sem} Marks Card was rejected. Please re-upload it.`
+            : `Semester ${sem} Marks Card history not found. Please upload it.`
+        );
         return;
       }
     }
@@ -364,11 +409,19 @@ export const ProvisionalAdmissionForm = () => {
     );
   }
 
-  const expectedSems = Number(selectedSemester) === 3 ? [1, 2] :
-                       Number(selectedSemester) === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
-
   const isCorrectionMode = application?.status === 'CORRECTION_REQUIRED';
   const hasAnyRejected = Object.values(uploads).some(doc => doc?.verificationStatus === 'REJECTED');
+
+  // Compute cumulative semester rules
+  const { previousSemesters, requiredNow } = getSemesterRules(isLateral, Number(selectedSemester));
+  const isAnyHistoricalDocRejected = previousSemesters.some(sem => {
+    const histDoc = historicalDocs[sem];
+    return histDoc && histDoc.verificationStatus === 'REJECTED';
+  });
+
+  // expectedSems used only for Step 2 academic records (still all lower sems)
+  const expectedSems = Number(selectedSemester) === 3 ? [1, 2] :
+                       Number(selectedSemester) === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col font-sans">
@@ -627,156 +680,268 @@ export const ProvisionalAdmissionForm = () => {
                 </div>
               )}
 
-              <div className="space-y-4">
-                {/* College Fee Receipt */}
-                {(() => {
-                  const key = 'FEE_RECEIPT';
-                  const isRejected = uploads[key]?.verificationStatus === 'REJECTED';
-                  const isLocked = isCorrectionMode && hasAnyRejected && !isRejected;
+              {loadingHistorical && (
+                <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading document history...
+                </div>
+              )}
 
-                  return (
-                    <div className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
-                      isRejected 
-                        ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5 shadow-sm shadow-rose-105/20 dark:shadow-none' 
-                        : isLocked
-                          ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
-                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
-                    }`}>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">College Fee Receipt *</h4>
-                          {isRejected && (
-                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-250 dark:border-rose-900 rounded-md">
-                              Needs Correction
-                            </span>
-                          )}
-                          {isLocked && (
-                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-neutral-500 bg-neutral-105 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md">
-                              Locked / Approved
-                            </span>
+              <div className="space-y-6">
+                {/* ── Section 1: College Fee Receipt (always in current application) ── */}
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2">
+                    College Fee Receipt
+                  </h3>
+                  {(() => {
+                    const key = 'FEE_RECEIPT';
+                    const isRejected = uploads[key]?.verificationStatus === 'REJECTED';
+                    const isLocked = isCorrectionMode && (hasAnyRejected || isAnyHistoricalDocRejected) && !isRejected;
+
+                    return (
+                      <div className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
+                        isRejected
+                          ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
+                          : isLocked
+                            ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
+                      }`}>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">College Fee Receipt *</h4>
+                            {isRejected && (
+                              <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-250 dark:border-rose-900 rounded-md">
+                                Needs Correction
+                              </span>
+                            )}
+                            {isLocked && (
+                              <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-neutral-500 bg-neutral-105 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md">
+                                Locked / Approved
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold mt-1">Upload current session provisional admission fee receipt.</p>
+                          {isRejected && uploads[key]?.verificationRemarks && (
+                            <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold mt-1.5 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1 rounded border border-rose-100 dark:border-rose-900/50 inline-block animate-pulse">
+                              Correction Note: {uploads[key].verificationRemarks}
+                            </p>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold mt-1">Upload current session provisional admission fee receipt.</p>
-                        {isRejected && uploads[key]?.remarks && (
-                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold mt-1.5 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1 rounded border border-rose-100 dark:border-rose-900/50 inline-block animate-pulse">
-                            Correction Note: {uploads[key].remarks}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {uploads[key] ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
-                              isRejected
-                                ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
-                                : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
-                            }`}>
-                              <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
+                        <div className="flex items-center gap-3">
+                          {uploads[key] ? (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
+                                isRejected
+                                  ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
+                                  : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
+                              }`}>
+                                <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
+                              </span>
+                              <a
+                                href={uploads[key].url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold hover:bg-slate-100 flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Preview
+                              </a>
+                            </div>
+                          ) : null}
+                          {isLocked ? (
+                            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-[10px] flex items-center gap-1 shadow-sm select-none">
+                              <Lock className="w-3.5 h-3.5" /> Locked
                             </span>
-                            <a
-                              href={uploads[key].url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold hover:bg-slate-100 flex items-center gap-1"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> Preview
-                            </a>
-                          </div>
-                        ) : null}
-                        {isLocked ? (
-                          <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-[10px] flex items-center gap-1 shadow-sm select-none">
-                            <Lock className="w-3.5 h-3.5" /> Locked
-                          </span>
-                        ) : (
-                          <label className="px-3 py-1.5 bg-[#0F4C81] text-white hover:bg-blue-700 rounded-xl font-bold text-[10px] flex items-center gap-1.5 cursor-pointer shadow-sm">
-                            <Upload className="w-3 h-3" /> {uploads[key] ? 'Replace' : 'Upload'}
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png"
-                              onChange={(e) => handleFileUpload(e, 'FEE_RECEIPT')}
-                              className="hidden"
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Expected Semester Marks Cards */}
-                {expectedSems.map(sem => {
-                  const key = `MARKS_CARD_${sem}`;
-                  const isRejected = uploads[key]?.verificationStatus === 'REJECTED';
-                  const isLocked = isCorrectionMode && hasAnyRejected && !isRejected;
-
-                  return (
-                    <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
-                      isRejected 
-                        ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5 shadow-sm shadow-rose-105/20 dark:shadow-none' 
-                        : isLocked
-                          ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
-                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
-                    }`}>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">{sem}th Semester Marks Card *</h4>
-                          {isRejected && (
-                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-250 dark:border-rose-900 rounded-md">
-                              Needs Correction
-                            </span>
-                          )}
-                          {isLocked && (
-                            <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-neutral-500 bg-neutral-105 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md">
-                              Locked / Approved
-                            </span>
+                          ) : (
+                            <label className="px-3 py-1.5 bg-[#0F4C81] text-white hover:bg-blue-700 rounded-xl font-bold text-[10px] flex items-center gap-1.5 cursor-pointer shadow-sm">
+                              <Upload className="w-3 h-3" /> {uploads[key] ? 'Replace' : 'Upload'}
+                              <input
+                                type="file"
+                                accept=".jpg,.jpeg,.png"
+                                onChange={(e) => handleFileUpload(e, 'FEE_RECEIPT')}
+                                className="hidden"
+                              />
+                            </label>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold mt-1">Upload original or attested copy of Semester {sem} marksheet.</p>
-                        {isRejected && uploads[key]?.remarks && (
-                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold mt-1.5 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1 rounded border border-rose-100 dark:border-rose-900/50 inline-block animate-pulse">
-                            Correction Note: {uploads[key].remarks}
-                          </p>
-                        )}
                       </div>
-                      <div className="flex items-center gap-3">
-                        {uploads[key] ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
-                              isRejected
-                                ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
-                                : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
-                            }`}>
-                              <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
-                            </span>
-                            <a
-                              href={uploads[key].url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold hover:bg-slate-100 flex items-center gap-1"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> Preview
-                            </a>
+                    );
+                  })()}
+                </div>
+
+                {/* ── Section 2: Previously Uploaded Semester Marks Cards ── */}
+                {previousSemesters.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      Documents From Previous Applications
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-medium -mt-1">
+                      These marks cards were uploaded during your earlier semester application and will be included automatically.
+                    </p>
+                    {previousSemesters.map(sem => {
+                      const histDoc = historicalDocs[sem];
+                      // Also check if student re-uploaded it in current application (e.g. due to rejection)
+                      const currentUpload = uploads[`MARKS_CARD_${sem}`];
+                      const effectiveDoc = currentUpload || histDoc;
+                      const isHistRejected = histDoc && histDoc.verificationStatus === 'REJECTED' && !currentUpload;
+                      const isReUploaded = !!currentUpload;
+                      const isVerified = effectiveDoc?.verificationStatus === 'VERIFIED';
+
+                      return (
+                        <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
+                          isHistRejected
+                            ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
+                            : !effectiveDoc
+                              ? 'border-amber-300 dark:border-amber-800 bg-amber-50/10 dark:bg-amber-950/5'
+                              : 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/10 dark:bg-emerald-950/5'
+                        }`}>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">Semester {sem} Marks Card</h4>
+                              {isHistRejected ? (
+                                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-250 dark:border-rose-900 rounded-md animate-pulse">
+                                  Re-Upload Required
+                                </span>
+                              ) : isReUploaded ? (
+                                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-md">
+                                  Re-Uploaded
+                                </span>
+                              ) : isVerified ? (
+                                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-md">
+                                  Verified ✓
+                                </span>
+                              ) : effectiveDoc ? (
+                                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-md">
+                                  Already Uploaded ✓
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md">
+                                  Missing
+                                </span>
+                              )}
+                            </div>
+                            {isHistRejected && histDoc?.verificationRemarks && (
+                              <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold mt-1.5 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1 rounded border border-rose-100 dark:border-rose-900/50 inline-block animate-pulse">
+                                Rejected: {histDoc.verificationRemarks}
+                              </p>
+                            )}
+                            {effectiveDoc && !isHistRejected && (
+                              <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                {effectiveDoc.originalFileName} · {(effectiveDoc.fileSize / 1024).toFixed(0)} KB
+                              </p>
+                            )}
                           </div>
-                        ) : null}
-                        {isLocked ? (
-                          <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-[10px] flex items-center gap-1 shadow-sm select-none">
-                            <Lock className="w-3.5 h-3.5" /> Locked
-                          </span>
-                        ) : (
-                          <label className="px-3 py-1.5 bg-[#0F4C81] text-white hover:bg-blue-700 rounded-xl font-bold text-[10px] flex items-center gap-1.5 cursor-pointer shadow-sm">
-                            <Upload className="w-3 h-3" /> {uploads[key] ? 'Replace' : 'Upload'}
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png"
-                              onChange={(e) => handleFileUpload(e, 'SEMESTER_MARKS_CARD', sem)}
-                              className="hidden"
-                            />
-                          </label>
-                        )}
+                          <div className="flex items-center gap-2">
+                            {effectiveDoc && !isHistRejected && (
+                              <a
+                                href={effectiveDoc.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold hover:bg-slate-100 flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View
+                              </a>
+                            )}
+                            {/* Allow re-upload if rejected */}
+                            {isHistRejected && (
+                              <label className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl font-bold text-[10px] flex items-center gap-1.5 cursor-pointer shadow-sm">
+                                <Upload className="w-3 h-3" /> Re-Upload
+                                <input
+                                  type="file"
+                                  accept=".jpg,.jpeg,.png"
+                                  onChange={(e) => handleFileUpload(e, 'SEMESTER_MARKS_CARD', sem)}
+                                  className="hidden"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Section 3: New Semester Marks Cards (required for current application) ── */}
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-[#0F4C81]" />
+                    {requiredNow.length > 0
+                      ? `New Semester Marks Cards — Upload Required`
+                      : 'Semester Marks Cards'}
+                  </h3>
+                  {requiredNow.map(sem => {
+                    const key = `MARKS_CARD_${sem}`;
+                    const isRejected = uploads[key]?.verificationStatus === 'REJECTED';
+                    const isLocked = isCorrectionMode && (hasAnyRejected || isAnyHistoricalDocRejected) && !isRejected;
+
+                    return (
+                      <div key={sem} className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-200 ${
+                        isRejected
+                          ? 'border-rose-400 dark:border-rose-900 bg-rose-50/10 dark:bg-rose-950/5'
+                          : isLocked
+                            ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30'
+                      }`}>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350">Semester {sem} Marks Card *</h4>
+                            {isRejected && (
+                              <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-250 dark:border-rose-900 rounded-md">
+                                Needs Correction
+                              </span>
+                            )}
+                            {isLocked && (
+                              <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-neutral-500 bg-neutral-105 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md">
+                                Locked / Approved
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold mt-1">Upload original or attested copy of Semester {sem} marksheet.</p>
+                          {isRejected && uploads[key]?.verificationRemarks && (
+                            <p className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold mt-1.5 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-1 rounded border border-rose-100 dark:border-rose-900/50 inline-block animate-pulse">
+                              Correction Note: {uploads[key].verificationRemarks}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {uploads[key] ? (
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-lg ${
+                                isRejected
+                                  ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900'
+                                  : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900'
+                              }`}>
+                                <CheckCircle2 className="w-3.5 h-3.5" /> {isRejected ? 'Rejected' : 'Uploaded'}
+                              </span>
+                              <a
+                                href={uploads[key].url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold hover:bg-slate-100 flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Preview
+                              </a>
+                            </div>
+                          ) : null}
+                          {isLocked ? (
+                            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-[10px] flex items-center gap-1 shadow-sm select-none">
+                              <Lock className="w-3.5 h-3.5" /> Locked
+                            </span>
+                          ) : (
+                            <label className="px-3 py-1.5 bg-[#0F4C81] text-white hover:bg-blue-700 rounded-xl font-bold text-[10px] flex items-center gap-1.5 cursor-pointer shadow-sm">
+                              <Upload className="w-3 h-3" /> {uploads[key] ? 'Replace' : 'Upload'}
+                              <input
+                                type="file"
+                                accept=".jpg,.jpeg,.png"
+                                onChange={(e) => handleFileUpload(e, 'SEMESTER_MARKS_CARD', sem)}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-between pt-4 border-t border-slate-100 dark:border-slate-850">
@@ -797,6 +962,7 @@ export const ProvisionalAdmissionForm = () => {
               </div>
             </div>
           )}
+
 
           {/* STEP 4: Review & Finalize */}
           {step === 4 && (

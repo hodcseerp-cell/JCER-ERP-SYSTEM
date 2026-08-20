@@ -100,8 +100,15 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
     try {
       const res = await API.get(`/provisional/acknowledgement/${appId}`);
       if (res.data?.success) {
-        setReviewData(res.data.data);
-        setSelectedApp(res.data.data.application);
+        const data = res.data.data;
+        // Use allSemesterDocuments if available (populated by backend for cumulative view)
+        if (data.allSemesterDocuments && data.allSemesterDocuments.length > 0) {
+          data._displayDocuments = data.allSemesterDocuments;
+        } else {
+          data._displayDocuments = data.documents || [];
+        }
+        setReviewData(data);
+        setSelectedApp(data.application);
       }
     } catch (err: any) {
       toast.error('Failed to load application details.');
@@ -423,17 +430,19 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700/60">
                   <h3 className="text-xs font-black uppercase text-indigo-650 dark:text-indigo-400 tracking-wider">Uploaded Documents Verification</h3>
                   <span className="text-[10px] bg-slate-105 dark:bg-slate-900 text-slate-550 dark:text-slate-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
-                    {reviewData.documents?.length || 0} Files
+                    {(reviewData._displayDocuments || reviewData.documents || []).length} Files
                   </span>
                 </div>
 
                 <div className="space-y-4">
-                  {reviewData.documents?.map((doc: any) => {
+                  {(reviewData._displayDocuments || reviewData.documents || [])?.map((doc: any) => {
                     const isVerified = doc.verificationStatus === 'VERIFIED';
                     const isRejected = doc.verificationStatus === 'REJECTED';
                     const isPending = doc.verificationStatus === 'PENDING';
                     const isAppResubmitted = reviewData?.application?.status === 'RESUBMITTED';
                     const isCorrected = isPending && doc.verificationRemarks === 'CORRECTED';
+                    // Historical docs come from a different application — admin can view but not verify via this form
+                    const isHistorical = doc._source === 'historical';
                     
                     const statusText = isAppResubmitted && isVerified ? 'APPROVED (PREV)' : 
                                      isAppResubmitted && isCorrected ? 'CORRECTED BY STUDENT' : 
@@ -449,17 +458,21 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                             ? 'bg-rose-100 text-rose-805 border-rose-200'
                             : 'bg-amber-100 text-amber-805 border-amber-200';
 
-                    const rowBgClass = isAppResubmitted && isCorrected 
-                      ? 'border-2 border-amber-400 dark:border-amber-900 bg-amber-50/10 dark:bg-amber-950/5 shadow-sm shadow-amber-105/20 dark:shadow-none' 
-                      : 'border border-slate-200/80 dark:border-slate-700 bg-slate-50/20 dark:bg-slate-900/20';
+                    const rowBgClass = isHistorical
+                      ? 'border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/10 dark:bg-indigo-950/5'
+                      : isAppResubmitted && isCorrected 
+                        ? 'border-2 border-amber-400 dark:border-amber-900 bg-amber-50/10 dark:bg-amber-950/5 shadow-sm shadow-amber-105/20 dark:shadow-none' 
+                        : 'border border-slate-200/80 dark:border-slate-700 bg-slate-50/20 dark:bg-slate-900/20';
 
-                    const iconContainerClass = isAppResubmitted && isCorrected
-                      ? 'bg-amber-50 text-amber-605 border-amber-200'
-                      : isVerified
-                        ? 'bg-emerald-50 text-emerald-605 border-emerald-200'
-                        : isRejected
-                          ? 'bg-rose-50 text-rose-605 border-rose-200'
-                          : 'bg-indigo-50 text-indigo-650 border-indigo-200';
+                    const iconContainerClass = isHistorical
+                      ? 'bg-indigo-50 text-indigo-500 border-indigo-200'
+                      : isAppResubmitted && isCorrected
+                        ? 'bg-amber-50 text-amber-605 border-amber-200'
+                        : isVerified
+                          ? 'bg-emerald-50 text-emerald-605 border-emerald-200'
+                          : isRejected
+                            ? 'bg-rose-50 text-rose-605 border-rose-200'
+                            : 'bg-indigo-50 text-indigo-650 border-indigo-200';
 
                     return (
                       <div key={doc.id} className={`rounded-2xl p-5 space-y-4 transition-all duration-205 shadow-sm ${rowBgClass}`}>
@@ -469,9 +482,16 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                               <FileText className="w-5 h-5" />
                             </div>
                             <div>
-                              <h4 className="text-xs font-black uppercase text-slate-805 dark:text-slate-200">
-                                {doc.documentType === 'FEE_RECEIPT' ? 'College Fee Receipt' : `Semester ${doc.semesterNumber} Marks Card`}
-                              </h4>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-xs font-black uppercase text-slate-805 dark:text-slate-200">
+                                  {doc.documentType === 'FEE_RECEIPT' ? 'College Fee Receipt' : `Semester ${doc.semesterNumber} Marks Card`}
+                                </h4>
+                                {isHistorical && (
+                                  <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-full uppercase tracking-wide">
+                                    From Prior Application
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-slate-450 font-extrabold font-mono mt-0.5 max-w-sm truncate">{doc.originalFileName}</p>
                             </div>
                           </div>
@@ -498,22 +518,32 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Document inline verification buttons */}
-                        <div className="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                          <button
-                            onClick={() => handleVerifyDocument(doc.id, 'VERIFIED')}
-                            className="px-4 py-2 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 text-emerald-750 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
-                          >
-                            <CheckCircle className="w-4 h-4" /> Mark Verified
-                          </button>
-                          
-                          <button
-                            onClick={() => handleStartRejection(doc)}
-                            className="px-4 py-2 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
-                          >
-                            <XCircle className="w-4 h-4" /> Reject File
-                          </button>
-                        </div>
+                        {/* Document inline verification buttons — only for current application docs */}
+                        {!isHistorical && (
+                          <div className="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              onClick={() => handleVerifyDocument(doc.id, 'VERIFIED')}
+                              className="px-4 py-2 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 text-emerald-750 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
+                            >
+                              <CheckCircle className="w-4 h-4" /> Mark Verified
+                            </button>
+                            
+                            <button
+                              onClick={() => handleStartRejection(doc)}
+                              className="px-4 py-2 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all duration-150 cursor-pointer shadow-sm active:scale-95"
+                            >
+                              <XCircle className="w-4 h-4" /> Reject File
+                            </button>
+                          </div>
+                        )}
+
+                        {isHistorical && (
+                          <div className="flex items-center gap-2 pt-3 border-t border-indigo-100 dark:border-indigo-900/40">
+                            <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-semibold">
+                              This document was verified during a previous semester application — verified status inherited.
+                            </span>
+                          </div>
+                        )}
 
                         {/* Inline rejection remarks text field */}
                         {verifyingDocId === doc.id && (

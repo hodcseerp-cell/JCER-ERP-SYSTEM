@@ -281,6 +281,114 @@ export const saveProvisionalStep1 = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
+/**
+ * Helper: Determine admission type (FRESH vs LATERAL) and initial semester for a student.
+ * Uses student record + original admission for cross-checks.
+ */
+const resolveAdmissionTypeInfo = async (studentId: string, userId: string) => {
+  const student = await Student.findByPk(studentId);
+  const originalAdmission = await Admission.findOne({ where: { userId } });
+  const isLateral =
+    student?.admissionType === 'LATERAL' ||
+    student?.initialSemester === 3 ||
+    originalAdmission?.admissionType === 'DCET' ||
+    originalAdmission?.qualification === 'DIPLOMA' ||
+    originalAdmission?.applicationType === 'LATERAL_ENTRY';
+  const initialSemester = isLateral ? 3 : 1;
+  return { isLateral, initialSemester, student };
+};
+
+/**
+ * Centralized semester document rules.
+ * FRESH: 3 → prev:[], now:[1,2] | 5 → prev:[1,2], now:[3,4] | 7 → prev:[1,2,3,4], now:[5,6]
+ * LATERAL: 5 → prev:[], now:[3,4] | 7 → prev:[3,4], now:[5,6]
+ */
+export const getSemesterRules = (isLateral: boolean, targetSemester: number) => {
+  if (isLateral) {
+    if (targetSemester === 5) return { previousSemesters: [] as number[], requiredNow: [3, 4] };
+    if (targetSemester === 7) return { previousSemesters: [3, 4], requiredNow: [5, 6] };
+    // Lateral entry at 3rd semester is not eligible for provisional admission (guarded elsewhere)
+    return { previousSemesters: [] as number[], requiredNow: [] as number[] };
+  }
+  // FRESH
+  if (targetSemester === 3) return { previousSemesters: [] as number[], requiredNow: [1, 2] };
+  if (targetSemester === 5) return { previousSemesters: [1, 2], requiredNow: [3, 4] };
+  if (targetSemester === 7) return { previousSemesters: [1, 2, 3, 4], requiredNow: [5, 6] };
+  return { previousSemesters: [] as number[], requiredNow: [] as number[] };
+};
+
+/**
+ * Helper: Fetch ALL semester marks card documents for a student across ALL their
+ * provisional admission applications. Returns a map keyed by semesterNumber.
+ * Deduplicates: prefers VERIFIED > PENDING > REJECTED, then most recent.
+ */
+const fetchAllHistoricalSemesterDocs = async (studentId: string): Promise<Map<number, any>> => {
+  const allApplications = await ProvisionalAdmission.findAll({
+    where: { studentId },
+    include: [{ model: ProvisionalAdmissionDocument, as: 'documents' }],
+    order: [['createdAt', 'ASC']],
+  });
+
+  const byStatus = { VERIFIED: 3, PENDING: 2, REJECTED: 1 };
+  const semMap = new Map<number, any>();
+
+  for (const app of allApplications) {
+    for (const doc of (app.documents || [])) {
+      if (doc.documentType !== 'SEMESTER_MARKS_CARD' || !doc.semesterNumber) continue;
+      const semNum = doc.semesterNumber;
+      const existing = semMap.get(semNum);
+      const newPriority = byStatus[doc.verificationStatus as keyof typeof byStatus] || 0;
+      const existingPriority = existing ? (byStatus[existing.verificationStatus as keyof typeof byStatus] || 0) : -1;
+      // Prefer higher verification status; tie-break: more recent (later in array since ASC order)
+      if (!existing || newPriority > existingPriority || (newPriority === existingPriority)) {
+        semMap.set(semNum, doc);
+      }
+    }
+  }
+
+  return semMap;
+};
+
+/** GET /api/student/provisional/historical-docs — Get all prior semester marks cards for the student */
+export const getStudentHistoricalSemesterDocs = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const userId = req.user!.id;
+    const student = await Student.findOne({ where: { userId } });
+    if (!student) {
+      return res.status(404).json({ success: false, error: 'Student profile not found.' });
+    }
+
+    const { isLateral } = await resolveAdmissionTypeInfo(student.id, userId);
+    const semMap = await fetchAllHistoricalSemesterDocs(student.id);
+
+    const result: any[] = [];
+    semMap.forEach((doc, semNum) => {
+      result.push({
+        semesterNumber: semNum,
+        id: doc.id,
+        provisionalAdmissionId: doc.provisionalAdmissionId,
+        r2Key: doc.r2Key,
+        originalFileName: doc.originalFileName,
+        mimeType: doc.mimeType,
+        fileSize: doc.fileSize,
+        verificationStatus: doc.verificationStatus,
+        verificationRemarks: doc.verificationRemarks,
+        url: r2.getSignedUrlSync(doc.r2Key),
+        uploadedAt: doc.createdAt,
+      });
+    });
+
+    return res.json({
+      success: true,
+      isLateral,
+      initialSemester: isLateral ? 3 : 1,
+      data: result,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 /** PUT /api/student/provisional/step2 - Save Step 2: Lower Examination Records */
 export const saveProvisionalStep2 = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
@@ -515,27 +623,43 @@ export const submitProvisionalAdmission = async (req: AuthenticatedRequest, res:
       return res.status(403).json({ error: 'Provisional Admission is currently closed.' });
     }
 
-    // Validate expected semesters count
-    const expectedSemesters = application.semester === 3 ? [1, 2] :
-                             application.semester === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
+    // Determine admission type for the student
+    const { isLateral } = await resolveAdmissionTypeInfo(student.id, userId);
+    const { previousSemesters, requiredNow } = getSemesterRules(isLateral, application.semester);
+    const allExpectedSemesters = [...previousSemesters, ...requiredNow];
 
-    if (!application.semesterRecords || application.semesterRecords.length !== expectedSemesters.length) {
+    // Validate semester records count (Step 2 keeps asking for all lower sems)
+    if (!application.semesterRecords || application.semesterRecords.length !== allExpectedSemesters.length) {
       return res.status(400).json({ error: 'Please enter academic records for all lower semesters before submitting.' });
     }
 
-    // Validate document counts (expected sem marks cards + 1 fee receipt)
-    const requiredDocsCount = expectedSemesters.length + 1;
-    const marksCards = application.documents?.filter(d => d.documentType === 'SEMESTER_MARKS_CARD') || [];
-    const feeReceipt = application.documents?.find(d => d.documentType === 'FEE_RECEIPT');
-
+    // Fee receipt must be in current application
+    const feeReceipt = application.documents?.find((d: any) => d.documentType === 'FEE_RECEIPT');
     if (!feeReceipt) {
       return res.status(400).json({ error: 'Please upload the College Fee Receipt.' });
     }
 
-    for (const sem of expectedSemesters) {
-      const hasCard = marksCards.some(m => m.semesterNumber === sem);
+    // Current application marks cards
+    const currentMarksCards = application.documents?.filter((d: any) => d.documentType === 'SEMESTER_MARKS_CARD') || [];
+
+    // Validate requiredNow semesters exist in current application
+    for (const sem of requiredNow) {
+      const hasCard = currentMarksCards.some((m: any) => m.semesterNumber === sem);
       if (!hasCard) {
         return res.status(400).json({ error: `Please upload the Semester ${sem} Marks Card.` });
+      }
+    }
+
+    // Validate previousSemesters: must exist historically (in any past provisional application)
+    // OR as a REJECTED doc in current app that the student was asked to re-upload
+    if (previousSemesters.length > 0) {
+      const semMap = await fetchAllHistoricalSemesterDocs(student.id);
+      for (const sem of previousSemesters) {
+        const currentDoc = currentMarksCards.find((m: any) => m.semesterNumber === sem);
+        const historicalDoc = semMap.get(sem);
+        if (!currentDoc && (!historicalDoc || historicalDoc.verificationStatus === 'REJECTED')) {
+          return res.status(400).json({ error: `Semester ${sem} Marks Card is missing or was rejected. Please upload it.` });
+        }
       }
     }
 
@@ -622,8 +746,8 @@ export const getProvisionalAcknowledgement = async (req: AuthenticatedRequest, r
       include: [{ model: AdmissionDocument, as: 'studentdocuments' }]
     });
 
-    // Signed doc links for viewing
-    const signedDocs = (application.documents || []).map(doc => {
+    // Signed doc links for viewing (current application docs)
+    const signedDocs = (application.documents || []).map((doc: any) => {
       return {
         id: doc.id,
         documentType: doc.documentType,
@@ -634,8 +758,64 @@ export const getProvisionalAcknowledgement = async (req: AuthenticatedRequest, r
         verificationStatus: doc.verificationStatus,
         verificationRemarks: doc.verificationRemarks,
         url: r2.getSignedUrlSync(doc.r2Key),
+        sourceApplicationId: application.id,
       };
     });
+
+    // ── ADMIN: Build complete aggregated semester document history ──────────────
+    // Fetch admission type info for this student
+    const studentUserId = studentProfile!.userId;
+    const { isLateral } = await resolveAdmissionTypeInfo(application.studentId, studentUserId);
+    const { previousSemesters: prevSems, requiredNow: nowSems } = getSemesterRules(isLateral, application.semester);
+    const allAdminSems = [...prevSems, ...nowSems];
+
+    // Build a map of current application docs by (type, semesterNumber)
+    const currentDocMap = new Map<string, any>();
+    for (const doc of signedDocs) {
+      const mapKey = doc.documentType === 'FEE_RECEIPT' ? 'FEE_RECEIPT' : `SEM_${doc.semesterNumber}`;
+      currentDocMap.set(mapKey, doc);
+    }
+
+    // Fetch historical semester docs from all prior applications for previousSemesters
+    const historicalSemMap = await fetchAllHistoricalSemesterDocs(application.studentId);
+
+    // Build allSemesterDocuments: FEE_RECEIPT first, then semester docs in ascending order
+    const allSemesterDocuments: any[] = [];
+
+    // Fee receipt (always from current application)
+    const feeReceiptDoc = currentDocMap.get('FEE_RECEIPT');
+    if (feeReceiptDoc) {
+      allSemesterDocuments.push({ ...feeReceiptDoc, _source: 'current' });
+    }
+
+    // Semester marks cards
+    const seenSemNums = new Set<number>();
+    for (const semNum of allAdminSems) {
+      if (seenSemNums.has(semNum)) continue;
+      seenSemNums.add(semNum);
+
+      const currentDoc = currentDocMap.get(`SEM_${semNum}`);
+      if (currentDoc) {
+        allSemesterDocuments.push({ ...currentDoc, _source: 'current' });
+      } else {
+        const histDoc = historicalSemMap.get(semNum);
+        if (histDoc) {
+          allSemesterDocuments.push({
+            id: histDoc.id,
+            documentType: 'SEMESTER_MARKS_CARD',
+            semesterNumber: semNum,
+            originalFileName: histDoc.originalFileName,
+            mimeType: histDoc.mimeType,
+            fileSize: histDoc.fileSize,
+            verificationStatus: histDoc.verificationStatus,
+            verificationRemarks: histDoc.verificationRemarks,
+            url: r2.getSignedUrlSync(histDoc.r2Key),
+            sourceApplicationId: histDoc.provisionalAdmissionId,
+            _source: 'historical',
+          });
+        }
+      }
+    }
 
     // Original photo signed URL fallback
     let originalPhotoUrl: string | null = null;
@@ -649,6 +829,8 @@ export const getProvisionalAcknowledgement = async (req: AuthenticatedRequest, r
         application,
         semesterRecords: application.semesterRecords,
         documents: signedDocs,
+        allSemesterDocuments,
+        isLateral,
         student: {
           photoUrl: originalPhotoUrl,
           name: studentProfile?.user ? `${studentProfile.user.firstName || ''} ${studentProfile.user.lastName || ''}`.trim() : 'Student',

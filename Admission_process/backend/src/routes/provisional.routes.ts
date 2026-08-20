@@ -9,6 +9,7 @@ const router = express.Router();
 // Student-facing routes
 router.get('/config', authMiddleware, provisionalController.getProvisionalConfig);
 router.get('/my-admission', authMiddleware, provisionalController.getMyProvisionalAdmission);
+router.get('/historical-docs', authMiddleware, provisionalController.getStudentHistoricalSemesterDocs);
 router.post('/step1', authMiddleware, provisionalController.saveProvisionalStep1);
 router.put('/step2', authMiddleware, provisionalController.saveProvisionalStep2);
 router.post('/documents', authMiddleware, uploadProvisionalDocMiddleware, provisionalController.uploadProvisionalDocument);
