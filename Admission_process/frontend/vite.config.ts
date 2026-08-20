@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'prompt',
-        includeAssets: ['favicon.ico', 'logo.png', 'college-view.jpg', 'offline.html', 'pwa-192x192.png', 'pwa-512x512.png', 'icons/icon-192.png', 'icons/icon-512.png'],
+        includeAssets: ['favicon.ico', 'logo.png', 'emaillogo.png', 'college-view.jpg', 'offline.html', 'pwa-192x192.png', 'pwa-512x512.png', 'icons/icon-192.png', 'icons/icon-512.png'],
         manifest: {
           name: 'JCER Student Admission Portal',
           short_name: 'JCER Admission',
