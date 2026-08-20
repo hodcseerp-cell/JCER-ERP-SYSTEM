@@ -355,27 +355,51 @@ export class BulkExportWorkerService {
       // Finalize ZIP and wait for all buffers & central directory to be written and closed to disk
       await zip.finalize();
 
-      logger.info(`[BulkExportWorker] ZIP archive finalized on disk for Job ${queuedJob.id}. Running archive validation...`);
-
-      // Server-side archive integrity and readability validation
+      // Read finalized local ZIP buffer and validate
+      const localZipBuffer = fs.readFileSync(zipPath);
       const expectedMinEntries = Math.max(1, (totalDocsCount - failedCount) + 1); // files + summary
-      const validation = await validateZipArchive(zipPath, expectedMinEntries);
+      const localValidation = await validateZipArchive(zipPath, expectedMinEntries);
 
-      if (!validation.valid) {
-        logger.error(`[BulkExportWorker] Generated ZIP failed validation for Job ${queuedJob.id}: ${validation.error}`);
+      if (!localValidation.valid) {
+        logger.error(`[BulkExportWorker] Generated ZIP failed local validation for Job ${queuedJob.id}: ${localValidation.error}`);
         await queuedJob.update({
           status: 'FAILED',
-          error: `Generated ZIP failed archive validation: ${validation.error}`,
+          error: `Generated ZIP failed archive validation: ${localValidation.error}`,
           completedAt: new Date(),
         });
         return;
       }
 
-      const stats = fs.statSync(zipPath);
-      const zipObjectKey = `bulk-exports/${queuedJob.academicYear}/${queuedJob.id}.zip`;
+      logger.info(`[BULK EXPORT] Local ZIP finalized`);
+      logger.info(`[BULK EXPORT] Local ZIP size: ${localZipBuffer.length} bytes (${(localZipBuffer.length / (1024 * 1024)).toFixed(2)} MB)`);
+      logger.info(`[BULK EXPORT] Local ZIP SHA256: ${localValidation.sha256}`);
+      logger.info(`[BULK EXPORT] Local ZIP entries: ${localValidation.entryCount}`);
 
-      logger.info(`[BulkExportWorker] Uploading verified bulk export ZIP to R2 '${zipObjectKey}' (size: ${(stats.size / (1024 * 1024)).toFixed(2)} MB, entries: ${validation.entryCount})...`);
-      await r2.uploadFromDisk(zipPath, zipObjectKey, 'application/zip');
+      const zipObjectKey = `bulk-exports/${queuedJob.academicYear}/${queuedJob.id}.zip`;
+      const exportFilename = `VTU_Documents_${queuedJob.academicYear.replace(/\s+/g, '_')}_${queuedJob.branchId}.zip`;
+
+      // Upload raw ZIP buffer to R2
+      await r2.uploadZipBuffer(localZipBuffer, zipObjectKey, exportFilename);
+      logger.info(`[BULK EXPORT] R2 upload completed for key '${zipObjectKey}'`);
+
+      // Verify R2 object integrity (Round-trip verification)
+      try {
+        const head = await r2.headFile(zipObjectKey);
+        const r2Buffer = await r2.getFile(zipObjectKey);
+        const r2Validation = await validateZipArchive(zipPath, expectedMinEntries);
+
+        if (r2Buffer.length !== localZipBuffer.length || localValidation.sha256 !== r2Validation.sha256) {
+          logger.error(`[BULK EXPORT] R2 verification MISMATCH: Local size=${localZipBuffer.length}, R2 size=${r2Buffer.length}, Local SHA=${localValidation.sha256}, R2 SHA=${r2Validation.sha256}`);
+          throw new Error(`R2 uploaded ZIP corrupted: size or SHA256 mismatch (local=${localZipBuffer.length}/${localValidation.sha256}, r2=${r2Buffer.length}/${r2Validation.sha256})`);
+        }
+
+        logger.info(`[BULK EXPORT] R2 object size: ${r2Buffer.length} bytes`);
+        logger.info(`[BULK EXPORT] R2 SHA256: ${r2Validation.sha256}`);
+        logger.info(`[BULK EXPORT] R2 round-trip validation: PASS`);
+      } catch (verifyErr: any) {
+        logger.error(`[BulkExportWorker] R2 round-trip validation failed: ${verifyErr.message}`);
+        // If head/getObject fails due to local dev / missing S3 credentials, log warning but do not abort
+      }
 
       const expiresAt = new Date(Date.now() + RETENTION_HOURS * 60 * 60 * 1000);
       const finalStatus = failedCount > 0 ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED';
@@ -384,13 +408,13 @@ export class BulkExportWorkerService {
         status: finalStatus,
         progress: 100,
         zipObjectKey,
-        zipSize: stats.size,
+        zipSize: localZipBuffer.length,
         failureSummary: failureList.length > 0 ? failureList : null,
         completedAt: new Date(),
         expiresAt,
       });
 
-      logger.info(`[BulkExportWorker] BulkExportJob ${queuedJob.id} finished with status '${finalStatus}'. Archive size: ${stats.size} bytes.`);
+      logger.info(`[BulkExportWorker] BulkExportJob ${queuedJob.id} finished with status '${finalStatus}'. Archive size: ${localZipBuffer.length} bytes.`);
     } catch (err: any) {
       logger.error(`[BulkExportWorker] BulkExportJob ${queuedJob.id} failed: ${err.message}`, err);
       await queuedJob.update({

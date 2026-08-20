@@ -1774,32 +1774,13 @@ export const AdmissionReviewPage: React.FC = () => {
               </div>
             )}
 
-            {app.applicationStatus === 'PRINCIPAL_APPROVED' && (
-              <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-800/60 rounded-xl p-4 w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-                  <div className="text-left">
-                    <p className="text-sm font-extrabold text-neutral-800 dark:text-neutral-200">Principal Approved</p>
-                    <p className="text-xs text-neutral-500 font-semibold mt-0.5">Approved by Principal. Ready to finalize ERP enrollment and generate USN details.</p>
-                  </div>
-                </div>
-                <button
-                  disabled={updating}
-                  onClick={() => handleUpdateStatus('ENROLLED')}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md shadow-emerald-600/10 shrink-0 cursor-pointer"
-                >
-                  <GraduationCap size={16} /> Finalize Enrollment
-                </button>
-              </div>
-            )}
-
-            {app.applicationStatus === 'ENROLLED' && (
+            {(app.applicationStatus === 'ENROLLED' || app.applicationStatus === 'PRINCIPAL_APPROVED') && (
               <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-800/60 rounded-xl p-4 text-center w-full">
                 <p className="text-sm font-black text-emerald-800 dark:text-emerald-400 flex items-center justify-center gap-2">
                   <CheckCircle2 size={18} /> Student Enrolled Successfully
                 </p>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 font-semibold mt-1">
-                  The student admission has been confirmed by Principal and enrolled into ERP.
+                  The student admission has been approved by Principal and enrolled directly into ERP.
                 </p>
               </div>
             )}

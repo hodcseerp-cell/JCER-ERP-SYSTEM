@@ -3243,13 +3243,54 @@ export const getBulkExportDownloadUrl = async (
       return res.status(404).json({ success: false, error: 'Export file key is missing or expired.' });
     }
 
-    const downloadUrl = r2.getSignedUrlSync(job.zipObjectKey);
+    const filename = `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`;
+    const downloadUrl = await r2.getSignedUrl(job.zipObjectKey, 3600, filename);
 
     return res.json({
       success: true,
       downloadUrl,
-      filename: `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`
+      directDownloadUrl: `/api/admin/documents/bulk-export/${jobId}/download-file`,
+      filename,
+      size: job.zipSize ? Number(job.zipSize) : null,
     });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/** GET /api/admin/documents/bulk-export/:jobId/download-file — Direct authenticated stream download */
+export const downloadBulkExportZipFile = async (
+  req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const { jobId } = req.params;
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+
+    const job = await BulkExportJob.findByPk(jobId);
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Export job not found.' });
+    }
+
+    if (!['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(job.status)) {
+      return res.status(400).json({ success: false, error: `Export package is not ready. Current status: ${job.status}` });
+    }
+
+    if (!job.zipObjectKey) {
+      return res.status(404).json({ success: false, error: 'Export file key is missing or expired.' });
+    }
+
+    const buffer = await r2.getFile(job.zipObjectKey);
+    const filename = `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.setHeader('Cache-Control', 'no-transform, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('x-no-compression', '1');
+
+    return res.send(buffer);
   } catch (err) {
     return next(err);
   }

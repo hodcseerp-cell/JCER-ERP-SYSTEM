@@ -67,6 +67,7 @@ adminAdmissionRouter.get('/documents/export', admissionController.bulkExportDocu
 adminAdmissionRouter.post('/documents/bulk-export', admissionController.startBulkExportJob);
 adminAdmissionRouter.get('/documents/bulk-export/active', admissionController.getActiveBulkExportJob);
 adminAdmissionRouter.get('/documents/bulk-export/:jobId/download', admissionController.getBulkExportDownloadUrl);
+adminAdmissionRouter.get('/documents/bulk-export/:jobId/download-file', admissionController.downloadBulkExportZipFile);
 adminAdmissionRouter.get('/documents/bulk-export/:jobId', admissionController.getBulkExportJobStatus);
 adminAdmissionRouter.get('/students/:studentId/documents', admissionController.getStudentDocuments);
 adminAdmissionRouter.get('/admissions/:id/documents/zip', admissionController.exportSingleStudentZip);

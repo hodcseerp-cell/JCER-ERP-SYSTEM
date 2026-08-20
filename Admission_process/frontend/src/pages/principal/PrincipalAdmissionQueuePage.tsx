@@ -271,10 +271,10 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
             onClick={handleOpenConfirmModal}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 active:scale-95"
-            title="Approve & Confirm Selected Admissions"
+            title="Approve & Enroll Selected Admissions"
           >
             <CheckCheck size={15} />
-            Bulk Approve / Confirm
+            Bulk Approve & Enroll
             {selectedIds.length > 0 && (
               <span className="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">
                 {selectedIds.length}
@@ -303,7 +303,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
             activeClass: "bg-amber-500 border-amber-600 text-white shadow-lg shadow-amber-500/50"
           },
           { 
-            name: "Confirmed / Approved", 
+            name: "Confirmed / Enrolled", 
             status: "ENROLLED", 
             count: stats.enrolled || 0, 
             color: "bg-emerald-500",
@@ -479,7 +479,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                 {selectedIds.length} student{selectedIds.length > 1 ? 's' : ''} selected
               </p>
               <p className="text-[10px] text-indigo-700/80 dark:text-indigo-400 font-medium">
-                Ready for Principal Confirmation
+                Ready for Final Principal Approval & Direct ERP Enrollment
               </p>
             </div>
           </div>
@@ -496,7 +496,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
               className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
             >
               <CheckCheck size={14} />
-              Approve & Confirm Selected
+              Approve & Enroll Selected
             </button>
           </div>
         </div>
@@ -574,7 +574,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                             onChange={() => handleToggleSelectRow(app.id, isEligible)}
                             disabled={!isEligible}
                             className="size-4 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={isEligible ? 'Select for bulk approval' : 'Not eligible for Principal approval'}
+                            title={isEligible ? 'Select for bulk approval & enrollment' : 'Not eligible for Principal approval'}
                           />
                         </td>
                         <td className="py-4 px-4 font-black">
@@ -671,20 +671,20 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
 
             <div className="space-y-2">
               <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                Approve & Confirm Selected Admissions?
+                Approve & Enroll Selected Admissions?
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-                You are about to confirm <strong className="text-slate-800 dark:text-slate-200">{selectedIds.length}</strong> selected admission{selectedIds.length > 1 ? 's' : ''}.
+                You are about to approve and directly enroll <strong className="text-slate-800 dark:text-slate-200">{selectedIds.length}</strong> selected student{selectedIds.length > 1 ? 's' : ''} into the ERP system.
               </p>
             </div>
 
             <div className="p-4 bg-slate-50 dark:bg-neutral-800/60 rounded-2xl border border-slate-100 dark:border-neutral-800 space-y-2 text-xs">
               <div className="flex items-center justify-between font-bold text-slate-700 dark:text-slate-300">
                 <span className="text-[11px] uppercase tracking-wider text-slate-400">Status Transition</span>
-                <span className="text-indigo-600 font-extrabold">AWAITING → CONFIRMED</span>
+                <span className="text-emerald-600 font-extrabold">AWAITING → ENROLLED</span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                This will approve the selected admissions and change their status to <strong>CONFIRMED</strong>. Enrollment and USN allocation will not be performed.
+                This will grant final Principal approval and directly enroll the selected students into the ERP system.
               </p>
             </div>
 
@@ -706,12 +706,12 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                 {confirming ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    Confirming...
+                    Enrolling...
                   </>
                 ) : (
                   <>
                     <CheckCheck size={14} />
-                    Approve & Confirm
+                    Approve & Enroll
                   </>
                 )}
               </button>
@@ -738,21 +738,21 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
 
             <div className="space-y-1">
               <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                Bulk Confirmation Completed
+                Bulk Approval & Enrollment Completed
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                The Principal approval queue has been updated.
+                The Principal approval queue has been updated and students have been enrolled in ERP.
               </p>
             </div>
 
             <div className="space-y-2 bg-slate-50 dark:bg-neutral-800/60 p-4 rounded-2xl border border-slate-100 dark:border-neutral-800 text-xs">
               <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-bold">
-                <span>✓ Confirmed</span>
+                <span>✓ Enrolled in ERP</span>
                 <span className="font-extrabold text-sm">{summaryData.confirmed}</span>
               </div>
               {summaryData.skipped > 0 && (
                 <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 font-bold">
-                  <span>○ Already Confirmed / Skipped</span>
+                  <span>○ Already Enrolled / Skipped</span>
                   <span className="font-extrabold text-sm">{summaryData.skipped}</span>
                 </div>
               )}

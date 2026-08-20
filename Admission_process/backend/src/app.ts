@@ -150,6 +150,7 @@ v1Router.get('/documents/view/*', async (req: Request, res: Response, next: Next
     const ext = path.extname(key).toLowerCase();
     let contentType = 'application/octet-stream';
     if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.zip') contentType = 'application/zip';
     else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
     else if (ext === '.png') contentType = 'image/png';
     else if (ext === '.gif') contentType = 'image/gif';
@@ -157,7 +158,8 @@ v1Router.get('/documents/view/*', async (req: Request, res: Response, next: Next
     else if (ext === '.svg') contentType = 'image/svg+xml';
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'no-transform, public, max-age=86400');
+    res.setHeader('x-no-compression', '1');
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.removeHeader('X-Frame-Options');
@@ -174,6 +176,7 @@ v1Router.get('/documents/view/*', async (req: Request, res: Response, next: Next
 
     try {
       const buffer = await r2Service.getFile(key);
+      res.setHeader('Content-Length', String(buffer.length));
       return res.send(buffer);
     } catch (r2Err) {
       logger.error(`[DocumentView] Error fetching object '${key}' from R2:`, r2Err);

@@ -168,26 +168,46 @@ export const BulkDocumentExportPage: React.FC = () => {
 
   const handleDownloadZip = async (jobId: string) => {
     setDownloadingFile(true);
-    const toastId = toast.loading('Generating secure download URL...');
+    const toastId = toast.loading('Preparing secure ZIP package download...');
     try {
-      const res = await API.get(`/admin/documents/bulk-export/${jobId}/download`);
-      if (res.data?.success && res.data.downloadUrl) {
-        toast.dismiss(toastId);
-        const link = document.createElement('a');
-        link.href = res.data.downloadUrl;
-        link.setAttribute('download', res.data.filename || `VTU_Documents_${academicYear}.zip`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        toast.success('Download started!');
-      } else {
-        toast.dismiss(toastId);
-        toast.error(res.data?.error || 'Failed to get download URL.');
+      // 1. Fetch metadata and direct streaming binary endpoint
+      const metaRes = await API.get(`/admin/documents/bulk-export/${jobId}/download`);
+      const targetFilename = metaRes.data?.filename || `VTU_Documents_${academicYear}_${branchId}.zip`;
+      const expectedSize = metaRes.data?.size || activeJob?.zipSize;
+
+      // 2. Fetch binary stream as blob directly from authenticated download-file endpoint
+      const fileRes = await API.get(`/admin/documents/bulk-export/${jobId}/download-file`, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([fileRes.data], { type: 'application/zip' });
+
+      console.log('[BULK EXPORT FRONTEND DOWNLOAD]', {
+        downloadedSize: blob.size,
+        expectedSize: expectedSize,
+        contentType: fileRes.headers?.['content-type'],
+        contentLength: fileRes.headers?.['content-length'],
+      });
+
+      if (blob.size === 0) {
+        throw new Error('Downloaded ZIP payload is empty.');
       }
-    } catch (err: any) {
-      console.error(err);
+
       toast.dismiss(toastId);
-      toast.error(err.response?.data?.error || 'Failed to trigger file download.');
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.setAttribute('download', targetFilename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+
+      toast.success(`Download started (${(blob.size / (1024 * 1024)).toFixed(1)} MB)!`);
+    } catch (err: any) {
+      console.error('Download failure:', err);
+      toast.dismiss(toastId);
+      toast.error(err.response?.data?.error || err.message || 'Failed to download ZIP archive.');
     } finally {
       setDownloadingFile(false);
     }

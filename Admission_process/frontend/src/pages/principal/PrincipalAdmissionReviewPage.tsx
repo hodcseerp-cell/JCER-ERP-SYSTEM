@@ -179,13 +179,13 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
     try {
       const res = await API.post(`/principal/admissions/${id}/approve`, {});
       if (res.data.success) {
-        toast.success('Admission Confirmed Successfully.');
+        toast.success('Admission Approved & Student Enrolled in ERP Successfully.');
         window.dispatchEvent(new CustomEvent('admissions-updated'));
         navigate('/principal/admissions/pending');
       }
     } catch (err: any) {
       console.error('Approve failed', err);
-      toast.error(err.response?.data?.error || 'Failed to confirm admission.');
+      toast.error(err.response?.data?.error || 'Failed to approve and enroll student.');
     } finally {
       setSubmitting(false);
     }

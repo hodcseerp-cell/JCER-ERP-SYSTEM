@@ -159,6 +159,29 @@ export async function uploadFile(
 }
 
 /**
+ * Upload a raw ZIP archive directly to R2 without any transformations.
+ */
+export async function uploadZipBuffer(
+  buffer: Buffer,
+  key: string,
+  filename?: string,
+): Promise<string> {
+  const cleanKey = key.replace(/^\/+/, '');
+  const contentDisposition = filename ? `attachment; filename="${filename}"` : 'attachment';
+
+  logger.info(`[R2] Uploading ZIP archive: ${cleanKey} (${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`);
+  await s3.putObject({
+    Bucket: BUCKET,
+    Key: cleanKey,
+    Body: buffer,
+    ContentType: 'application/zip',
+    ContentDisposition: contentDisposition,
+  }).promise();
+  logger.info(`[R2] ZIP uploaded successfully: ${cleanKey}`);
+  return cleanKey;
+}
+
+/**
  * Upload a file from local disk to R2, compress images, then remove the local file.
  *
  * Flow:
@@ -184,6 +207,14 @@ export async function uploadFromDisk(
     logger.warn(`[R2] Could not delete local temp file after upload: ${localPath}`, cleanupErr);
   }
   return key;
+}
+
+/**
+ * Retrieves metadata and headers for an R2 object.
+ */
+export async function headFile(key: string): Promise<AWS.S3.HeadObjectOutput> {
+  const cleanKey = key.replace(/^\/+/, '');
+  return s3.headObject({ Bucket: BUCKET, Key: cleanKey }).promise();
 }
 
 /**
@@ -213,9 +244,27 @@ export async function deleteFile(key: string | null | undefined): Promise<void> 
  */
 export async function getSignedUrl(
   key: string,
-  _ttl: number = SIGNED_URL_TTL,
+  ttl: number = SIGNED_URL_TTL,
+  downloadFilename?: string,
 ): Promise<string> {
   if (!key) return '';
+  const cleanKey = key.replace(/^\/+/, '');
+  if (process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) {
+    try {
+      const params: any = {
+        Bucket: BUCKET,
+        Key: cleanKey,
+        Expires: ttl,
+      };
+      if (downloadFilename) {
+        params.ResponseContentType = 'application/zip';
+        params.ResponseContentDisposition = `attachment; filename="${downloadFilename}"`;
+      }
+      return s3.getSignedUrlPromise('getObject', params);
+    } catch (err: any) {
+      logger.warn(`[R2] Presigned URL generation fallback: ${err.message}`);
+    }
+  }
   return resolveFileUrl(key);
 }
 
@@ -224,9 +273,27 @@ export async function getSignedUrl(
  */
 export function getSignedUrlSync(
   key: string,
-  _ttl: number = SIGNED_URL_TTL,
+  ttl: number = SIGNED_URL_TTL,
+  downloadFilename?: string,
 ): string {
   if (!key) return '';
+  const cleanKey = key.replace(/^\/+/, '');
+  if (process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY) {
+    try {
+      const params: any = {
+        Bucket: BUCKET,
+        Key: cleanKey,
+        Expires: ttl,
+      };
+      if (downloadFilename) {
+        params.ResponseContentType = 'application/zip';
+        params.ResponseContentDisposition = `attachment; filename="${downloadFilename}"`;
+      }
+      return s3.getSignedUrl('getObject', params);
+    } catch (err: any) {
+      logger.warn(`[R2] Presigned URL sync generation fallback: ${err.message}`);
+    }
+  }
   return resolveFileUrl(key);
 }
 
@@ -234,7 +301,8 @@ export function getSignedUrlSync(
  * Fetch file buffer from Cloudflare R2.
  */
 export async function getFile(key: string): Promise<Buffer> {
-  const data = await s3.getObject({ Bucket: BUCKET, Key: key }).promise();
+  const cleanKey = key.replace(/^\/+/, '');
+  const data = await s3.getObject({ Bucket: BUCKET, Key: cleanKey }).promise();
   return data.Body as Buffer;
 }
 

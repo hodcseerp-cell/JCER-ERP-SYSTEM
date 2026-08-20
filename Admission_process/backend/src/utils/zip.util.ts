@@ -1,5 +1,6 @@
 import { Writable } from 'stream';
 import fs from 'fs';
+import crypto from 'crypto';
 import archiver from 'archiver';
 import JSZip from 'jszip';
 import logger from './logger.util';
@@ -23,6 +24,41 @@ export function getCrc32(buf: Buffer): number {
     crc = (crc >>> 8) ^ crcTable[(crc ^ buf[i]) & 0xFF];
   }
   return (crc ^ -1) >>> 0;
+}
+
+/**
+ * Calculates the SHA-256 hexadecimal hash of a Buffer.
+ */
+export function getBufferSha256(buf: Buffer): string {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * Validates ZIP Magic Bytes (0x50 0x4B 0x03 0x04) at the start of the buffer.
+ */
+export function verifyZipMagicBytes(buf: Buffer): boolean {
+  if (!buf || buf.length < 4) return false;
+  return buf[0] === 0x50 && buf[1] === 0x4B && (
+    (buf[2] === 0x03 && buf[3] === 0x04) || // Standard Local File Header
+    (buf[2] === 0x05 && buf[3] === 0x06) || // Empty ZIP with End of Central Directory
+    (buf[2] === 0x07 && buf[3] === 0x08)    // Spanned archive
+  );
+}
+
+/**
+ * Validates the presence of End Of Central Directory (EOCD) signature (0x50 0x4B 0x05 0x06).
+ */
+export function verifyZipEOCD(buf: Buffer): boolean {
+  if (!buf || buf.length < 22) return false;
+  // Search backward in the last 65KB (max comment size) or buffer length
+  const searchLen = Math.min(buf.length, 65536 + 22);
+  const startPos = buf.length - searchLen;
+  for (let i = buf.length - 22; i >= startPos; i--) {
+    if (buf[i] === 0x50 && buf[i + 1] === 0x4B && buf[i + 2] === 0x05 && buf[i + 3] === 0x06) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export interface ZipEntry {
@@ -134,28 +170,44 @@ export class StreamingZip {
 }
 
 /**
- * Server-side validation of a generated ZIP archive on disk.
- * Verifies that:
- *  - The file exists on disk
- *  - Size > 0 (and > minimum empty ZIP header size)
- *  - ZIP central directory exists and is intact
- *  - Archive can be opened and parsed by standard ZIP parser without corruption
- *  - Entry count matches expectations
+ * Validates a ZIP buffer directly in memory.
  */
-export async function validateZipArchive(
-  filePath: string,
+export async function validateZipBuffer(
+  data: Buffer,
   minExpectedEntries: number = 1
-): Promise<{ valid: boolean; entryCount: number; error?: string }> {
+): Promise<{ valid: boolean; entryCount: number; size: number; sha256: string; error?: string }> {
   try {
-    if (!fs.existsSync(filePath)) {
-      return { valid: false, entryCount: 0, error: 'ZIP file does not exist on disk.' };
-    }
-    const stat = fs.statSync(filePath);
-    if (stat.size <= 22) {
-      return { valid: false, entryCount: 0, error: `ZIP file is empty or truncated (${stat.size} bytes).` };
+    if (!data || data.length <= 22) {
+      return {
+        valid: false,
+        entryCount: 0,
+        size: data ? data.length : 0,
+        sha256: data ? getBufferSha256(data) : '',
+        error: `ZIP data is empty or truncated (${data ? data.length : 0} bytes).`
+      };
     }
 
-    const data = fs.readFileSync(filePath);
+    if (!verifyZipMagicBytes(data)) {
+      return {
+        valid: false,
+        entryCount: 0,
+        size: data.length,
+        sha256: getBufferSha256(data),
+        error: 'Invalid ZIP magic header. File does not start with standard PK signature.'
+      };
+    }
+
+    if (!verifyZipEOCD(data)) {
+      return {
+        valid: false,
+        entryCount: 0,
+        size: data.length,
+        sha256: getBufferSha256(data),
+        error: 'Missing End Of Central Directory (EOCD) signature. Archive is incomplete or truncated.'
+      };
+    }
+
+    const sha256 = getBufferSha256(data);
     const zip = await JSZip.loadAsync(data);
     const files = Object.keys(zip.files).filter((k) => !zip.files[k].dir);
 
@@ -163,6 +215,8 @@ export async function validateZipArchive(
       return {
         valid: false,
         entryCount: files.length,
+        size: data.length,
+        sha256,
         error: `ZIP archive contains ${files.length} files, expected at least ${minExpectedEntries}.`,
       };
     }
@@ -170,12 +224,40 @@ export async function validateZipArchive(
     return {
       valid: true,
       entryCount: files.length,
+      size: data.length,
+      sha256,
     };
   } catch (err: any) {
     return {
       valid: false,
       entryCount: 0,
+      size: data ? data.length : 0,
+      sha256: data ? getBufferSha256(data) : '',
       error: `ZIP validation failed: ${err.message || 'Corrupted ZIP archive or missing Central Directory.'}`,
+    };
+  }
+}
+
+/**
+ * Server-side validation of a generated ZIP archive on disk.
+ */
+export async function validateZipArchive(
+  filePath: string,
+  minExpectedEntries: number = 1
+): Promise<{ valid: boolean; entryCount: number; size: number; sha256: string; error?: string }> {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { valid: false, entryCount: 0, size: 0, sha256: '', error: 'ZIP file does not exist on disk.' };
+    }
+    const data = fs.readFileSync(filePath);
+    return await validateZipBuffer(data, minExpectedEntries);
+  } catch (err: any) {
+    return {
+      valid: false,
+      entryCount: 0,
+      size: 0,
+      sha256: '',
+      error: `ZIP validation failed: ${err.message || 'Failed reading file from disk.'}`,
     };
   }
 }
