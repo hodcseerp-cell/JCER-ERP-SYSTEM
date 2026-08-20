@@ -31,7 +31,15 @@ app.set('trust proxy', 1);
 
 // 1. CORS Configuration (Perimeter Defense - MUST run before all other middleware and routes)
 app.use(corsConfig);
-app.options('*', corsConfig);
+
+// Fast-path OPTIONS preflight requests for all endpoints
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  return next();
+});
 
 // Security HTTP headers
 app.use(helmet({
