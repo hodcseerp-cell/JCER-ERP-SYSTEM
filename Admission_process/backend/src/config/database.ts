@@ -5,9 +5,20 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true' || process.env.DB_SSL === 'true';
+const dialectOptions = (isProduction || (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com')))
+  ? {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    }
+  : {};
+
 const sequelize = process.env.DATABASE_URL
   ? new Sequelize(process.env.DATABASE_URL, {
       dialect: 'postgres',
+      dialectOptions,
       logging: process.env.NODE_ENV === 'development' ? console.log : false,
       pool: {
         max: 50,
@@ -24,6 +35,7 @@ const sequelize = process.env.DATABASE_URL
         host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
         port: parseInt(process.env.DB_PORT || process.env.PGPORT || '5432', 10),
         dialect: 'postgres',
+        dialectOptions,
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
         pool: {
           max: 50,
