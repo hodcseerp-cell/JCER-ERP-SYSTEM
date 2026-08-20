@@ -115,8 +115,8 @@ export const uploadDocuments = (req: Request, res: Response, next: NextFunction)
       return next(err);
     }
 
-    if (req.files) {
-      const filesObject = req.files as { [fieldname: string]: Express.Multer.File[] };
+    if ((req as any).files) {
+      const filesObject = (req as any).files as { [fieldname: string]: any[] };
       for (const fieldName of Object.keys(filesObject)) {
         const filesList = filesObject[fieldName];
         for (const file of filesList) {
@@ -175,8 +175,8 @@ export const uploadFeeReceiptMiddleware = (req: Request, res: Response, next: Ne
       return next(err);
     }
 
-    if (req.file) {
-      const file = req.file;
+    if ((req as any).file) {
+      const file = (req as any).file;
       const isValid = verifyMagicBytes(file.path, file.mimetype);
       if (!isValid) {
         try {
