@@ -133,6 +133,14 @@ app.get('/api', (_req: Request, res: Response) => {
   });
 });
 
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'JCER Admission Backend',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',

@@ -2,24 +2,28 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package manifests
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies for compilation
+RUN npm ci
 
-# Copy source code
+# Copy source files
 COPY . .
 
-# Build TypeScript
+# Build TypeScript to /app/dist
 RUN npm run build
 
-# Expose port
+# Create necessary upload and log directories with proper permissions for non-root user
+RUN mkdir -p /app/uploads/avatars /app/uploads/handbookPdf /app/logs && \
+    chown -R node:node /app
+
+USER node
+
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+# Health check verifies /api/health
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {if (r.statusCode !== 200) process.exit(1)})"
 
-# Start application
 CMD ["node", "dist/index.js"]

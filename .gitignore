@@ -1,2 +1,19 @@
 
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Dependencies & Builds
+node_modules/
+dist/
+build/
+dev-dist/
 Admission_process/frontend/dev-dist/
+
+# Logs & Temporary Files
+logs/
+*.log
+.DS_Store
+Thumbs.db

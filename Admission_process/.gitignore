@@ -42,6 +42,8 @@ yarn-error.log*
 # Database
 *.sqlite
 *.sqlite3
+backups/
+*.sql.gz
 
 # OS
 .DS_Store
