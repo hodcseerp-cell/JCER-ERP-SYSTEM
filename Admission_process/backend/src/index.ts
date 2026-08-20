@@ -617,8 +617,9 @@ async function startServer() {
       console.warn('Startup feature validation banner failed:', e.message);
     }
 
-    app.listen(PORT, () => {
-      console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    const portNum = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+    app.listen(portNum, '0.0.0.0', () => {
+      console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on 0.0.0.0:${portNum}`);
     });
   } catch (error) {
     console.error('Unable to start the application server:', error);
