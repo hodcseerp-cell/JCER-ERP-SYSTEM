@@ -46,7 +46,21 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-const compressionMiddleware = compression();
+const compressionMiddleware = compression({
+  filter: (req, res) => {
+    if (
+      req.headers['x-no-compression'] ||
+      req.path.includes('download-file') ||
+      req.path.includes('bulk-export') ||
+      req.path.endsWith('.zip') ||
+      Boolean(res.getHeader('x-no-compression')) ||
+      Boolean(res.getHeader('X-No-Compression'))
+    ) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+});
 app.use((req, res, next) => (compressionMiddleware as any)(req, res, next));
 
 // 2. Body & Cookie Parsers (Must run before logging, rate limiting, and routing)

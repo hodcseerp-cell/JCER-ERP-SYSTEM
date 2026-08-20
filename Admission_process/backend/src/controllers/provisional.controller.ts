@@ -186,6 +186,7 @@ export const getMyProvisionalAdmission = async (req: AuthenticatedRequest, res: 
         semester: student.semester,
         admissionType: student.admissionType,
         initialSemester: student.initialSemester,
+        isLateral,
         isInitialLateralEntry,
         isProvisionalEligible,
         branchName: originalAdmission?.branch?.name || 'Engineering',
@@ -296,6 +297,24 @@ const resolveAdmissionTypeInfo = async (studentId: string, userId: string) => {
     originalAdmission?.applicationType === 'LATERAL_ENTRY';
   const initialSemester = isLateral ? 3 : 1;
   return { isLateral, initialSemester, student };
+};
+
+/**
+ * Centralized academic semester requirements.
+ * FRESH: 3 → [1, 2] | 5 → [1, 2, 3, 4] | 7 → [1, 2, 3, 4, 5, 6]
+ * LATERAL: 5 → [3, 4] | 7 → [3, 4, 5, 6]
+ */
+export const getRequiredAcademicSemesters = (isLateral: boolean, targetSemester: number): number[] => {
+  const sem = Number(targetSemester);
+  if (isLateral) {
+    if (sem === 5) return [3, 4];
+    if (sem === 7) return [3, 4, 5, 6];
+    return [];
+  }
+  if (sem === 3) return [1, 2];
+  if (sem === 5) return [1, 2, 3, 4];
+  if (sem === 7) return [1, 2, 3, 4, 5, 6];
+  return [];
 };
 
 /**
@@ -413,9 +432,9 @@ export const saveProvisionalStep2 = async (req: AuthenticatedRequest, res: Respo
       return res.status(400).json({ error: 'Application is not editable.' });
     }
 
-    // Validate expected semesters count based on target semester
-    const expectedSemesters = application.semester === 3 ? [1, 2] :
-                             application.semester === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
+    // Validate expected semesters count based on target semester and student admission type
+    const { isLateral } = await resolveAdmissionTypeInfo(student.id, userId);
+    const expectedSemesters = getRequiredAcademicSemesters(isLateral, application.semester);
 
     if (records.length !== expectedSemesters.length) {
       return res.status(400).json({ error: `Please provide records for exactly all completed semesters: ${expectedSemesters.join(', ')}.` });
@@ -625,12 +644,15 @@ export const submitProvisionalAdmission = async (req: AuthenticatedRequest, res:
 
     // Determine admission type for the student
     const { isLateral } = await resolveAdmissionTypeInfo(student.id, userId);
+    const expectedAcademicSemesters = getRequiredAcademicSemesters(isLateral, application.semester);
     const { previousSemesters, requiredNow } = getSemesterRules(isLateral, application.semester);
-    const allExpectedSemesters = [...previousSemesters, ...requiredNow];
 
-    // Validate semester records count (Step 2 keeps asking for all lower sems)
-    if (!application.semesterRecords || application.semesterRecords.length !== allExpectedSemesters.length) {
-      return res.status(400).json({ error: 'Please enter academic records for all lower semesters before submitting.' });
+    // Validate academic records for all required semesters
+    for (const sem of expectedAcademicSemesters) {
+      const hasRecord = application.semesterRecords?.some((r: any) => Number(r.semesterNumber) === sem);
+      if (!hasRecord) {
+        return res.status(400).json({ error: `Please enter academic record for Semester ${sem}.` });
+      }
     }
 
     // Fee receipt must be in current application

@@ -20,7 +20,7 @@ import {
 import api from '../../../../../services/api';
 import toast from 'react-hot-toast';
 import { compressDocumentImage } from '../../utils/imageCompressor';
-import { getSemesterRules } from '../../utils/semesterDocumentRules';
+import { getSemesterRules, getRequiredAcademicSemesters } from '../../utils/semesterDocumentRules';
 
 export const ProvisionalAdmissionForm = () => {
   const navigate = useNavigate();
@@ -68,13 +68,16 @@ export const ProvisionalAdmissionForm = () => {
       // Get my application
       const appRes = await api.get('/provisional/my-admission');
       if (appRes.data?.success) {
-        const { application: appData, studentName, usn, branchName, applicationNumber, originalPhotoUrl, semester: studentSem, isInitialLateralEntry } = appRes.data.data;
+        const { application: appData, studentName, usn, branchName, applicationNumber, originalPhotoUrl, semester: studentSem, isInitialLateralEntry, isLateral: latFlag, admissionType, initialSemester } = appRes.data.data;
         
         if (isInitialLateralEntry && !appData) {
           toast.error("Provisional Admission is not applicable for your initial 3rd Semester lateral entry.");
           navigate('/admission/dashboard');
           return;
         }
+
+        const studentIsLateral = Boolean(latFlag || admissionType === 'LATERAL' || initialSemester === 3);
+        setIsLateral(studentIsLateral);
 
         setStudentProfile({ name: studentName, usn, branchName, applicationNumber, semester: studentSem });
         setOriginalPhoto(originalPhotoUrl);
@@ -87,18 +90,28 @@ export const ProvisionalAdmissionForm = () => {
           const cached = localStorage.getItem(`prov_exam_records_${appData.id}`);
           if (cached) {
             try {
-              setExamRecords(JSON.parse(cached));
+              const parsed = JSON.parse(cached);
+              const expectedSems = getRequiredAcademicSemesters(studentIsLateral, appData.semester);
+              const cachedSemNumbers = parsed.map((r) => r.semesterNumber);
+              const matches = expectedSems.length === parsed.length && expectedSems.every(s => cachedSemNumbers.includes(s));
+              if (matches) {
+                setExamRecords(parsed);
+              } else if (appData.semesterRecords && appData.semesterRecords.length > 0) {
+                setExamRecords(appData.semesterRecords);
+              } else {
+                initializeExamRecords(appData.semester, studentIsLateral);
+              }
             } catch (e) {
               if (appData.semesterRecords && appData.semesterRecords.length > 0) {
                 setExamRecords(appData.semesterRecords);
               } else {
-                initializeExamRecords(appData.semester);
+                initializeExamRecords(appData.semester, studentIsLateral);
               }
             }
           } else if (appData.semesterRecords && appData.semesterRecords.length > 0) {
             setExamRecords(appData.semesterRecords);
           } else {
-            initializeExamRecords(appData.semester);
+            initializeExamRecords(appData.semester, studentIsLateral);
           }
 
           // Set uploads map
@@ -155,7 +168,9 @@ export const ProvisionalAdmissionForm = () => {
           histMap[doc.semesterNumber] = doc;
         });
         setHistoricalDocs(histMap);
-        setIsLateral(!!res.data.isLateral);
+        if (res.data.isLateral !== undefined) {
+          setIsLateral(Boolean(res.data.isLateral));
+        }
       }
     } catch (err) {
       console.warn('Could not load historical semester docs:', err);
@@ -164,9 +179,9 @@ export const ProvisionalAdmissionForm = () => {
     }
   };
 
-  const initializeExamRecords = (targetSem) => {
+  const initializeExamRecords = (targetSem, lateral = isLateral) => {
     const semInt = Number(targetSem);
-    const expected = semInt === 3 ? [1, 2] : semInt === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
+    const expected = getRequiredAcademicSemesters(lateral, semInt);
     const initial = expected.map(s => ({
       semesterNumber: s,
       examMonth: 'January',
@@ -182,7 +197,7 @@ export const ProvisionalAdmissionForm = () => {
     const sem = e.target.value;
     setSelectedSemester(sem);
     if (sem) {
-      initializeExamRecords(sem);
+      initializeExamRecords(sem, isLateral);
     }
   };
 
@@ -199,7 +214,7 @@ export const ProvisionalAdmissionForm = () => {
       if (res.data?.success) {
         setApplication(res.data.data);
         if (examRecords.length === 0) {
-          initializeExamRecords(selectedSemester);
+          initializeExamRecords(selectedSemester, isLateral);
         }
         setStep(2);
         toast.success('Basic details saved.');
@@ -419,9 +434,8 @@ export const ProvisionalAdmissionForm = () => {
     return histDoc && histDoc.verificationStatus === 'REJECTED';
   });
 
-  // expectedSems used only for Step 2 academic records (still all lower sems)
-  const expectedSems = Number(selectedSemester) === 3 ? [1, 2] :
-                       Number(selectedSemester) === 5 ? [1, 2, 3, 4] : [1, 2, 3, 4, 5, 6];
+  // expectedSems used for Step 2 academic records and review validation
+  const expectedSems = getRequiredAcademicSemesters(isLateral, Number(selectedSemester));
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col font-sans">
@@ -1115,7 +1129,7 @@ export const ProvisionalAdmissionForm = () => {
                 >
                   Go to Dashboard
                 </button>
-                 {(application?.status === 'APPROVED' || application?.status === 'CONFIRMED' || application?.status === 'SUBMITTED' || application?.status === 'UNDER_REVIEW' || application?.status === 'RESUBMITTED') && (
+                {(application?.status === 'APPROVED' || application?.status === 'CONFIRMED' || application?.status === 'SUBMITTED' || application?.status === 'UNDER_REVIEW' || application?.status === 'RESUBMITTED') && (
                   <button
                     onClick={triggerPrint}
                     className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md flex items-center gap-2 hover:shadow-lg cursor-pointer text-xs uppercase"

@@ -380,7 +380,9 @@ export const decideAdmission = async (
         admissionId: id,
         applicationNumber: admission?.applicationNumber,
         principalName,
+        academicYear: admission?.academicYear,
         timestamp: new Date(),
+        mode: 'INDIVIDUAL',
         action: targetStatus === 'ENROLLED' ? 'ENROLLED' : 'REJECTED',
         previousStatus: 'AWAITING_PRINCIPAL_APPROVAL',
         newStatus: targetStatus,
@@ -435,15 +437,15 @@ export const bulkConfirmAdmissions = async (
 
     const results: Array<{
       admissionId: string;
-      admissionNumber?: string;
+      applicationNumber?: string;
       studentName?: string;
       previousStatus?: string;
-      newStatus?: string;
-      result: 'CONFIRMED' | 'SKIPPED' | 'FAILED';
+      finalStatus?: string;
+      result: 'ENROLLED' | 'SKIPPED' | 'FAILED';
       reason?: string;
     }> = [];
 
-    let confirmedCount = 0;
+    let enrolledCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
 
@@ -481,10 +483,10 @@ export const bulkConfirmAdmissions = async (
         if (currentStatus === 'ENROLLED') {
           results.push({
             admissionId,
-            admissionNumber: appNo,
+            applicationNumber: appNo,
             studentName,
             previousStatus: currentStatus,
-            newStatus: 'ENROLLED',
+            finalStatus: 'ENROLLED',
             result: 'SKIPPED',
             reason: 'Student is already ENROLLED'
           });
@@ -495,9 +497,10 @@ export const bulkConfirmAdmissions = async (
         if (currentStatus === 'REJECTED') {
           results.push({
             admissionId,
-            admissionNumber: appNo,
+            applicationNumber: appNo,
             studentName,
             previousStatus: currentStatus,
+            finalStatus: 'REJECTED',
             result: 'SKIPPED',
             reason: 'Admission is REJECTED'
           });
@@ -508,9 +511,10 @@ export const bulkConfirmAdmissions = async (
         if (currentStatus === 'CANCELLED' || currentStatus === 'CANCELLATION_REQUESTED') {
           results.push({
             admissionId,
-            admissionNumber: appNo,
+            applicationNumber: appNo,
             studentName,
             previousStatus: currentStatus,
+            finalStatus: currentStatus,
             result: 'SKIPPED',
             reason: 'Admission is CANCELLED'
           });
@@ -522,9 +526,10 @@ export const bulkConfirmAdmissions = async (
         if (currentStatus !== 'APPROVED' && currentStatus !== 'PRINCIPAL_APPROVED') {
           results.push({
             admissionId,
-            admissionNumber: appNo,
+            applicationNumber: appNo,
             studentName,
             previousStatus: currentStatus,
+            finalStatus: currentStatus,
             result: 'FAILED',
             reason: `Admission is not awaiting Principal approval (Current: ${currentStatus})`
           });
@@ -532,8 +537,8 @@ export const bulkConfirmAdmissions = async (
           continue;
         }
 
-        // Perform direct atomic enrollment update
-        await admissionService.updateStatus(
+        // Perform direct atomic enrollment update using the trusted admissionService
+        const enrollmentNumber = await admissionService.updateStatus(
           admissionId,
           'ENROLLED',
           req.user!.id,
@@ -541,6 +546,14 @@ export const bulkConfirmAdmissions = async (
           undefined,
           undefined
         );
+
+        // Update principal review and approval timestamps on the admission record
+        await admission.update({
+          principalReviewedBy: req.user!.id,
+          principalReviewedAt: new Date(),
+          principalApprovedAt: new Date(),
+          principalRemarks: 'Bulk approved & enrolled by Principal',
+        });
 
         // Audit Log
         try {
@@ -555,9 +568,11 @@ export const bulkConfirmAdmissions = async (
               studentName,
               previousStatus: currentStatus,
               newStatus: 'ENROLLED',
+              enrollmentNumber,
               academicYear: admission.academicYear,
               principalName,
               timestamp: new Date(),
+              mode: 'BULK',
               remarks: 'Bulk approved & enrolled directly into ERP by Principal'
             }
           });
@@ -567,13 +582,13 @@ export const bulkConfirmAdmissions = async (
 
         results.push({
           admissionId,
-          admissionNumber: appNo,
+          applicationNumber: appNo,
           studentName,
           previousStatus: currentStatus,
-          newStatus: 'ENROLLED',
-          result: 'CONFIRMED'
+          finalStatus: 'ENROLLED',
+          result: 'ENROLLED'
         });
-        confirmedCount++;
+        enrolledCount++;
 
       } catch (err: any) {
         console.error(`Error enrolling admission ${admissionId}:`, err.message);
@@ -588,12 +603,13 @@ export const bulkConfirmAdmissions = async (
 
     return res.json({
       success: true,
-      message: confirmedCount > 0
-        ? `${confirmedCount} student${confirmedCount > 1 ? 's' : ''} successfully approved and enrolled in ERP.`
+      message: enrolledCount > 0
+        ? `${enrolledCount} student${enrolledCount > 1 ? 's' : ''} successfully approved and enrolled in ERP.`
         : 'No admissions were enrolled.',
       summary: {
-        requested: uniqueIds.length,
-        confirmed: confirmedCount,
+        total: uniqueIds.length,
+        enrolled: enrolledCount,
+        confirmed: enrolledCount, // alias for frontend compatibility
         skipped: skippedCount,
         failed: failedCount
       },

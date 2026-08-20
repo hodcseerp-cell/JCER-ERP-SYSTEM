@@ -62,3 +62,21 @@ export function getAllSemesters(isLateral, targetSemester) {
   const rules = getSemesterRules(isLateral, targetSemester);
   return [...rules.previousSemesters, ...rules.requiredNow];
 }
+
+/**
+ * Get the list of academic semester examination records required for Step 2 and final submission.
+ * FRESH: 3 → [1, 2], 5 → [1, 2, 3, 4], 7 → [1, 2, 3, 4, 5, 6]
+ * LATERAL: 5 → [3, 4], 7 → [3, 4, 5, 6]
+ */
+export function getRequiredAcademicSemesters(isLateral, targetSemester) {
+  const sem = Number(targetSemester);
+  if (isLateral) {
+    if (sem === 5) return [3, 4];
+    if (sem === 7) return [3, 4, 5, 6];
+    return [];
+  }
+  if (sem === 3) return [1, 2];
+  if (sem === 5) return [1, 2, 3, 4];
+  if (sem === 7) return [1, 2, 3, 4, 5, 6];
+  return [];
+}

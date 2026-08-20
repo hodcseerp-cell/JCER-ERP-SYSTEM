@@ -3264,34 +3264,77 @@ export const downloadBulkExportZipFile = async (
 ): Promise<any> => {
   try {
     const { jobId } = req.params;
-    const BulkExportJob = (await import('../models/BulkExportJob')).default;
+    logger.info(`[BULK DOWNLOAD] request received jobId=${jobId}`);
 
+    const BulkExportJob = (await import('../models/BulkExportJob')).default;
     const job = await BulkExportJob.findByPk(jobId);
+
     if (!job) {
+      logger.warn(`[BULK DOWNLOAD] jobId=${jobId} not found`);
       return res.status(404).json({ success: false, error: 'Export job not found.' });
     }
 
+    logger.info(`[BULK DOWNLOAD] jobId=${job.id} status=${job.status} zipKey=${job.zipObjectKey} zipSize=${job.zipSize}`);
+
     if (!['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(job.status)) {
+      logger.warn(`[BULK DOWNLOAD] job not completed: status=${job.status}`);
       return res.status(400).json({ success: false, error: `Export package is not ready. Current status: ${job.status}` });
     }
 
     if (!job.zipObjectKey) {
+      logger.error(`[BULK DOWNLOAD] job.zipObjectKey is missing`);
       return res.status(404).json({ success: false, error: 'Export file key is missing or expired.' });
     }
 
+    // Retrieve object metadata from R2
+    let r2Size = 0;
+    try {
+      const head = await r2.headFile(job.zipObjectKey);
+      r2Size = Number(head.ContentLength || 0);
+    } catch (headErr: any) {
+      logger.warn(`[BULK DOWNLOAD] headFile notice: ${headErr.message}`);
+    }
+
+    // Retrieve file buffer from R2
     const buffer = await r2.getFile(job.zipObjectKey);
+    logger.info(`[BULK DOWNLOAD] r2Size=${r2Size} bufferSize=${buffer.length}`);
+
+    // Validate ZIP magic bytes
+    const isMagicValid = (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b);
+    logger.info(`[BULK DOWNLOAD] ZIP validation: magic=${isMagicValid}, bufferSize=${buffer.length}`);
+
+    if (!isMagicValid || buffer.length === 0) {
+      logger.error(`[BULK DOWNLOAD] Stored ZIP buffer is invalid or empty`);
+      return res.status(500).json({ success: false, error: 'Stored ZIP archive failed integrity check.' });
+    }
+
     const filename = `VTU_Documents_${job.academicYear.replace(/\s+/g, '_')}_${job.branchId}.zip`;
 
+    res.status(200);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', String(buffer.length));
-    res.setHeader('Cache-Control', 'no-transform, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'no-transform, no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-No-Compression', '1');
     res.setHeader('x-no-compression', '1');
 
-    return res.send(buffer);
-  } catch (err) {
+    res.on('finish', () => {
+      logger.info(`[BULK DOWNLOAD] response completed successfully for job ${jobId} (${buffer.length} bytes sent)`);
+    });
+    res.on('close', () => {
+      logger.info(`[BULK DOWNLOAD] response connection closed for job ${jobId}`);
+    });
+    res.on('error', (resErr) => {
+      logger.error(`[BULK DOWNLOAD] response error for job ${jobId}:`, resErr);
+    });
+
+    logger.info(`[BULK DOWNLOAD] starting response for job ${jobId}`);
+    return res.end(buffer);
+  } catch (err: any) {
+    logger.error(`[BULK DOWNLOAD] response error: ${err.message}`, err);
     return next(err);
   }
 };

@@ -170,44 +170,103 @@ export const BulkDocumentExportPage: React.FC = () => {
     setDownloadingFile(true);
     const toastId = toast.loading('Preparing secure ZIP package download...');
     try {
-      // 1. Fetch metadata and direct streaming binary endpoint
+      // 1. Fetch metadata and signed download URL
       const metaRes = await API.get(`/admin/documents/bulk-export/${jobId}/download`);
       const targetFilename = metaRes.data?.filename || `VTU_Documents_${academicYear}_${branchId}.zip`;
       const expectedSize = metaRes.data?.size || activeJob?.zipSize;
+      const downloadUrl = metaRes.data?.downloadUrl;
 
-      // 2. Fetch binary stream as blob directly from authenticated download-file endpoint
-      const fileRes = await API.get(`/admin/documents/bulk-export/${jobId}/download-file`, {
-        responseType: 'blob',
+      console.log('[BULK EXPORT DOWNLOAD INIT]', {
+        jobId,
+        targetFilename,
+        expectedSize,
+        hasDirectUrl: !!downloadUrl,
       });
 
-      const blob = new Blob([fileRes.data], { type: 'application/zip' });
+      // 2. Try direct authenticated stream fetch
+      try {
+        const fullRequestUrl = `${API.defaults.baseURL || ''}/admin/documents/bulk-export/${jobId}/download-file`;
+        console.log('[BULK EXPORT FETCHING]', { fullRequestUrl });
 
-      console.log('[BULK EXPORT FRONTEND DOWNLOAD]', {
-        downloadedSize: blob.size,
-        expectedSize: expectedSize,
-        contentType: fileRes.headers?.['content-type'],
-        contentLength: fileRes.headers?.['content-length'],
-      });
+        const fileRes = await API.get(`/admin/documents/bulk-export/${jobId}/download-file`, {
+          responseType: 'blob',
+          headers: {
+            Accept: 'application/zip, application/octet-stream',
+          },
+        });
 
-      if (blob.size === 0) {
-        throw new Error('Downloaded ZIP payload is empty.');
+        const blob = fileRes.data instanceof Blob ? fileRes.data : new Blob([fileRes.data], { type: 'application/zip' });
+
+        console.log('[BULK EXPORT FRONTEND DOWNLOAD SUCCESS]', {
+          downloadedSize: blob.size,
+          expectedSize,
+          contentType: fileRes.headers?.['content-type'],
+          contentLength: fileRes.headers?.['content-length'],
+        });
+
+        if (blob.size === 0) {
+          throw new Error('Downloaded ZIP payload is empty.');
+        }
+
+        toast.dismiss(toastId);
+        const objectUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.setAttribute('download', targetFilename);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(objectUrl);
+
+        toast.success(`Download started (${(blob.size / (1024 * 1024)).toFixed(1)} MB)!`);
+        return;
+      } catch (streamErr: any) {
+        console.warn('[BULK EXPORT STREAM FAILED, TRYING SIGNED URL FALLBACK]', streamErr);
+
+        // If backend returned JSON error inside Blob, extract it
+        if (streamErr.response?.data instanceof Blob) {
+          try {
+            const text = await streamErr.response.data.text();
+            const parsed = JSON.parse(text);
+            console.error('[BULK EXPORT BACKEND ERROR]', parsed);
+            if (parsed.error) {
+              toast.dismiss(toastId);
+              toast.error(parsed.error);
+              return;
+            }
+          } catch (e) {
+            // not json
+          }
+        }
+
+        // Fallback: If signed R2 download URL is available and not pseudo-view
+        if (downloadUrl && downloadUrl.startsWith('http')) {
+          console.log('[BULK EXPORT USING SIGNED URL]', downloadUrl);
+          toast.dismiss(toastId);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.setAttribute('download', targetFilename);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          toast.success('Download started via direct storage link!');
+          return;
+        }
+
+        throw streamErr;
       }
-
-      toast.dismiss(toastId);
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.setAttribute('download', targetFilename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(objectUrl);
-
-      toast.success(`Download started (${(blob.size / (1024 * 1024)).toFixed(1)} MB)!`);
     } catch (err: any) {
       console.error('Download failure:', err);
       toast.dismiss(toastId);
-      toast.error(err.response?.data?.error || err.message || 'Failed to download ZIP archive.');
+
+      let errorMessage = 'Failed to download ZIP archive.';
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      toast.error(errorMessage);
     } finally {
       setDownloadingFile(false);
     }
