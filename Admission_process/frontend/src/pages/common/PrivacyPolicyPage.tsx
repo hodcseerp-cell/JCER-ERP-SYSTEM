@@ -186,7 +186,7 @@ const PrivacyPolicyPage: React.FC = () => {
           If you have questions, concerns, or grievances regarding your data privacy, or if you wish to request a correction of your profile records, you may submit a formal request to the designated privacy desk at:
         </p>
         <p className="font-mono bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border text-center text-indigo-600 dark:text-indigo-400">
-          +919980979654
+        support.collegeerp@gmail.com
         </p>
         <p>
           For general technical inquiries, form correction status, or support assistance, please visit the <Link to="/support" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Admission Support Center</Link>.
@@ -208,7 +208,7 @@ const PrivacyPolicyPage: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border space-y-1">
           <p className="font-bold">Jain College of Engineering & Research</p>
           <p className="text-slate-500 dark:text-slate-400">Industrial Estate, Udyambag, Belagavi, Karnataka - 590008</p>
-          <p>Email: <span className="font-semibold text-indigo-600 dark:text-indigo-400">Principal@jcer.in</span></p>
+          <p>Email: <span className="font-semibold text-indigo-600 dark:text-indigo-400">support.collegeerp@gmail.com</span></p>
         </div>
       </section>
     </LegalPageLayout>

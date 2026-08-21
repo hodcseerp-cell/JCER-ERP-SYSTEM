@@ -76,6 +76,7 @@ export const getDashboardData = async (
         pendingAdmissions,
         alertsToday,
         studentCount,
+        enrolledCount,
         teacherCount,
         hodCount,
         principalCount,
@@ -87,6 +88,7 @@ export const getDashboardData = async (
         Admission.count({ where: { applicationStatus: { [Op.in]: ['SUBMITTED', 'UNDER_REVIEW'] } }, transaction }).catch(e => { console.error('Error counting pending admissions:', e); return 0; }),
         AuditLog.count({ where: { action: 'LOGIN_FAILED', createdAt: { [Op.gte]: today } }, transaction }).catch(e => { console.error('Error counting alerts today:', e); return 0; }),
         User.count({ where: { role: 'STUDENT' }, transaction }).catch(e => { console.error('Error counting students:', e); return 0; }),
+        Admission.count({ where: { applicationStatus: 'ENROLLED' }, transaction }).catch(e => { console.error('Error counting enrolled students:', e); return 0; }),
         User.count({ where: { role: 'TEACHER' }, transaction }).catch(e => { console.error('Error counting teachers:', e); return 0; }),
         User.count({ where: { role: 'HOD' }, transaction }).catch(e => { console.error('Error counting HODs:', e); return 0; }),
         User.count({ where: { role: { [Op.in]: ['SUPER_ADMIN', 'ADMIN'] } }, transaction }).catch(e => { console.error('Error counting principals:', e); return 0; }),
@@ -131,6 +133,7 @@ export const getDashboardData = async (
           },
           moduleCounts: {
             students: studentCount,
+            enrolledStudents: enrolledCount,
             teachers: teacherCount,
             hods: hodCount,
             principals: principalCount,

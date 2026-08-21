@@ -119,7 +119,7 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { name: 'Applicants', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.students ?? 0} Total`, icon: Users, color: '#3b82f6' },
-          { name: 'Students', path: '/admin/students', count: `${data?.moduleCounts?.students ?? 0} Enrolled`, icon: GraduationCap, color: '#10b981' },
+          { name: 'Students', path: '/admin/students', count: `${data?.moduleCounts?.enrolledStudents ?? 0} Enrolled`, icon: GraduationCap, color: '#10b981' },
           { name: 'Admissions', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.admissions ?? 0} New`, icon: ClipboardList, color: '#f43f5e' },
         ].map(mod => {
           const Icon = mod.icon;

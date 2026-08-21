@@ -79,6 +79,7 @@ export interface DashboardData {
   };
   moduleCounts: {
     students: number;
+    enrolledStudents?: number;
     teachers: number;
     hods: number;
     principals: number;
