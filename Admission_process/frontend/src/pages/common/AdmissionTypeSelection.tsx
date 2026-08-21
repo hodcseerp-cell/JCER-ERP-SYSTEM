@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, GraduationCap, School, Layers, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, GraduationCap, School, Layers } from 'lucide-react';
 import GlobalFooter from '../../components/common/GlobalFooter';
 
 interface PublicConfig {
@@ -27,7 +27,7 @@ export const AdmissionTypeSelection: React.FC = () => {
     provisionalAdmission7Open: false,
   });
 
-  const [isDark, setIsDark] = useState<boolean>(() => {
+  const [isDark] = useState<boolean>(() => {
     return document.documentElement.classList.contains('dark') ||
       localStorage.getItem('theme') === 'dark';
   });
@@ -42,18 +42,6 @@ export const AdmissionTypeSelection: React.FC = () => {
       })
       .catch((err) => console.warn('Could not load config', err));
   }, []);
-
-  const toggleTheme = () => {
-    if (isDark) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDark(false);
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDark(true);
-    }
-  };
 
   const handleSelectType = (type: 'fresh' | 'lateral' | 'provisional') => {
     if (type === 'fresh') {
@@ -95,13 +83,6 @@ export const AdmissionTypeSelection: React.FC = () => {
               </p>
             </div>
           </div>
-
-          <button
-            onClick={toggleTheme}
-            className={`p-2 rounded-full border transition-all ${isDark ? 'bg-slate-800 border-slate-700 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
         </div>
       </header>
 

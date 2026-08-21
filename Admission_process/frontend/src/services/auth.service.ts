@@ -1,4 +1,5 @@
 import API from './api';
+import { activityHeartbeat } from './activityHeartbeat';
 
 export interface UserSession {
   id: string;
@@ -32,6 +33,7 @@ class AuthService {
       const { token, user } = response.data.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      activityHeartbeat.start();
     }
     return response.data;
   }
@@ -41,6 +43,7 @@ class AuthService {
     const { token, user } = response.data.data;
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
+    activityHeartbeat.start();
     return user;
   }
 
@@ -77,11 +80,13 @@ class AuthService {
     const { token, user } = response.data.data;
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
+    activityHeartbeat.start();
     return user;
   }
 
   async logout(): Promise<void> {
     try {
+      activityHeartbeat.stop();
       await API.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);

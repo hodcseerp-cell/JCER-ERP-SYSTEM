@@ -81,47 +81,54 @@ API.interceptors.response.use(
 
     if (
       error.response &&
-      error.response.status === 401 &&
-      originalRequest &&
-      !originalRequest._retry
+      error.response.status === 401
     ) {
-      // Don't refresh for login/register/status
-      if (
-        originalRequest.url?.includes('/auth/login') ||
-        originalRequest.url?.includes('/auth/register') ||
-        originalRequest.url?.includes('/auth/status')
-      ) {
+      // If session expired due to inactivity, force logout immediately with inactive reason
+      if (error.response.data?.code === 'SESSION_INACTIVE') {
+        forceLogout(true, 'inactive');
         return Promise.reject(error);
       }
 
-      // Refresh endpoint itself failed
-      if (originalRequest.url?.includes('/auth/refresh-token')) {
-        forceLogout(true);
-        return Promise.reject(error);
-      }
+      if (originalRequest && !originalRequest._retry) {
+        // Don't refresh for login/register/status/activity
+        if (
+          originalRequest.url?.includes('/auth/login') ||
+          originalRequest.url?.includes('/auth/register') ||
+          originalRequest.url?.includes('/auth/status') ||
+          originalRequest.url?.includes('/auth/activity')
+        ) {
+          return Promise.reject(error);
+        }
 
-      originalRequest._retry = true;
+        // Refresh endpoint itself failed
+        if (originalRequest.url?.includes('/auth/refresh-token')) {
+          forceLogout(true);
+          return Promise.reject(error);
+        }
 
-      try {
-        const refreshResponse = await axios.post(
-          `${baseURL}/auth/refresh-token`,
-          {},
-          {
-            withCredentials: true,
-          }
-        );
+        originalRequest._retry = true;
 
-        const { token, user } = refreshResponse.data.data;
+        try {
+          const refreshResponse = await axios.post(
+            `${baseURL}/auth/refresh-token`,
+            {},
+            {
+              withCredentials: true,
+            }
+          );
 
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
+          const { token, user } = refreshResponse.data.data;
 
-        originalRequest.headers.Authorization = `Bearer ${token}`;
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
 
-        return API(originalRequest);
-      } catch (refreshError) {
-        forceLogout(true);
-        return Promise.reject(refreshError);
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+
+          return API(originalRequest);
+        } catch (refreshError) {
+          forceLogout(true);
+          return Promise.reject(refreshError);
+        }
       }
     }
 

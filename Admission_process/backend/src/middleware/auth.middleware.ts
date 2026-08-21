@@ -5,6 +5,7 @@ import redisService from '../services/redis.service';
 import logger from '../utils/logger.util';
 import { UnauthorizedError } from '../utils/error.util';
 import { contextStorage } from '../utils/context.util';
+import { STUDENT_INACTIVITY_TIMEOUT_MINUTES } from '../constants/activity.constants';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -53,6 +54,29 @@ export const authMiddleware = async (
 
     if (typeof decoded.tv === 'number' && decoded.tv !== user.tokenVersion) {
       throw new UnauthorizedError('Session invalidated due to password or permission change. Please log in again.');
+    }
+
+    // 3. Student-Only Inactivity Check (1 hour auto-logout)
+    // ADMIN, PRINCIPAL, and staff roles are exempt
+    if (user.role === 'STUDENT' && user.lastActivityAt) {
+      const inactivityMs = Date.now() - new Date(user.lastActivityAt).getTime();
+      const maxInactivityMs = STUDENT_INACTIVITY_TIMEOUT_MINUTES * 60 * 1000;
+      if (inactivityMs >= maxInactivityMs) {
+        logger.warn(`SESSION_INACTIVE: Student ${user.email} session expired due to inactivity (${Math.round(inactivityMs / 60000)}m).`);
+        return res.status(401).json({
+          code: 'SESSION_INACTIVE',
+          error: 'Your session expired due to inactivity. Please log in again.',
+          message: 'Your session expired due to inactivity. Please log in again.',
+        });
+      }
+    }
+
+    // 4. Throttle updating lastActivityAt (at most once every 60 seconds)
+    const now = new Date();
+    if (!user.lastActivityAt || (now.getTime() - new Date(user.lastActivityAt).getTime() > 60 * 1000)) {
+      User.update({ lastActivityAt: now }, { where: { id: user.id }, silent: true }).catch(err => {
+        logger.error(`Failed to update lastActivityAt for user ${user.id}: ${err.message}`);
+      });
     }
 
     // Attach verified user payload to the request object

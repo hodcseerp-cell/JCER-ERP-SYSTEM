@@ -14,6 +14,7 @@ import securityEvents from '../services/securityEvents.service';
 import db from '../config/database';
 import AnalyticsService from '../services/analytics.service';
 import * as r2 from '../services/r2.service';
+import { ACTIVE_USER_WINDOW_MINUTES } from '../constants/activity.constants';
 
 interface AuthRequest extends Request {
   user?: { id: string; role: string };
@@ -31,6 +32,32 @@ export const getStats = async (
   }
 };
 
+/** GET /api/admin/user-stats — Real-time user statistics */
+export const getUserStats = async (
+  _req: AuthRequest, res: Response, next: NextFunction
+): Promise<any> => {
+  try {
+    const activeThreshold = new Date(Date.now() - ACTIVE_USER_WINDOW_MINUTES * 60 * 1000);
+
+    const [totalUsers, activeUsers] = await Promise.all([
+      User.count(),
+      User.count({
+        where: {
+          lastActivityAt: { [Op.gte]: activeThreshold }
+        }
+      })
+    ]);
+
+    return res.json({
+      success: true,
+      totalUsers,
+      activeUsers
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 /** GET /api/admin/dashboard — Real-time dashboard full data */
 export const getDashboardData = async (
   _req: AuthRequest, res: Response, next: NextFunction
@@ -38,6 +65,8 @@ export const getDashboardData = async (
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    const activeThreshold = new Date(Date.now() - ACTIVE_USER_WINDOW_MINUTES * 60 * 1000);
 
     const transaction = await db.transaction({ readOnly: true });
     try {
@@ -54,7 +83,7 @@ export const getDashboardData = async (
         recentLogs
       ] = await Promise.all([
         User.count({ transaction }).catch(e => { console.error('Error counting total users:', e); return 0; }),
-        User.count({ where: { status: 'ACTIVE' }, transaction }).catch(e => { console.error('Error counting active users:', e); return 0; }),
+        User.count({ where: { lastActivityAt: { [Op.gte]: activeThreshold } }, transaction }).catch(e => { console.error('Error counting active users:', e); return 0; }),
         Admission.count({ where: { applicationStatus: { [Op.in]: ['SUBMITTED', 'UNDER_REVIEW'] } }, transaction }).catch(e => { console.error('Error counting pending admissions:', e); return 0; }),
         AuditLog.count({ where: { action: 'LOGIN_FAILED', createdAt: { [Op.gte]: today } }, transaction }).catch(e => { console.error('Error counting alerts today:', e); return 0; }),
         User.count({ where: { role: 'STUDENT' }, transaction }).catch(e => { console.error('Error counting students:', e); return 0; }),

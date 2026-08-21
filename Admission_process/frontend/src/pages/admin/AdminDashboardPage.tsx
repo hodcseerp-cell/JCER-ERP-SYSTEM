@@ -23,11 +23,25 @@ export const AdminDashboardPage: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchDashboard = (isInitial = false) => {
+    if (isInitial) setLoading(true);
     officeService.getDashboardData()
       .then(res => setData(res))
       .catch(err => console.error('Failed to load dashboard data:', err))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isInitial) setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchDashboard(true);
+
+    // Auto-refresh stats every 30 seconds
+    const interval = setInterval(() => {
+      fetchDashboard(false);
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -42,6 +56,7 @@ export const AdminDashboardPage: React.FC = () => {
               <h3 className="text-3xl font-extrabold text-neutral-900 dark:text-white mt-1">
                 {loading ? '...' : (data?.quickStats?.totalUsers ?? 0)}
               </h3>
+              <p className="text-[10px] font-semibold text-neutral-400 mt-1">Registered Accounts</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <Users size={20} />
@@ -56,6 +71,10 @@ export const AdminDashboardPage: React.FC = () => {
               <h3 className="text-3xl font-extrabold text-neutral-900 dark:text-white mt-1">
                 {loading ? '...' : (data?.quickStats?.activeUsers ?? 0)}
               </h3>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Currently active</p>
+              </div>
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Activity size={20} />

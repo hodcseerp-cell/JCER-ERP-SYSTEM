@@ -42,7 +42,11 @@ export const LoginPage: React.FC = () => {
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('expired') === 'true') {
-      setToast({ type: 'error', message: 'Session expired. Please log in again.' });
+      const isInactive = params.get('reason') === 'inactive';
+      const msg = isInactive
+        ? 'Your session expired due to 1 hour of inactivity. Please log in again.'
+        : 'Session expired. Please log in again.';
+      setToast({ type: 'error', message: msg });
       navigate(location.pathname, { replace: true });
     }
   }, [location, navigate]);

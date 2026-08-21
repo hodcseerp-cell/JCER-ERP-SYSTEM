@@ -40,7 +40,11 @@ const Login = () => {
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get('expired') === 'true') {
-            toast.error('Session expired. Please log in again.', { id: 'session-expired-toast' });
+            const isInactive = params.get('reason') === 'inactive';
+            const msg = isInactive
+                ? 'Your session expired due to 1 hour of inactivity. Please log in again.'
+                : 'Session expired. Please log in again.';
+            toast.error(msg, { id: 'session-expired-toast' });
             navigate(location.pathname, { replace: true });
         }
     }, [location, navigate]);

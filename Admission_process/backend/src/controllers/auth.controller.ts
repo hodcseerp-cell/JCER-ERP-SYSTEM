@@ -125,8 +125,10 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     // Generate tokens and store session via AuthService
     const { accessToken, refreshToken } = await authService.generateTokens(user);
 
-    // Set refresh token in httpOnly cookie
-    res.cookie('refreshToken', refreshToken, cookieOptions);
+    // Update lastActivityAt immediately on successful login
+    const now = new Date();
+    await User.update({ lastActivityAt: now }, { where: { id: user.id }, silent: true });
+    user.lastActivityAt = now;
 
     // Audit Success
     securityEvents.loginSuccess(req, { id: user.id, role: user.role, email: user.email });
@@ -266,6 +268,11 @@ export const verifyDailyOtp = async (req: Request, res: Response, next: NextFunc
     // Generate tokens and store session via AuthService
     const { accessToken, refreshToken } = await authService.generateTokens(user);
     res.cookie('refreshToken', refreshToken, cookieOptions);
+
+    // Update lastActivityAt immediately on successful daily OTP verification
+    const now = new Date();
+    await User.update({ lastActivityAt: now }, { where: { id: user.id }, silent: true });
+    user.lastActivityAt = now;
 
     securityEvents.loginSuccess(req, { id: user.id, role: user.role, email: user.email });
     logger.info(`DAILY_OTP_SUCCESS: Daily login verified for ${user.email} (${user.role})`);
@@ -851,3 +858,27 @@ export const verifyEmailChange = async (req: Request, res: Response, next: NextF
     return next(error);
   }
 };
+
+/**
+ * POST /api/auth/activity
+ * Authenticated heartbeat / activity recording endpoint
+ */
+export const recordActivity = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Access denied. Unauthorized.' });
+    }
+
+    const now = new Date();
+    await User.update({ lastActivityAt: now }, { where: { id: userId }, silent: true });
+
+    return res.status(200).json({
+      success: true,
+      lastActivityAt: now,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+

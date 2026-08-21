@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { UserSession } from '../services/auth.service';
+import { activityHeartbeat } from '../services/activityHeartbeat';
 
 interface AuthState {
   user: UserSession | null;
@@ -45,6 +46,11 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.error = null;
+      try {
+        activityHeartbeat.start();
+      } catch {
+        // ignore
+      }
     },
     loginFailure(state, action: PayloadAction<string>) {
       state.loading = false;
@@ -52,12 +58,22 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.error = action.payload;
+      try {
+        activityHeartbeat.stop();
+      } catch {
+        // ignore
+      }
     },
     logout(state) {
       state.isAuthenticated = false;
       state.user = null;
       state.token = null;
       state.error = null;
+      try {
+        activityHeartbeat.stop();
+      } catch {
+        // ignore
+      }
     },
     updateUser(state, action: PayloadAction<Partial<UserSession>>) {
       if (state.user) {

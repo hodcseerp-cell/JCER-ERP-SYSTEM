@@ -23,6 +23,7 @@ class User extends Model {
   public tokenVersion!: number;
   public mustChangePassword!: boolean;
   public registrationType!: 'FRESH' | 'LATERAL_ENTRY' | null;
+  public lastActivityAt!: Date | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -130,6 +131,10 @@ User.init(
       allowNull: true,
       defaultValue: 'FRESH',
     },
+    lastActivityAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     sequelize: db,
@@ -138,6 +143,7 @@ User.init(
     indexes: [
       { fields: ['email'] },
       { fields: ['role'] },
+      { fields: ['lastActivityAt'] },
     ],
     hooks: {
       beforeSave: async (user: User) => {

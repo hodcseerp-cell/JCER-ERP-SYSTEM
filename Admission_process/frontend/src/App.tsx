@@ -8,6 +8,7 @@ import { store, RootState } from './store';
 import API from './services/api';
 import { loginSuccess } from './store/authSlice';
 import { forceLogout } from './utils/auth.utils';
+import { activityHeartbeat } from './services/activityHeartbeat';
 
 // ─── Shared Layouts ───────────────────────────────────────────────────────────
 import ProtectedLayout from './components/layout/ProtectedLayout';
@@ -121,6 +122,7 @@ const AuthBootstrap: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           const res = await API.get('/auth/status');
           if (res.data.success) {
             dispatch(loginSuccess({ user: res.data.data.user, token }));
+            activityHeartbeat.start();
           } else {
             localStorage.removeItem('token');
             localStorage.removeItem('user');

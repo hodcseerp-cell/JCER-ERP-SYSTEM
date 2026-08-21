@@ -36,7 +36,7 @@ const AuthLayout = () => {
                         onClick={() => {
                             localStorage.removeItem('token');
                             localStorage.removeItem('user');
-                            window.location.href = '/';
+                            window.location.href = '/admission/type';
                         }}
                         className="flex items-center gap-2 px-3.5 py-1.5 sm:py-2 rounded-xl bg-white/90 backdrop-blur-md hover:bg-white border border-slate-200/80 hover:border-primary-400 text-slate-800 hover:text-primary-600 font-bold text-xs transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105 cursor-pointer"
                     >

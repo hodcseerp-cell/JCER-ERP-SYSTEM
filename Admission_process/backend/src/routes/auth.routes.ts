@@ -29,6 +29,7 @@ const avatarUpload = multer({
 });
 
 // Authenticated Endpoints
+router.post('/activity', authMiddleware, authController.recordActivity);
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/status', authMiddleware, authController.status);
 router.post('/change-password', authMiddleware, authController.changePassword);

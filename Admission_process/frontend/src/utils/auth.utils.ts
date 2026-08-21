@@ -1,8 +1,15 @@
+import { activityHeartbeat } from '../services/activityHeartbeat';
+
 let loggingOut = false;
 
-export const forceLogout = (expired: boolean = false): void => {
+export const forceLogout = (expired: boolean = false, reason?: string): void => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  try {
+    activityHeartbeat.stop();
+  } catch {
+    // ignore
+  }
 
   const currentPath = window.location.pathname;
 
@@ -29,6 +36,9 @@ export const forceLogout = (expired: boolean = false): void => {
   const isAdmissionPath = currentPath.startsWith('/admission');
   const targetLogin = isAdmissionPath ? '/admission/login' : '/login';
 
-  const targetUrl = expired ? `${targetLogin}?expired=true` : targetLogin;
-  window.location.replace(targetUrl);
+  let query = '';
+  if (expired) {
+    query = reason ? `?expired=true&reason=${encodeURIComponent(reason)}` : '?expired=true';
+  }
+  window.location.replace(`${targetLogin}${query}`);
 };

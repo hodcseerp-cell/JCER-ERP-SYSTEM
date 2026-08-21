@@ -94,6 +94,15 @@ export interface DashboardData {
 }
 
 const officeService = {
+  // User Stats
+  getUserStats: async (): Promise<{ totalUsers: number; activeUsers: number }> => {
+    const res = await API.get('/admin/user-stats');
+    return {
+      totalUsers: res.data.totalUsers ?? 0,
+      activeUsers: res.data.activeUsers ?? 0,
+    };
+  },
+
   // HODs
   getHODs: async (): Promise<HOD[]> => {
     const res = await API.get('/admin/hods');

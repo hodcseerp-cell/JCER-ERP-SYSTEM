@@ -303,6 +303,30 @@ async function startServer() {
       console.warn('Pre-cast migration for admissions correction workflow columns skipped:', e.message);
     }
 
+    // Pre-cast: ensure users.lastActivityAt column and index exist
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'users' AND column_name = 'lastActivityAt'
+          ) THEN
+            ALTER TABLE "users" ADD COLUMN "lastActivityAt" TIMESTAMP WITH TIME ZONE;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE tablename = 'users' AND indexname = 'idx_users_last_activity_at'
+          ) THEN
+            CREATE INDEX "idx_users_last_activity_at" ON "users" ("lastActivityAt");
+          END IF;
+        END
+        $$;
+      `);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for users.lastActivityAt skipped:', e.message);
+    }
+
     // Provisional Admission and system settings column alterations
     try {
       await sequelize.query(`

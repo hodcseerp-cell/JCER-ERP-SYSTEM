@@ -17,6 +17,7 @@ router.use(authorizeRoles('ADMIN', 'SUPER_ADMIN'));
 
 // Dashboard & Stats
 router.get('/dashboard', adminController.getDashboardData);
+router.get('/user-stats', adminController.getUserStats);
 router.get('/stats', adminController.getStats);
 router.get('/analytics', adminController.getAnalyticsData);
 router.get('/profile', adminController.getProfile);
