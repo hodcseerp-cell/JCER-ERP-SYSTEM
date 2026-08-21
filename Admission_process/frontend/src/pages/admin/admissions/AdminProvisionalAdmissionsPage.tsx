@@ -26,6 +26,14 @@ import {
   Phone
 } from 'lucide-react';
 
+const getOrdinal = (n: number | string): string => {
+  const num = Number(n);
+  if (isNaN(num)) return `${n}`;
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = num % 100;
+  return num + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 export const AdminProvisionalAdmissionsPage: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -769,15 +777,7 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
             <table className="w-full text-left text-xs font-medium border-collapse">
               <thead>
                 <tr className="bg-black border-b border-slate-800 text-white">
-                  <th className="p-4 w-12 text-center">
-                    <button onClick={toggleSelectAll} className="text-slate-400 hover:text-white transition-colors">
-                      {selectedIds.length === applications.filter(a => ['SUBMITTED', 'RESUBMITTED', 'UNDER_REVIEW'].includes(a.status)).length && selectedIds.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-400" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                  </th>
+                  <th className="p-4 w-14 text-center font-black uppercase tracking-wider text-white">SL NO.</th>
                   <th className="p-4 font-black uppercase tracking-wider text-white">PA Number</th>
                   <th className="p-4 font-black uppercase tracking-wider text-white">Student</th>
                   <th className="p-4 font-black uppercase tracking-wider text-white">USN</th>
@@ -788,25 +788,16 @@ export const AdminProvisionalAdmissionsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {applications.map(app => {
-                  const isSelectable = ['SUBMITTED', 'RESUBMITTED', 'UNDER_REVIEW'].includes(app.status);
+                {applications.map((app, idx) => {
                   return (
                     <tr key={app.id} className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                      <td className="p-4 text-center">
-                        {isSelectable ? (
-                          <button onClick={() => toggleSelectRow(app.id)} className="text-slate-400 hover:text-slate-600">
-                            {selectedIds.includes(app.id) ? (
-                              <CheckSquare className="w-4 h-4 text-indigo-600" />
-                            ) : (
-                              <Square className="w-4 h-4" />
-                            )}
-                          </button>
-                        ) : null}
+                      <td className="p-4 text-center font-bold text-slate-500 dark:text-slate-400">
+                        {idx + 1}
                       </td>
                       <td className="p-4 font-bold font-mono text-indigo-650">{app.provisionalAdmissionNumber}</td>
                       <td className="p-4 font-bold">{app.studentNameSnapshot}</td>
-                      <td className="p-4 font-mono font-bold text-slate-600 dark:text-slate-350 uppercase">{app.usnSnapshot}</td>
-                      <td className="p-4 font-bold text-center">{app.semester}th</td>
+                      <td className="p-4 font-mono font-bold text-slate-600 dark:text-slate-350 uppercase">{app.usnSnapshot || '—'}</td>
+                      <td className="p-4 font-bold text-center">{getOrdinal(app.semester)}</td>
                       <td className="p-4 font-semibold">{app.academicYear}</td>
                       <td className="p-4">
                         <span className={`px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider text-[10px] ${
