@@ -115,7 +115,7 @@ export const AdminDashboardPage: React.FC = () => {
       <h3 className="text-sm font-extrabold tracking-widest text-neutral-400 uppercase mt-8 mb-2">Module Quick Access</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { name: 'Applicants', path: '/admin/users/students', count: `${data?.moduleCounts?.students ?? 0} Total`, icon: Users, color: '#3b82f6' },
+          { name: 'Applicants', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.students ?? 0} Total`, icon: Users, color: '#3b82f6' },
           { name: 'Principals', path: '/admin/users/principals', count: `${data?.moduleCounts?.principals ?? 0} Total`, icon: Shield, color: '#eab308' },
           { name: 'Admissions', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.admissions ?? 0} New`, icon: ClipboardList, color: '#f43f5e' },
         ].map(mod => {
