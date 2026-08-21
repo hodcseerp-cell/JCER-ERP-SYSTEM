@@ -6,7 +6,8 @@ import {
   Users, ClipboardList, TrendingUp,
   CheckCircle2, XCircle, Clock, ChevronRight,
   Megaphone, Activity, AlertCircle, Send,
-  Shield, Download, Database, Server, Mail, HardDrive, KeyRound, UserPlus
+  Shield, Download, Database, Server, Mail, HardDrive, KeyRound, UserPlus,
+  GraduationCap
 } from 'lucide-react';
 
 const getActionIcon = (action: string) => {
@@ -49,7 +50,7 @@ export const AdminDashboardPage: React.FC = () => {
       
       {/* QUICK STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <div className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-blue-500">
+        <Link to="/admin/students" className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-blue-500 hover:scale-[1.02] transition-all cursor-pointer block">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs uppercase font-bold text-neutral-400">Total Users</p>
@@ -62,7 +63,7 @@ export const AdminDashboardPage: React.FC = () => {
               <Users size={20} />
             </div>
           </div>
-        </div>
+        </Link>
         
         <div className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-emerald-500">
           <div className="flex justify-between items-start">
@@ -82,33 +83,35 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-amber-500">
+        <Link to="/admin/admissions/queue" className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-amber-500 hover:scale-[1.02] transition-all cursor-pointer block">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs uppercase font-bold text-neutral-400">Pending Tasks</p>
               <h3 className="text-3xl font-extrabold text-neutral-900 dark:text-white mt-1">
                 {loading ? '...' : (data?.quickStats?.pendingTasks ?? 0)}
               </h3>
+              <p className="text-[10px] font-semibold text-amber-500 mt-1">Admissions Under Review</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
               <Clock size={20} />
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-rose-500">
+        <Link to="/admin/settings/logs" className="glass-panel rounded-2xl p-5 shadow-ambient border-l-4 border-l-rose-500 hover:scale-[1.02] transition-all cursor-pointer block">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs uppercase font-bold text-neutral-400">Alerts Today</p>
               <h3 className="text-3xl font-extrabold text-neutral-900 dark:text-white mt-1">
                 {loading ? '...' : (data?.quickStats?.alertsToday ?? 0)}
               </h3>
+              <p className="text-[10px] font-semibold text-rose-500 mt-1">Failed Logins & Security</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
               <AlertCircle size={20} />
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* MODULE QUICK ACCESS */}
@@ -116,7 +119,7 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { name: 'Applicants', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.students ?? 0} Total`, icon: Users, color: '#3b82f6' },
-          { name: 'Principals', path: '/admin/users/principals', count: `${data?.moduleCounts?.principals ?? 0} Total`, icon: Shield, color: '#eab308' },
+          { name: 'Students', path: '/admin/students', count: `${data?.moduleCounts?.students ?? 0} Enrolled`, icon: GraduationCap, color: '#10b981' },
           { name: 'Admissions', path: '/admin/admissions/queue', count: `${data?.moduleCounts?.admissions ?? 0} New`, icon: ClipboardList, color: '#f43f5e' },
         ].map(mod => {
           const Icon = mod.icon;
