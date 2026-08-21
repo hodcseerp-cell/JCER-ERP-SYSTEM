@@ -5,22 +5,30 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-let rawDbUrl = process.env.DATABASE_URL || 
-               process.env.DATABASE_PRIVATE_URL || 
-               process.env.DATABASE_PUBLIC_URL || 
-               process.env.POSTGRES_URL;
+const isProduction = process.env.NODE_ENV === 'production';
 
-if (rawDbUrl) {
-  rawDbUrl = rawDbUrl.trim().replace(/^["']|["']$/g, '');
-  // Guard against unexpanded Railway template strings
-  if (rawDbUrl.startsWith('${') || rawDbUrl.startsWith('$')) {
-    console.warn(`⚠️ Warning: DATABASE_URL contains unexpanded template: "${rawDbUrl}". Check Railway variable references.`);
-    rawDbUrl = undefined;
-  }
+// Safely sanitize string URLs (strip outer quotes, whitespace)
+function getSanitizedUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  const cleaned = url.trim().replace(/^["']|["']$/g, '');
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
-const dbUrl = rawDbUrl;
-const useSSL = process.env.DB_SSL === 'true' || (dbUrl ? dbUrl.includes('sslmode=require') : false);
+// 1. Highest Priority: DATABASE_URL (Standard Railway Postgres reference)
+// 2. Secondary Priority: DATABASE_PRIVATE_URL / DATABASE_PUBLIC_URL / POSTGRES_URL
+const databaseUrl =
+  getSanitizedUrl(process.env.DATABASE_URL) ||
+  getSanitizedUrl(process.env.DATABASE_PRIVATE_URL) ||
+  getSanitizedUrl(process.env.DATABASE_PUBLIC_URL) ||
+  getSanitizedUrl(process.env.POSTGRES_URL);
+
+let connectionSource = 'NONE';
+let resolvedHost = '';
+let resolvedDatabase = '';
+let sequelize: Sequelize;
+
+// SSL Detection
+const useSSL = process.env.DB_SSL === 'true' || (databaseUrl ? databaseUrl.includes('sslmode=require') : false);
 const dialectOptions = useSSL
   ? {
       ssl: {
@@ -30,53 +38,122 @@ const dialectOptions = useSSL
     }
   : {};
 
-const host = (process.env.PGHOST || process.env.DB_HOST || (process.env.NODE_ENV === 'production' ? '' : 'localhost')).trim().replace(/^["']|["']$/g, '');
-const port = parseInt((process.env.PGPORT || process.env.DB_PORT || '5432').trim().replace(/^["']|["']$/g, ''), 10);
-const dbName = (process.env.PGDATABASE || process.env.DB_NAME || process.env.POSTGRES_DB || 'college_erp_db').trim().replace(/^["']|["']$/g, '');
-const dbUser = (process.env.PGUSER || process.env.DB_USER || process.env.POSTGRES_USER || 'erp_user').trim().replace(/^["']|["']$/g, '');
-const dbPassword = (process.env.PGPASSWORD || process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123').trim().replace(/^["']|["']$/g, '');
+if (databaseUrl) {
+  if (getSanitizedUrl(process.env.DATABASE_URL)) {
+    connectionSource = 'DATABASE_URL';
+  } else if (getSanitizedUrl(process.env.DATABASE_PRIVATE_URL)) {
+    connectionSource = 'DATABASE_PRIVATE_URL';
+  } else if (getSanitizedUrl(process.env.DATABASE_PUBLIC_URL)) {
+    connectionSource = 'DATABASE_PUBLIC_URL';
+  } else {
+    connectionSource = 'POSTGRES_URL';
+  }
 
-const sequelize = dbUrl
-  ? new Sequelize(dbUrl, {
+  try {
+    const parsed = new URL(databaseUrl);
+    resolvedHost = parsed.hostname;
+    resolvedDatabase = parsed.pathname.replace(/^\//, '');
+  } catch {
+    resolvedHost = 'Railway PostgreSQL';
+    resolvedDatabase = 'Railway PostgreSQL database';
+  }
+
+  // Initialize Sequelize directly with the sanitized database URL
+  sequelize = new Sequelize(databaseUrl, {
+    dialect: 'postgres',
+    dialectOptions,
+    logging: !isProduction ? console.log : false,
+    pool: {
+      max: 50,
+      min: 5,
+      acquire: 30000,
+      idle: 10000,
+    },
+  });
+} else if (process.env.PGHOST || process.env.DB_HOST) {
+  // Discrete host/port/db variables (e.g. Docker Compose or direct parameters)
+  connectionSource = process.env.PGHOST ? 'PGHOST' : 'DB_HOST';
+  resolvedHost = (process.env.PGHOST || process.env.DB_HOST || '').trim().replace(/^["']|["']$/g, '');
+  const port = parseInt((process.env.PGPORT || process.env.DB_PORT || '5432').trim().replace(/^["']|["']$/g, ''), 10);
+  resolvedDatabase = (process.env.PGDATABASE || process.env.DB_NAME || process.env.POSTGRES_DB || 'college_erp_db').trim().replace(/^["']|["']$/g, '');
+  const user = (process.env.PGUSER || process.env.DB_USER || process.env.POSTGRES_USER || 'erp_user').trim().replace(/^["']|["']$/g, '');
+  const password = (process.env.PGPASSWORD || process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '').trim().replace(/^["']|["']$/g, '');
+
+  sequelize = new Sequelize(
+    resolvedDatabase,
+    user,
+    password,
+    {
+      host: resolvedHost,
+      port: port,
       dialect: 'postgres',
       dialectOptions,
-      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      logging: !isProduction ? console.log : false,
       pool: {
         max: 50,
         min: 5,
         acquire: 30000,
         idle: 10000,
       },
-    })
-  : new Sequelize(
-      dbName,
-      dbUser,
-      dbPassword,
-      {
-        host: host || 'localhost',
-        port: port || 5432,
-        dialect: 'postgres',
-        dialectOptions,
-        logging: process.env.NODE_ENV === 'development' ? console.log : false,
-        pool: {
-          max: 50,
-          min: 5,
-          acquire: 30000,
-          idle: 10000,
-        },
-      }
-    );
+    }
+  );
+} else if (!isProduction) {
+  // Local development fallback ONLY when NOT in production
+  connectionSource = 'LOCAL_DEV_FALLBACK';
+  resolvedHost = 'localhost';
+  resolvedDatabase = 'college_erp_db';
+
+  sequelize = new Sequelize(
+    resolvedDatabase,
+    'erp_user',
+    'erp_password_123',
+    {
+      host: resolvedHost,
+      port: 5432,
+      dialect: 'postgres',
+      dialectOptions,
+      logging: console.log,
+      pool: {
+        max: 50,
+        min: 5,
+        acquire: 30000,
+        idle: 10000,
+      },
+    }
+  );
+} else {
+  // In production, when DATABASE_URL is missing, fail immediately and clearly
+  connectionSource = 'MISSING';
+  resolvedHost = 'UNCONFIGURED';
+  resolvedDatabase = 'UNCONFIGURED';
+
+  sequelize = new Sequelize('postgres://unconfigured:unconfigured@unconfigured:5432/unconfigured', {
+    dialect: 'postgres',
+    logging: false,
+  });
+}
+
+/**
+ * Diagnostic logger called at startup in index.ts
+ */
+export function logDatabaseConfiguration(): void {
+  console.log('\n==================================================');
+  console.log('DATABASE CONFIGURATION:');
+  console.log(`- NODE_ENV:          ${process.env.NODE_ENV || 'development'}`);
+  console.log(`- Connection source: ${connectionSource}`);
+  console.log(`- Host:              ${resolvedHost || 'None'}`);
+  console.log(`- Database:          ${resolvedDatabase || 'None'}`);
+  console.log('==================================================\n');
+
+  if (isProduction && connectionSource === 'MISSING') {
+    console.error('❌ FATAL: DATABASE_URL is not configured for production.');
+    console.error('Please configure DATABASE_URL in your Railway service variables.');
+    throw new Error('DATABASE_URL is not configured for production.');
+  }
+}
 
 export function getSafeDatabaseTargetInfo(): string {
-  if (dbUrl) {
-    try {
-      const parsed = new URL(dbUrl);
-      return `${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace(/^\//, '')}`;
-    } catch {
-      return 'DATABASE_URL (remote)';
-    }
-  }
-  return `${host || 'localhost'}:${port || 5432}/${dbName}`;
+  return `${resolvedHost || 'unknown'}/${resolvedDatabase || 'unknown'}`;
 }
 
 // RLS Hook: SET session variables before executing query
