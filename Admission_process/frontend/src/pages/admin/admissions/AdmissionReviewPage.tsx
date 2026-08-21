@@ -911,7 +911,7 @@ export const AdmissionReviewPage: React.FC = () => {
       localStorage.removeItem(`rejection_reason_${app.id}`);
 
       if (status === 'APPROVED') {
-        toast.success('Application approved successfully. Student can now pay ₹500 Admission Processing Fee.');
+        toast.success('Application approved, forwarded to Principal.');
         navigate('/admin/admissions/queue');
       } else if (status === 'REJECTED') {
         toast.success('Application rejected and student has been notified.');
