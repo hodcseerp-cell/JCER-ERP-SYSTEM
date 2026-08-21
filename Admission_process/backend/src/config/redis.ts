@@ -33,11 +33,16 @@ const memoryClient = {
 let redisClient: any = memoryClient;
 
 if (process.env.NODE_ENV !== 'test') {
-  const host = process.env.REDIS_HOST || process.env.REDISHOST || '127.0.0.1';
-  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379';
-  const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD || '';
+  const host = (process.env.REDIS_HOST || process.env.REDISHOST || '127.0.0.1').trim().replace(/^["']|["']$/g, '');
+  const port = (process.env.REDIS_PORT || process.env.REDISPORT || '6379').trim().replace(/^["']|["']$/g, '');
+  const password = (process.env.REDIS_PASSWORD || process.env.REDISPASSWORD || '').trim().replace(/^["']|["']$/g, '');
   
-  const redisUrl = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL || process.env.REDIS_PUBLIC_URL || process.env.REDISURL || (
+  let rawRedisUrl = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL || process.env.REDIS_PUBLIC_URL || process.env.REDISURL;
+  if (rawRedisUrl) {
+    rawRedisUrl = rawRedisUrl.trim().replace(/^["']|["']$/g, '');
+  }
+
+  const redisUrl = rawRedisUrl || (
     password 
       ? `redis://:${password}@${host}:${port}` 
       : `redis://${host}:${port}`

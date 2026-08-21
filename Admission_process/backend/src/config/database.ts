@@ -5,7 +5,11 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_PUBLIC_URL;
+let rawDbUrl = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_PUBLIC_URL;
+if (rawDbUrl) {
+  rawDbUrl = rawDbUrl.trim().replace(/^["']|["']$/g, '');
+}
+const dbUrl = rawDbUrl;
 const useSSL = process.env.DB_SSL === 'true' || (dbUrl ? dbUrl.includes('sslmode=require') : false);
 const dialectOptions = useSSL
   ? {
