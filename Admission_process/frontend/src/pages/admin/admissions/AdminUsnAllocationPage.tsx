@@ -66,6 +66,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
 
   const [academicYear, setAcademicYear] = useState(getAcademicYear());
   const [branchId, setBranchId] = useState('ALL');
+  const [semester, setSemester] = useState('ALL');
   const [entryType, setEntryType] = useState('ALL');
   const [usnStatus, setUsnStatus] = useState('ALL');
   const [search, setSearch] = useState('');
@@ -149,6 +150,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
       const res = await admissionService.listUsnEligible({
         academicYear,
         branchId,
+        semester: semester !== 'ALL' ? semester : undefined,
         entryType,
         usnStatus,
         search: debouncedSearch,
@@ -168,7 +170,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
     } finally {
       setLoadingList(false);
     }
-  }, [academicYear, branchId, entryType, usnStatus, debouncedSearch, sortBy, sortOrder, page, limit]);
+  }, [academicYear, branchId, semester, entryType, usnStatus, debouncedSearch, sortBy, sortOrder, page, limit]);
 
   useEffect(() => {
     fetchSummary();
@@ -758,7 +760,8 @@ export const AdminUsnAllocationPage: React.FC = () => {
       }));
 
       const branchName = branchId !== 'ALL' ? branches.find(b => b.id === branchId)?.code || 'All' : 'All';
-      const fileName = `USN_Allocations_${branchName}_${entryType}_${academicYear}.xlsx`;
+      const semName = semester !== 'ALL' ? `Sem${semester}_` : '';
+      const fileName = `USN_Allocations_${branchName}_${semName}${entryType}_${academicYear}.xlsx`;
 
       await generateStyledExcelFile(
         'USN Allocations',
@@ -937,7 +940,7 @@ export const AdminUsnAllocationPage: React.FC = () => {
       {/* ── FILTER & SEARCH PANEL ── */}
       <div className="bg-white dark:bg-neutral-900 border border-neutral-200/50 dark:border-neutral-800 rounded-3xl p-5 shadow-sm space-y-4 select-none">
         <h4 className="text-[11px] font-black text-slate-800 dark:text-white uppercase tracking-wider">Filter Applicants</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           
           {/* Academic Year */}
           <div className="flex flex-col gap-1.5">
@@ -965,6 +968,26 @@ export const AdminUsnAllocationPage: React.FC = () => {
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
               ))}
+            </select>
+          </div>
+
+          {/* Semester */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase text-neutral-450 tracking-wider">Semester</label>
+            <select
+              value={semester}
+              onChange={(e) => handleFilterChange(setSemester, e.target.value)}
+              className="w-full text-xs font-semibold bg-neutral-50 dark:bg-neutral-955 border border-neutral-200/80 dark:border-neutral-800 rounded-xl px-3 py-2.5 outline-none focus:border-violet-500 transition-colors cursor-pointer"
+            >
+              <option value="ALL">All Semesters</option>
+              <option value="1">1st Sem</option>
+              <option value="2">2nd Sem</option>
+              <option value="3">3rd Sem</option>
+              <option value="4">4th Sem</option>
+              <option value="5">5th Sem</option>
+              <option value="6">6th Sem</option>
+              <option value="7">7th Sem</option>
+              <option value="8">8th Sem</option>
             </select>
           </div>
 

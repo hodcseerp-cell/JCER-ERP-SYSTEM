@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { Op } from 'sequelize';
+import { Op, Sequelize } from 'sequelize';
 import path from 'path';
 import fs from 'fs';
 import admissionService from '../services/admission.service';
@@ -641,6 +641,7 @@ export const listAdmissions = async (
     const {
       status,
       branchId,
+      semester,
       admissionType,
       search,
       sortBy,
@@ -658,6 +659,7 @@ export const listAdmissions = async (
     const result = await admissionService.listApplications({
       status,
       branchId,
+      semester,
       admissionType,
       search,
       sortBy,
@@ -1909,6 +1911,7 @@ export const listUsnEligibleApplicants = async (
     const {
       academicYear,
       branchId,
+      semester,
       entryType,
       usnStatus,
       search,
@@ -1938,6 +1941,45 @@ export const listUsnEligibleApplicants = async (
       where.branchId = branchId;
     }
 
+    // Filter by Semester
+    if (semester && semester !== 'ALL') {
+      const semNum = parseInt(semester);
+      if (semNum === 3) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: 3 },
+            { qualification: 'DIPLOMA' },
+            { admissionType: 'DCET' },
+            { applicationType: 'LATERAL_ENTRY' },
+          ]
+        });
+      } else if (semNum === 1) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: 1 },
+            {
+              [Op.and]: [
+                { entrySemester: { [Op.or]: [1, null] } },
+                { qualification: { [Op.or]: [{ [Op.ne]: 'DIPLOMA' }, { [Op.eq]: null }] } },
+                { admissionType: { [Op.or]: [{ [Op.ne]: 'DCET' }, { [Op.eq]: null }] } },
+                { applicationType: { [Op.or]: [{ [Op.ne]: 'LATERAL_ENTRY' }, { [Op.eq]: null }] } },
+              ]
+            }
+          ]
+        });
+      } else if (!isNaN(semNum)) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: semNum },
+            { '$user.student.semester$': semNum }
+          ]
+        });
+      }
+    }
+
     // Filter by Entry Type (Regular or Lateral)
     if (entryType && entryType !== 'ALL') {
       if (entryType === 'LATERAL') {
@@ -1965,15 +2007,39 @@ export const listUsnEligibleApplicants = async (
     // Universal Search
     if (search && search.trim() !== '') {
       const s = search.trim();
+      const tokens = s.split(/\s+/).filter(Boolean);
+
+      const searchOrs: any[] = [
+        { applicationNumber: { [Op.iLike]: `%${s}%` } },
+        { usn: { [Op.iLike]: `%${s}%` } },
+        { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${s}%` } },
+        { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } },
+        Sequelize.where(
+          Sequelize.fn('concat', Sequelize.col('studentpersonaldetails.firstName'), ' ', Sequelize.fn('coalesce', Sequelize.col('studentpersonaldetails.middleName'), ''), ' ', Sequelize.col('studentpersonaldetails.lastName')),
+          { [Op.iLike]: `%${s}%` }
+        ),
+        Sequelize.where(
+          Sequelize.fn('concat', Sequelize.col('studentpersonaldetails.firstName'), ' ', Sequelize.col('studentpersonaldetails.lastName')),
+          { [Op.iLike]: `%${s}%` }
+        ),
+      ];
+
+      if (tokens.length > 1) {
+        searchOrs.push({
+          [Op.and]: tokens.map(token => ({
+            [Op.or]: [
+              { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${token}%` } },
+              { '$studentpersonaldetails.middleName$': { [Op.iLike]: `%${token}%` } },
+              { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${token}%` } },
+              { applicationNumber: { [Op.iLike]: `%${token}%` } },
+              { usn: { [Op.iLike]: `%${token}%` } },
+            ]
+          }))
+        });
+      }
+
       where[Op.and] = where[Op.and] || [];
-      where[Op.and].push({
-        [Op.or]: [
-          { applicationNumber: { [Op.iLike]: `%${s}%` } },
-          { usn: { [Op.iLike]: `%${s}%` } },
-          { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${s}%` } },
-          { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } },
-        ],
-      });
+      where[Op.and].push({ [Op.or]: searchOrs });
     }
 
     // Alphabet filter
@@ -2006,7 +2072,14 @@ export const listUsnEligibleApplicants = async (
     const { count, rows } = await Admission.findAndCountAll({
       where,
       include: [
-        { model: User, as: 'user', attributes: ['id', 'email', 'firstName', 'lastName'] },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName'],
+          include: [
+            { model: Student, as: 'student', attributes: ['id', 'semester', 'enrollmentNumber', 'rollNumber'], required: false }
+          ]
+        },
         { model: Department, as: 'branch', attributes: ['id', 'name', 'code'] },
         { model: AdmissionPersonalDetail, as: 'studentpersonaldetails', attributes: ['firstName', 'middleName', 'lastName'] },
       ],

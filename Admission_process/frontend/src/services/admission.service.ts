@@ -232,6 +232,7 @@ const admissionService = {
   async listApplications(params: {
     status?: string;
     branchId?: string;
+    semester?: string;
     admissionType?: string;
     search?: string;
     sortBy?: string;
@@ -253,6 +254,7 @@ const admissionService = {
     if (params.status)   query.set('status',   params.status);
     if (params.search)   query.set('search',   params.search);
     if (params.branchId) query.set('branchId', params.branchId);
+    if (params.semester) query.set('semester', params.semester);
     if (params.admissionType) query.set('admissionType', params.admissionType);
     if (params.sortBy)    query.set('sortBy',    params.sortBy);
     if (params.sortOrder) query.set('sortOrder', params.sortOrder);
@@ -354,6 +356,7 @@ const admissionService = {
   async listUsnEligible(filters: {
     academicYear?: string;
     branchId?: string;
+    semester?: string;
     entryType?: string;
     usnStatus?: string;
     search?: string;

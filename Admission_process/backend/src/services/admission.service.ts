@@ -1,4 +1,4 @@
-import { Op, Transaction } from 'sequelize';
+import { Op, Sequelize, Transaction } from 'sequelize';
 import fs from 'fs';
 import path from 'path';
 import Admission from '../models/Admission';
@@ -883,6 +883,7 @@ class AdmissionService {
   async listApplications(filters: {
     status?: string;
     branchId?: string;
+    semester?: string;
     admissionType?: string;
     search?: string;
     sortBy?: string;
@@ -901,6 +902,7 @@ class AdmissionService {
     const {
       status,
       branchId,
+      semester,
       admissionType,
       search,
       sortBy,
@@ -946,6 +948,45 @@ class AdmissionService {
     if (admissionType && admissionType !== 'ALL') where.admissionType = admissionType;
     if (qualification && qualification !== 'ALL') where.qualification = qualification;
 
+    // Filter by Semester
+    if (semester && semester !== 'ALL') {
+      const semNum = parseInt(semester);
+      if (semNum === 3) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: 3 },
+            { qualification: 'DIPLOMA' },
+            { admissionType: 'DCET' },
+            { applicationType: 'LATERAL_ENTRY' },
+          ]
+        });
+      } else if (semNum === 1) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: 1 },
+            {
+              [Op.and]: [
+                { entrySemester: { [Op.or]: [1, null] } },
+                { qualification: { [Op.or]: [{ [Op.ne]: 'DIPLOMA' }, { [Op.eq]: null }] } },
+                { admissionType: { [Op.or]: [{ [Op.ne]: 'DCET' }, { [Op.eq]: null }] } },
+                { applicationType: { [Op.or]: [{ [Op.ne]: 'LATERAL_ENTRY' }, { [Op.eq]: null }] } },
+              ]
+            }
+          ]
+        });
+      } else if (!isNaN(semNum)) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { entrySemester: semNum },
+            { '$user.student.semester$': semNum }
+          ]
+        });
+      }
+    }
+
     // Academic Year filter
     if (academicYear && academicYear !== 'ALL') {
       const startYearMatch = academicYear.match(/\d{4}/);
@@ -976,7 +1017,9 @@ class AdmissionService {
     // Universal Search filter
     if (search && search.trim() !== '') {
       const s = search.trim();
-      where[Op.or] = [
+      const tokens = s.split(/\s+/).filter(Boolean);
+
+      const searchOrConditions: any[] = [
         { applicationNumber: { [Op.iLike]: `%${s}%` } },
         { aadhaar: { [Op.iLike]: `%${s}%` } },
         { '$user.firstName$': { [Op.iLike]: `%${s}%` } },
@@ -986,8 +1029,41 @@ class AdmissionService {
         { '$user.student.enrollmentNumber$': { [Op.iLike]: `%${s}%` } },
         { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${s}%` } },
         { '$studentpersonaldetails.middleName$': { [Op.iLike]: `%${s}%` } },
-        { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } }
+        { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${s}%` } },
+        Sequelize.where(
+          Sequelize.fn('concat', Sequelize.col('user.firstName'), ' ', Sequelize.col('user.lastName')),
+          { [Op.iLike]: `%${s}%` }
+        ),
+        Sequelize.where(
+          Sequelize.fn('concat', Sequelize.col('studentpersonaldetails.firstName'), ' ', Sequelize.fn('coalesce', Sequelize.col('studentpersonaldetails.middleName'), ''), ' ', Sequelize.col('studentpersonaldetails.lastName')),
+          { [Op.iLike]: `%${s}%` }
+        ),
+        Sequelize.where(
+          Sequelize.fn('concat', Sequelize.col('studentpersonaldetails.firstName'), ' ', Sequelize.col('studentpersonaldetails.lastName')),
+          { [Op.iLike]: `%${s}%` }
+        ),
       ];
+
+      // If multi-word search (e.g. "SWATI R MASTI"), match if all individual tokens are found across student fields
+      if (tokens.length > 1) {
+        searchOrConditions.push({
+          [Op.and]: tokens.map(token => ({
+            [Op.or]: [
+              { '$user.firstName$': { [Op.iLike]: `%${token}%` } },
+              { '$user.lastName$': { [Op.iLike]: `%${token}%` } },
+              { '$studentpersonaldetails.firstName$': { [Op.iLike]: `%${token}%` } },
+              { '$studentpersonaldetails.middleName$': { [Op.iLike]: `%${token}%` } },
+              { '$studentpersonaldetails.lastName$': { [Op.iLike]: `%${token}%` } },
+              { applicationNumber: { [Op.iLike]: `%${token}%` } },
+              { aadhaar: { [Op.iLike]: `%${token}%` } },
+              { '$user.email$': { [Op.iLike]: `%${token}%` } },
+              { '$user.phone$': { [Op.iLike]: `%${token}%` } },
+            ]
+          }))
+        });
+      }
+
+      where[Op.or] = searchOrConditions;
     }
 
     // Filters for personal details

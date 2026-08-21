@@ -84,6 +84,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const [search, setSearch] = useState('');
   const [academicYear, setAcademicYear] = useState('ALL');
   const [branchId, setBranchId] = useState('ALL');
+  const [semester, setSemester] = useState('ALL');
   const [status, setStatus] = useState('ENROLLED');
   const [admissionType, setAdmissionType] = useState('ALL');
   const [qualification, setQualification] = useState('ALL');
@@ -100,6 +101,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const [pendingSearch, setPendingSearch] = useState('');
   const [pendingAcademicYear, setPendingAcademicYear] = useState('ALL');
   const [pendingBranchId, setPendingBranchId] = useState('ALL');
+  const [pendingSemester, setPendingSemester] = useState('ALL');
   const [pendingStatus, setPendingStatus] = useState('ENROLLED');
   const [pendingAdmissionType, setPendingAdmissionType] = useState('ALL');
   const [pendingQualification, setPendingQualification] = useState('ALL');
@@ -217,6 +219,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         limit: 10,
         status: status === 'ALL' ? undefined : status,
         branchId: branchId === 'ALL' ? undefined : branchId,
+        semester: semester === 'ALL' ? undefined : semester,
         admissionType: admissionType === 'ALL' ? undefined : admissionType,
         qualification: qualification === 'ALL' ? undefined : qualification,
         gender: gender === 'ALL' ? undefined : gender,
@@ -266,9 +269,38 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   useEffect(() => {
     fetchStudentsList();
   }, [
-    page, status, branchId, admissionType, qualification, gender, category, 
-    district, startDate, endDate, sortBy, sortOrder, search
+    page, status, branchId, semester, admissionType, qualification, gender, category, 
+    district, startDate, endDate, sortBy, sortOrder, search, academicYear
   ]);
+
+  // Debounced auto-search as user types
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pendingSearch.trim() !== search) {
+        setSearch(pendingSearch.trim());
+        setPage(1);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [pendingSearch]);
+
+  const handleExecuteSearch = () => {
+    setSearch(pendingSearch.trim());
+    setAcademicYear(pendingAcademicYear);
+    setBranchId(pendingBranchId);
+    setSemester(pendingSemester);
+    setStatus(pendingStatus);
+    setAdmissionType(pendingAdmissionType);
+    setQualification(pendingQualification);
+    setGender(pendingGender);
+    setCategory(pendingCategory);
+    setDistrict(pendingDistrict);
+    setStartDate(pendingStartDate);
+    setEndDate(pendingEndDate);
+    setSortBy(pendingSortBy);
+    setSortOrder(pendingSortOrder);
+    setPage(1);
+  };
 
   const handleRefresh = () => {
     fetchStatsAndBranches();
@@ -505,7 +537,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         <div className="px-5 py-3.5 flex items-center gap-3 border-b border-neutral-100 dark:border-neutral-800">
           {/* Boxed search input */}
           <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-400 transition-all">
-            <Search className="shrink-0 text-neutral-400" size={15} />
+            <Search className="shrink-0 text-neutral-400" size={16} />
             <input
               type="text"
               placeholder="Search by name, application no., phone, email, Aadhaar, USN..."
@@ -513,41 +545,33 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               onChange={(e) => setPendingSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  setSearch(pendingSearch); setPendingAcademicYear(pendingAcademicYear);
-                  setAcademicYear(pendingAcademicYear); setBranchId(pendingBranchId);
-                  setStatus(pendingStatus); setAdmissionType(pendingAdmissionType);
-                  setQualification(pendingQualification); setGender(pendingGender);
-                  setCategory(pendingCategory); setDistrict(pendingDistrict);
-                  setStartDate(pendingStartDate); setEndDate(pendingEndDate);
-                  setSortBy(pendingSortBy); setSortOrder(pendingSortOrder); setPage(1);
+                  handleExecuteSearch();
                 }
               }}
               className="flex-1 bg-transparent text-sm text-neutral-800 dark:text-white placeholder:text-neutral-400 outline-none font-medium"
             />
             {pendingSearch && (
               <button
-                onClick={() => setPendingSearch('')}
-                className="shrink-0 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors text-xs font-bold"
+                type="button"
+                onClick={() => {
+                  setPendingSearch('');
+                  setSearch('');
+                  setPage(1);
+                }}
+                className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors text-xs font-bold cursor-pointer"
+                title="Clear search"
               >
                 ✕
               </button>
             )}
           </div>
           <button
-            onClick={() => setShowFilters(v => !v)}
-            className="shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 transition-colors"
+            type="button"
+            onClick={handleExecuteSearch}
+            className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
           >
-            {showFilters ? (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-                Hide Filters
-              </>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                Show Filters
-              </>
-            )}
+            <Search size={14} />
+            Search
           </button>
         </div>
 
