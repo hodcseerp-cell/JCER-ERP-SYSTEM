@@ -1,6 +1,6 @@
 // Trigger watch reload 
 import app from './app';
-import sequelize from './config/database';
+import sequelize, { getSafeDatabaseTargetInfo } from './config/database';
 import { initRedis } from './config/redis';
 
 const PORT = process.env.PORT || 5000;
@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   try {
     // 1. Authenticate PostgreSQL database connection
-    console.log('Connecting to PostgreSQL...');
+    console.log(`Connecting to PostgreSQL (${getSafeDatabaseTargetInfo()})...`);
     await sequelize.authenticate();
     console.log('PostgreSQL connected successfully.');
 

@@ -5,10 +5,20 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-let rawDbUrl = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_PUBLIC_URL;
+let rawDbUrl = process.env.DATABASE_URL || 
+               process.env.DATABASE_PRIVATE_URL || 
+               process.env.DATABASE_PUBLIC_URL || 
+               process.env.POSTGRES_URL;
+
 if (rawDbUrl) {
   rawDbUrl = rawDbUrl.trim().replace(/^["']|["']$/g, '');
+  // Guard against unexpanded Railway template strings
+  if (rawDbUrl.startsWith('${') || rawDbUrl.startsWith('$')) {
+    console.warn(`⚠️ Warning: DATABASE_URL contains unexpanded template: "${rawDbUrl}". Check Railway variable references.`);
+    rawDbUrl = undefined;
+  }
 }
+
 const dbUrl = rawDbUrl;
 const useSSL = process.env.DB_SSL === 'true' || (dbUrl ? dbUrl.includes('sslmode=require') : false);
 const dialectOptions = useSSL
@@ -19,6 +29,12 @@ const dialectOptions = useSSL
       },
     }
   : {};
+
+const host = (process.env.PGHOST || process.env.DB_HOST || (process.env.NODE_ENV === 'production' ? '' : 'localhost')).trim().replace(/^["']|["']$/g, '');
+const port = parseInt((process.env.PGPORT || process.env.DB_PORT || '5432').trim().replace(/^["']|["']$/g, ''), 10);
+const dbName = (process.env.PGDATABASE || process.env.DB_NAME || process.env.POSTGRES_DB || 'college_erp_db').trim().replace(/^["']|["']$/g, '');
+const dbUser = (process.env.PGUSER || process.env.DB_USER || process.env.POSTGRES_USER || 'erp_user').trim().replace(/^["']|["']$/g, '');
+const dbPassword = (process.env.PGPASSWORD || process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123').trim().replace(/^["']|["']$/g, '');
 
 const sequelize = dbUrl
   ? new Sequelize(dbUrl, {
@@ -33,12 +49,12 @@ const sequelize = dbUrl
       },
     })
   : new Sequelize(
-      (process.env.DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'college_erp_db').trim().replace(/^["']|["']$/g, ''),
-      (process.env.DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'erp_user').trim().replace(/^["']|["']$/g, ''),
-      (process.env.DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123').trim().replace(/^["']|["']$/g, ''),
+      dbName,
+      dbUser,
+      dbPassword,
       {
-        host: (process.env.DB_HOST || process.env.PGHOST || 'localhost').trim().replace(/^["']|["']$/g, ''),
-        port: parseInt((process.env.DB_PORT || process.env.PGPORT || '5432').trim().replace(/^["']|["']$/g, ''), 10),
+        host: host || 'localhost',
+        port: port || 5432,
         dialect: 'postgres',
         dialectOptions,
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
@@ -50,6 +66,18 @@ const sequelize = dbUrl
         },
       }
     );
+
+export function getSafeDatabaseTargetInfo(): string {
+  if (dbUrl) {
+    try {
+      const parsed = new URL(dbUrl);
+      return `${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace(/^\//, '')}`;
+    } catch {
+      return 'DATABASE_URL (remote)';
+    }
+  }
+  return `${host || 'localhost'}:${port || 5432}/${dbName}`;
+}
 
 // RLS Hook: SET session variables before executing query
 sequelize.addHook('beforeQuery', async (options: any) => {
