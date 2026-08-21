@@ -350,13 +350,15 @@ export const PrincipalLayout: React.FC = () => {
         {/* ── SUB PAGE ROUTER CONTENT ── */}
         <main className="flex-1 relative">
           <div 
-            className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.015] bg-no-repeat bg-center bg-fixed"
-            style={{ 
-              backgroundImage: 'url(/logo.png)', 
-              backgroundSize: '450px',
-              zIndex: 0
-            }}
-          />
+            className="fixed inset-y-0 right-0 left-0 lg:left-[328px] pointer-events-none flex items-center justify-center z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <img 
+              src="/logo.png" 
+              alt="" 
+              className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
+            />
+          </div>
           <div className="relative z-10">
             <Outlet />
           </div>
