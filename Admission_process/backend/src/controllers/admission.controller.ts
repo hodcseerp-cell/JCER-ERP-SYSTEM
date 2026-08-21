@@ -3143,21 +3143,44 @@ export const startBulkExportJob = async (
   }
 };
 
-/** GET /api/admin/documents/bulk-export/active — Check for active job */
+/** GET /api/admin/documents/bulk-export/active — Check for active or completed job */
 export const getActiveBulkExportJob = async (
   req: AuthRequest, res: Response, next: NextFunction
 ): Promise<any> => {
   try {
     const adminUserId = req.user!.id;
+    const { academicYear, branchId } = req.query;
     const BulkExportJob = (await import('../models/BulkExportJob')).default;
 
-    const job = await BulkExportJob.findOne({
+    const baseWhere: any = {
+      createdBy: adminUserId,
+    };
+    if (academicYear) {
+      baseWhere.academicYear = String(academicYear);
+    }
+    if (branchId) {
+      baseWhere.branchId = String(branchId);
+    }
+
+    // 1. Prioritize any actively running job (QUEUED or PROCESSING)
+    let job = await BulkExportJob.findOne({
       where: {
-        createdBy: adminUserId,
-        status: { [Op.in]: ['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS'] }
+        ...baseWhere,
+        status: { [Op.in]: ['QUEUED', 'PROCESSING'] }
       },
       order: [['createdAt', 'DESC']]
     });
+
+    // 2. If no in-progress job, retrieve the latest completed job matching the filter
+    if (!job) {
+      job = await BulkExportJob.findOne({
+        where: {
+          ...baseWhere,
+          status: { [Op.in]: ['COMPLETED', 'COMPLETED_WITH_ERRORS'] }
+        },
+        order: [['createdAt', 'DESC']]
+      });
+    }
 
     if (!job) {
       return res.json({ success: true, job: null });

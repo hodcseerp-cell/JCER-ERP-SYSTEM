@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../../../services/api';
 import admissionService from '../../../services/admission.service';
 import { 
-  ArrowLeft, Download, RefreshCw, Loader2, Archive, HelpCircle, CheckCircle2, FileArchive, AlertTriangle, AlertCircle, Clock
+  ArrowLeft, Download, RefreshCw, Loader2, HelpCircle, CheckCircle2, FileArchive, AlertTriangle, AlertCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAcademicYear } from '../../../utils/date.util';
@@ -50,14 +50,51 @@ export const BulkDocumentExportPage: React.FC = () => {
     }
   };
 
-  const checkActiveJob = async () => {
-    try {
-      const res = await API.get('/admin/documents/bulk-export/active');
-      if (res.data?.success && res.data.job) {
-        setActiveJob(res.data.job);
-        if (['QUEUED', 'PROCESSING'].includes(res.data.job.status)) {
-          startPollingJob(res.data.job.id);
+  /**
+   * Restores active job from localStorage if present, or checks for active/completed job for current filter.
+   */
+  const restoreOrCheckActiveJob = async () => {
+    const savedJobId = localStorage.getItem('activeBulkExportJobId');
+    if (savedJobId) {
+      try {
+        const res = await API.get(`/admin/documents/bulk-export/${savedJobId}`);
+        if (res.data?.success && res.data.job) {
+          const job: ExportJob = res.data.job;
+          setActiveJob(job);
+          if (job.academicYear) setAcademicYear(job.academicYear);
+          if (job.branchId) setBranchId(job.branchId);
+
+          if (['QUEUED', 'PROCESSING'].includes(job.status)) {
+            startPollingJob(job.id);
+          }
+          return;
+        } else {
+          localStorage.removeItem('activeBulkExportJobId');
         }
+      } catch (err) {
+        console.warn('Saved job not found or failed to load:', err);
+        localStorage.removeItem('activeBulkExportJobId');
+      }
+    }
+
+    // If no saved job, check active job for current filter
+    checkActiveJobForFilters(academicYear, branchId);
+  };
+
+  const checkActiveJobForFilters = async (year: string, branch: string) => {
+    try {
+      const res = await API.get('/admin/documents/bulk-export/active', {
+        params: { academicYear: year, branchId: branch }
+      });
+      if (res.data?.success && res.data.job) {
+        const job: ExportJob = res.data.job;
+        setActiveJob(job);
+        if (['QUEUED', 'PROCESSING'].includes(job.status)) {
+          startPollingJob(job.id);
+        }
+      } else {
+        // If not actively processing, clear job card if filters don't match
+        setActiveJob(null);
       }
     } catch (err) {
       console.warn('Unable to check active export job:', err);
@@ -66,10 +103,11 @@ export const BulkDocumentExportPage: React.FC = () => {
 
   useEffect(() => {
     fetchBranches();
-    checkActiveJob();
+    restoreOrCheckActiveJob();
     return () => {
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
       }
     };
   }, []);
@@ -77,16 +115,42 @@ export const BulkDocumentExportPage: React.FC = () => {
   const startPollingJob = (jobId: string) => {
     if (pollTimerRef.current) {
       clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
     }
+
+    localStorage.setItem('activeBulkExportJobId', jobId);
+
     pollTimerRef.current = setInterval(async () => {
       try {
         const res = await API.get(`/admin/documents/bulk-export/${jobId}`);
         if (res.data?.success && res.data.job) {
-          const updatedJob = res.data.job;
-          setActiveJob(updatedJob);
+          const updatedJob: ExportJob = res.data.job;
+
+          setActiveJob((prev) => {
+            const effectiveTotal = (updatedJob.totalDocuments && updatedJob.totalDocuments > 0)
+              ? updatedJob.totalDocuments
+              : (prev?.totalDocuments || previewData?.documentCount || 0);
+
+            const effectiveProgress = (updatedJob.status === 'COMPLETED' || updatedJob.status === 'COMPLETED_WITH_ERRORS')
+              ? 100
+              : (updatedJob.progress > 0 
+                  ? updatedJob.progress 
+                  : (effectiveTotal > 0 ? Math.min(99, Math.round((updatedJob.processedDocuments / effectiveTotal) * 100)) : 0));
+
+            return {
+              ...updatedJob,
+              totalDocuments: effectiveTotal,
+              totalStudents: (updatedJob.totalStudents && updatedJob.totalStudents > 0)
+                ? updatedJob.totalStudents
+                : (prev?.totalStudents || previewData?.studentCount || 0),
+              progress: effectiveProgress,
+            };
+          });
+
           if (['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'EXPIRED', 'CANCELLED'].includes(updatedJob.status)) {
             clearInterval(pollTimerRef.current);
             pollTimerRef.current = null;
+
             if (updatedJob.status === 'COMPLETED') {
               toast.success('Bulk document package is ready for download!');
             } else if (updatedJob.status === 'COMPLETED_WITH_ERRORS') {
@@ -142,10 +206,12 @@ export const BulkDocumentExportPage: React.FC = () => {
         branchId
       });
       if (res.data?.success && res.data.jobId) {
-        toast.info('Bulk export job started. Processing package in background...');
-        startPollingJob(res.data.jobId);
-        setActiveJob({
-          id: res.data.jobId,
+        const newJobId = res.data.jobId;
+        localStorage.setItem('activeBulkExportJobId', newJobId);
+
+        // Immediately show the active export progress UI
+        const initialJob: ExportJob = {
+          id: newJobId,
           academicYear,
           branchId,
           status: 'QUEUED',
@@ -154,7 +220,11 @@ export const BulkDocumentExportPage: React.FC = () => {
           processedDocuments: 0,
           failedDocuments: 0,
           progress: 0,
-        });
+        };
+        setActiveJob(initialJob);
+
+        toast.info('Bulk export job queued. Generating package in background...');
+        startPollingJob(newJobId);
       } else {
         toast.error(res.data?.error || 'Failed to start bulk export job.');
       }
@@ -174,12 +244,6 @@ export const BulkDocumentExportPage: React.FC = () => {
       const metaRes = await API.get(`/admin/documents/bulk-export/${jobId}/download`);
       const targetFilename = metaRes.data?.filename || `VTU_Documents_${academicYear}_${branchId}.zip`;
       const downloadUrl = metaRes.data?.downloadUrl;
-
-      console.log('[BULK EXPORT DOWNLOAD INIT]', {
-        jobId,
-        targetFilename,
-        hasDirectUrl: !!downloadUrl,
-      });
 
       // 2. If signed direct download URL (Cloudflare R2) is available, download directly from storage
       if (downloadUrl && (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://'))) {
@@ -256,8 +320,12 @@ export const BulkDocumentExportPage: React.FC = () => {
               value={academicYear}
               disabled={isJobActive || false}
               onChange={(e) => {
-                setAcademicYear(e.target.value);
+                const newYear = e.target.value;
+                setAcademicYear(newYear);
                 setPreviewData(null);
+                if (!isJobActive) {
+                  checkActiveJobForFilters(newYear, branchId);
+                }
               }}
               className="w-full h-11 px-3.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/25 transition-all disabled:opacity-50"
             >
@@ -276,8 +344,12 @@ export const BulkDocumentExportPage: React.FC = () => {
               value={branchId}
               disabled={isJobActive || false}
               onChange={(e) => {
-                setBranchId(e.target.value);
+                const newBranch = e.target.value;
+                setBranchId(newBranch);
                 setPreviewData(null);
+                if (!isJobActive) {
+                  checkActiveJobForFilters(academicYear, newBranch);
+                }
               }}
               className="w-full h-11 px-3.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/25 transition-all disabled:opacity-50"
             >
@@ -345,7 +417,7 @@ export const BulkDocumentExportPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-black text-neutral-900 dark:text-white uppercase tracking-wide">
                     {activeJob.status === 'QUEUED' && 'Export Queued'}
-                    {activeJob.status === 'PROCESSING' && 'Building Package (ZIP)'}
+                    {activeJob.status === 'PROCESSING' && 'Generating Bulk ZIP Package'}
                     {activeJob.status === 'COMPLETED' && '✓ Package Ready'}
                     {activeJob.status === 'COMPLETED_WITH_ERRORS' && '✓ Package Ready (With Minor Notices)'}
                     {activeJob.status === 'FAILED' && 'Export Failed'}
@@ -363,17 +435,33 @@ export const BulkDocumentExportPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Download Button on Completion */}
-            {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(activeJob.status) && (
-              <button
-                onClick={() => handleDownloadZip(activeJob.id)}
-                disabled={downloadingFile}
-                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-emerald-600/10 cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                {downloadingFile ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                Download ZIP Package
-              </button>
-            )}
+            {/* Action Buttons on Completion or Failure */}
+            <div className="flex items-center gap-3 shrink-0">
+              {['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(activeJob.status) && (
+                <button
+                  onClick={() => handleDownloadZip(activeJob.id)}
+                  disabled={downloadingFile}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-emerald-600/10 cursor-pointer disabled:opacity-50"
+                >
+                  {downloadingFile ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                  Download ZIP Package
+                </button>
+              )}
+
+              {activeJob.status === 'FAILED' && (
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('activeBulkExportJobId');
+                    handleStartExport();
+                  }}
+                  disabled={jobLoading}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-rose-600/10"
+                >
+                  <RefreshCw size={14} />
+                  Retry Export
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Progress Bar & Counter */}
@@ -395,7 +483,7 @@ export const BulkDocumentExportPage: React.FC = () => {
                     ? 'bg-rose-500'
                     : 'bg-indigo-600 progress-bar-animated'
                 }`}
-                style={{ width: `${activeJob.progress}%` }}
+                style={{ width: `${Math.max(activeJob.progress, isJobActive ? 4 : 0)}%` }}
               />
             </div>
           </div>
@@ -422,7 +510,7 @@ export const BulkDocumentExportPage: React.FC = () => {
             </div>
             <div>
               <h3 className="text-sm font-black text-neutral-900 dark:text-white uppercase tracking-wide">Ready for packaged download</h3>
-              <p className="text-xs text-neutral-550 dark:text-neutral-400 mt-0.5">Found finalized, verified applicants matching your criteria.</p>
+              <p className="text-xs text-neutral-550 dark:text-neutral-450 mt-0.5">Found finalized, verified applicants matching your criteria.</p>
             </div>
           </div>
 
