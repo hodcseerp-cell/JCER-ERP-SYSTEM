@@ -103,12 +103,6 @@ jobs:
             done
 
             echo "============================================================"
-            echo "🔄 6. EXECUTING DATABASE MIGRATIONS (STRICT)"
-            echo "============================================================"
-            # Migration failures will strictly fail the deployment step
-            docker compose run --rm backend npm run migrate
-
-            echo "============================================================"
             echo "🚀 6. STARTING ALL PRODUCTION CONTAINERS"
             echo "============================================================"
             docker compose up -d --remove-orphans
