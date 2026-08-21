@@ -612,6 +612,8 @@ const SubmittedDashboard = ({
                 return { label: 'Documents Verified', icon: ShieldCheck, color: 'text-teal-600', bg: 'bg-teal-100', desc: 'Your documents have been verified.' };
             case 'APPROVED':
                 return { label: 'Application Verified', icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100', desc: 'Your application has been verified by Admin and sent to the Principal for final approval.' };
+            case 'PRINCIPAL_APPROVED':
+                return { label: 'Principal Approved', icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100', desc: 'Your admission has been approved by the Principal and is confirmed for enrollment.' };
             case 'ADMISSION_CONFIRMED':
             case 'ENROLLED':
             case 'USN_ASSIGNED':
@@ -619,7 +621,7 @@ const SubmittedDashboard = ({
             case 'REJECTED':
                 return { label: 'Application Rejected', icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', desc: 'Your application has been permanently rejected by the Admissions Committee / Principal.' };
             case 'CANCELLATION_REQUESTED':
-                return { label: 'Cancellation Requested', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-100', desc: 'Your request for admission cancellation is under review.' };
+                return { label: 'Cancellation Requested', icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-100', desc: 'Your request for admission cancellation has been submitted and is currently under review.' };
             case 'CANCELLED':
                 return { label: 'Admission Cancelled', icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', desc: 'Your admission has been cancelled.' };
             default:
@@ -629,9 +631,10 @@ const SubmittedDashboard = ({
 
     const meta = getStatusMeta(applicationStatus);
     const StatusIcon = meta.icon;
-    const isApproved = applicationStatus === 'ADMISSION_CONFIRMED' || applicationStatus === 'APPROVED' || applicationStatus === 'ENROLLED' || applicationStatus === 'USN_ASSIGNED';
-    const isRejected = applicationStatus === 'REJECTED';
+    const isCancellationRequested = applicationStatus === 'CANCELLATION_REQUESTED';
     const isCancelled = applicationStatus === 'CANCELLED';
+    const isRejected = applicationStatus === 'REJECTED';
+    const isApproved = (applicationStatus === 'ADMISSION_CONFIRMED' || applicationStatus === 'APPROVED' || applicationStatus === 'PRINCIPAL_APPROVED' || applicationStatus === 'ENROLLED' || applicationStatus === 'USN_ASSIGNED') && !isCancellationRequested && !isCancelled;
 
     const handleDownloadPDF = async () => {
         await downloadAdmissionPDF(api, toast);
@@ -696,6 +699,7 @@ const SubmittedDashboard = ({
 
 {/* Status Hero Card */ }
 <div className={`relative overflow-hidden p-8 rounded-2xl border-2 ${isRejected || isCancelled ? 'border-red-200 bg-red-50' :
+    isCancellationRequested ? 'border-amber-200 bg-amber-50' :
     isApproved ? 'border-emerald-200 bg-emerald-50' :
         'border-slate-200 bg-white'
     }`}>
@@ -821,6 +825,38 @@ const SubmittedDashboard = ({
                             <p className="font-bold text-red-800 mt-1 italic">"{stepStatus.cancellationAdminRemarks}"</p>
                         </div>
                     )}
+                </div>
+            </div>
+        ) : isCancellationRequested ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4 text-slate-900">
+                <div className="flex items-center gap-3 border-b border-amber-100 pb-3">
+                    <Clock className="text-amber-600" size={20} />
+                    <h3 className="text-sm font-bold text-amber-950 uppercase tracking-wide">Cancellation Request Pending</h3>
+                </div>
+                <div className="space-y-3.5 text-xs">
+                    <div>
+                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Requested Date</p>
+                        <p className="font-bold text-amber-900 mt-1">
+                            {stepStatus?.cancellationRequestedAt
+                                ? new Date(stepStatus.cancellationRequestedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : 'Pending Review'}
+                        </p>
+                    </div>
+                    {stepStatus?.cancellationReason && (
+                        <div>
+                            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Reason</p>
+                            <p className="font-bold text-amber-900 mt-1">{stepStatus.cancellationReason}</p>
+                        </div>
+                    )}
+                    {stepStatus?.cancellationRemarks && (
+                        <div>
+                            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Student Remarks</p>
+                            <p className="font-bold text-amber-900 mt-1 italic">"{stepStatus.cancellationRemarks}"</p>
+                        </div>
+                    )}
+                    <p className="text-[11px] text-amber-700 font-medium">
+                        Your admission cancellation request is currently under review by the Administrator and Principal.
+                    </p>
                 </div>
             </div>
         ) : (

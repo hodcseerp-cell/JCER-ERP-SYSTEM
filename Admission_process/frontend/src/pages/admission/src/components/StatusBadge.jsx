@@ -34,14 +34,26 @@ const StatusBadge = ({ status }) => {
             label = 'Rejected';
             break;
         case 'APPROVED':
-        case 'ADMISSION_CONFIRMED':
             color = 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-            label = 'Approved';
+            label = 'Application Verified';
             break;
+        case 'PRINCIPAL_APPROVED':
+            color = 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+            label = 'Principal Approved';
+            break;
+        case 'ADMISSION_CONFIRMED':
         case 'ENROLLED':
         case 'USN_ASSIGNED':
-            color = 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+            color = 'bg-purple-50 text-purple-700 border border-purple-200';
             label = 'Admission Confirmed';
+            break;
+        case 'CANCELLATION_REQUESTED':
+            color = 'bg-amber-50 text-amber-700 border border-amber-200';
+            label = 'Cancellation Requested';
+            break;
+        case 'CANCELLED':
+            color = 'bg-red-50 text-red-700 border border-red-200';
+            label = 'Admission Cancelled';
             break;
         default:
             label = status?.replace(/_/g, ' ') || 'Unknown';

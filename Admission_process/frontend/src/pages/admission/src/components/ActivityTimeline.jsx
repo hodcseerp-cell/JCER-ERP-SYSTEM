@@ -69,7 +69,16 @@ const TIMELINE_STEPS = [
     },
     {
         key: 'approvedAt',
-        label: 'Admission Approved',
+        label: 'Verified & Forwarded to Principal',
+        icon: CheckCircle,
+        activeColor: 'text-emerald-600',
+        activeBg: 'bg-emerald-100',
+        activeBorder: 'border-emerald-300',
+        lineColor: 'bg-emerald-300'
+    },
+    {
+        key: 'principalApprovedAt',
+        label: 'Principal Approved',
         icon: CheckCircle,
         activeColor: 'text-emerald-600',
         activeBg: 'bg-emerald-100',

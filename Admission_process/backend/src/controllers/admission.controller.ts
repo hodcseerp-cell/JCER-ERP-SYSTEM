@@ -1156,6 +1156,7 @@ export const requestAdmissionCancellation = async (
     admission.cancellationRequestedAt = new Date();
     admission.cancellationRequestedById = req.user!.id;
     await admission.save();
+    await admissionService.invalidateCache(admission.userId);
 
     await AuditLog.create({
       userId: req.user!.id,
@@ -1236,6 +1237,8 @@ export const processCancellationRequest = async (
         });
       }
 
+      await admissionService.invalidateCache(admission.userId);
+
       await AuditLog.create({
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
@@ -1257,6 +1260,7 @@ export const processCancellationRequest = async (
       admission.cancellationRejectedById = req.user!.id;
       admission.cancellationAdminRemarks = remarks || null;
       await admission.save();
+      await admissionService.invalidateCache(admission.userId);
 
       await AuditLog.create({
         userId: req.user!.id,
