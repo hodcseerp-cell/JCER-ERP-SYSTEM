@@ -263,14 +263,14 @@ function computeStepStatus(admission: any) {
   if (admission?.reviewedAt && isAfterResubmission(admission.reviewedAt)) {
     timeline.reviewStartedAt = admission.reviewedAt;
   } else if (['UNDER_REVIEW', 'APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'REJECTED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
-    timeline.reviewStartedAt = admission?.reviewedAt || admission?.updatedAt;
+    timeline.reviewStartedAt = admission?.reviewedAt || admission?.submittedAt || admission?.updatedAt;
   }
 
   if (admission?.verifiedAt && isAfterResubmission(admission.verifiedAt)) {
     timeline.documentsVerifiedAt = admission.verifiedAt;
     timeline.approvedAt = admission.verifiedAt;
     timeline.forwardedToPrincipalAt = admission.verifiedAt;
-  } else if (['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+  } else if (['APPROVED', 'PRINCIPAL_APPROVED', 'ENROLLED'].includes(admission?.applicationStatus) || (['CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus) && admission?.verifiedAt)) {
     timeline.documentsVerifiedAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
     timeline.approvedAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
     timeline.forwardedToPrincipalAt = admission?.verifiedAt || admission?.reviewedAt || admission?.updatedAt;
@@ -278,23 +278,24 @@ function computeStepStatus(admission: any) {
 
   if (admission?.principalApprovedAt && isAfterResubmission(admission.principalApprovedAt)) {
     timeline.principalApprovedAt = admission.principalApprovedAt;
-  } else if (['PRINCIPAL_APPROVED', 'ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
+  } else if (['PRINCIPAL_APPROVED', 'ENROLLED'].includes(admission?.applicationStatus) || (['CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus) && admission?.principalApprovedAt)) {
     timeline.principalApprovedAt = admission?.principalApprovedAt || admission?.principalReviewedAt || admission?.updatedAt;
   }
 
   if (admission?.enrolledAt && isAfterResubmission(admission.enrolledAt)) {
     timeline.usnAssignedAt = admission.enrolledAt;
-  } else if (['ENROLLED', 'CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus)) {
-    timeline.usnAssignedAt = admission?.enrolledAt || admission?.principalReviewedAt || admission?.updatedAt;
+  } else if (admission?.applicationStatus === 'ENROLLED' || (['CANCELLATION_REQUESTED', 'CANCELLED'].includes(admission?.applicationStatus) && admission?.enrolledAt)) {
+    timeline.usnAssignedAt = admission?.enrolledAt || admission?.updatedAt;
   }
+
   if (admission?.applicationStatus === 'REJECTED') {
     timeline.rejectedAt = admission?.reviewedAt || admission?.updatedAt;
   }
-  if (admission?.cancellationRequestedAt) {
-    timeline.cancellationRequestedAt = admission.cancellationRequestedAt;
+  if (admission?.cancellationRequestedAt || admission?.applicationStatus === 'CANCELLATION_REQUESTED' || admission?.applicationStatus === 'CANCELLED') {
+    timeline.cancellationRequestedAt = admission?.cancellationRequestedAt || admission?.updatedAt;
   }
-  if (admission?.cancellationApprovedAt) {
-    timeline.cancellationApprovedAt = admission.cancellationApprovedAt;
+  if (admission?.cancellationApprovedAt || admission?.applicationStatus === 'CANCELLED') {
+    timeline.cancellationApprovedAt = admission?.cancellationApprovedAt || admission?.updatedAt;
   }
 
   return {
