@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package manifests
 COPY package*.json ./
 
-# Install dependencies for compilation
-RUN npm ci
+# Install dependencies (npm ci with fallback to npm install)
+RUN npm ci || npm install
 
 # Copy source files
 COPY . .

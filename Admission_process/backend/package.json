@@ -19,10 +19,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@types/cookie-parser": "^1.4.10",
-    "@types/express": "^4.17.21",
-    "@types/multer": "^1.4.11",
-    "@types/sharp": "^0.31.1",
     "archiver": "^5.3.2",
     "aws-sdk": "^2.1565.0",
     "axios": "^1.6.0",
@@ -63,6 +59,7 @@
     "@types/archiver": "^5.3.4",
     "@types/bcryptjs": "^2.4.2",
     "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.8",
@@ -71,6 +68,7 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.0.0",
     "@types/nodemailer": "^6.4.24",
+    "@types/sharp": "^0.31.1",
     "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "^6.13.2",
     "@typescript-eslint/parser": "^6.13.2",
