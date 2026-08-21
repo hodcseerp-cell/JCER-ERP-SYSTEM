@@ -33,12 +33,12 @@ const sequelize = dbUrl
       },
     })
   : new Sequelize(
-      process.env.DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'college_erp_db',
-      process.env.DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'erp_user',
-      process.env.DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123',
+      (process.env.DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'college_erp_db').trim().replace(/^["']|["']$/g, ''),
+      (process.env.DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'erp_user').trim().replace(/^["']|["']$/g, ''),
+      (process.env.DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || 'erp_password_123').trim().replace(/^["']|["']$/g, ''),
       {
-        host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || process.env.PGPORT || '5432', 10),
+        host: (process.env.DB_HOST || process.env.PGHOST || 'localhost').trim().replace(/^["']|["']$/g, ''),
+        port: parseInt((process.env.DB_PORT || process.env.PGPORT || '5432').trim().replace(/^["']|["']$/g, ''), 10),
         dialect: 'postgres',
         dialectOptions,
         logging: process.env.NODE_ENV === 'development' ? console.log : false,

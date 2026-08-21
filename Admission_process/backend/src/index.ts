@@ -1,14 +1,19 @@
 // Trigger watch reload 
 import app from './app';
 import sequelize from './config/database';
+import { initRedis } from './config/redis';
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
-    // Authenticate database connection
-    console.log('Connecting to PostgreSQL database...');
+    // 1. Authenticate PostgreSQL database connection
+    console.log('Connecting to PostgreSQL...');
     await sequelize.authenticate();
+    console.log('PostgreSQL connected successfully.');
+
+    // 2. Initialize Redis connection
+    await initRedis();
     
     // Run safe, non-destructive schema synchronization queries on server startup (Production & Development)
     // Pre-cast: fix audit_logs.details column type before sync tries to alter it.
@@ -599,8 +604,6 @@ async function startServer() {
       console.log('twelfthStream update check skipped/failed:', e.message);
     }
     
-    console.log('Database connection has been established successfully.');
-    
     // Invalidate Redis/In-memory cache on startup in development to prevent stale caches
     if (process.env.NODE_ENV === 'development') {
       try {
@@ -692,7 +695,7 @@ async function startServer() {
 
     const portNum = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
     app.listen(portNum, '0.0.0.0', () => {
-      console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on 0.0.0.0:${portNum}`);
+      console.log(`Server listening on port ${portNum}.`);
     });
   } catch (error) {
     console.error('Unable to start the application server:', error);
