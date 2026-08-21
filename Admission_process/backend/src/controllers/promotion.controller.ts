@@ -7,6 +7,7 @@ import Admission from '../models/Admission';
 import Department from '../models/Department';
 import PromotionBatch from '../models/PromotionBatch';
 import StudentPromotionHistory from '../models/StudentPromotionHistory';
+import admissionService from '../services/admission.service';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -23,11 +24,15 @@ export const getPromotionFilters = async (req: Request, res: Response, next: Nex
       order: [['name', 'ASC']]
     });
 
-    const currentYear = Math.max(2026, new Date().getFullYear());
-    const academicYears = [
-      `${currentYear}-${currentYear + 1}`,
-      `${currentYear + 1}-${currentYear + 2}`,
-      `${currentYear + 2}-${currentYear + 3}`
+    const academicYears: string[] = [
+      '2024-2025',
+      '2025-2026',
+      '2026-2027',
+      '2027-2028',
+      '2028-2029',
+      '2029-2030',
+      '2030-2031',
+      '2031-2032'
     ];
 
     return res.status(200).json({
@@ -138,14 +143,28 @@ export const getPromotionStudents = async (req: Request, res: Response, next: Ne
 /** POST /api/admin/promotion/preview */
 export const previewPromotion = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
-    const { studentIds, fromSemester, toSemester } = req.body;
+    const {
+      studentIds,
+      currentAcademicYear,
+      currentSemester,
+      fromSemester,
+      promotionAcademicYear,
+      targetSemester,
+      toSemester
+    } = req.body;
 
     if (!Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ error: 'Please select at least one student.' });
     }
 
-    const fromSem = Number(fromSemester);
-    const toSem = Number(toSemester);
+    const fromSem = Number(currentSemester ?? fromSemester);
+    const toSem = Number(targetSemester ?? toSemester);
+    const curYear = currentAcademicYear || null;
+    const promYear = promotionAcademicYear || curYear || '2026-2027';
+
+    if (isNaN(fromSem) || isNaN(toSem)) {
+      return res.status(400).json({ error: 'Invalid semester selection.' });
+    }
 
     const isTargetValid = toSem === fromSem + 1 || (fromSem === 3 && toSem === 5) || (fromSem === 5 && toSem === 7);
     if (!isTargetValid) {
@@ -172,6 +191,16 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
 
       const name = `${student.user?.firstName || ''} ${student.user?.lastName || ''}`.trim() || student.usn || 'Student';
 
+      if (curYear && curYear !== 'All' && student.currentAcademicYear && student.currentAcademicYear !== curYear) {
+        skippedList.push({
+          id,
+          name,
+          usn: student.usn,
+          reason: `Current academic year mismatch. Expected ${curYear}, found ${student.currentAcademicYear}`
+        });
+        return;
+      }
+
       if (student.semester !== fromSem) {
         skippedList.push({
           id,
@@ -197,7 +226,9 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
         name,
         usn: student.usn,
         currentSemester: student.semester,
-        targetSemester: toSem
+        targetSemester: toSem,
+        currentAcademicYear: student.currentAcademicYear,
+        promotionAcademicYear: promYear
       });
     });
 
@@ -207,7 +238,11 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
         eligibleCount: eligibleList.length,
         skippedCount: skippedList.length,
         eligible: eligibleList,
-        skipped: skippedList
+        skipped: skippedList,
+        currentAcademicYear: curYear,
+        currentSemester: fromSem,
+        promotionAcademicYear: promYear,
+        targetSemester: toSem
       }
     });
   } catch (err) {
@@ -219,16 +254,31 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
 export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   let transaction: Transaction | null = null;
   try {
-    const { studentIds, fromSemester, toSemester, remarks, academicYear } = req.body;
+    const {
+      studentIds,
+      currentAcademicYear,
+      currentSemester,
+      fromSemester,
+      promotionAcademicYear,
+      academicYear,
+      targetSemester,
+      toSemester,
+      remarks
+    } = req.body;
     const operatorId = req.user!.id;
 
     if (!Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ error: 'Please select at least one student.' });
     }
 
-    const fromSem = Number(fromSemester);
-    const toSem = Number(toSemester);
-    const acYear = academicYear || '2026-2027';
+    const fromSem = Number(currentSemester ?? fromSemester);
+    const toSem = Number(targetSemester ?? toSemester);
+    const curYear = currentAcademicYear || null;
+    const promYear = promotionAcademicYear || academicYear || curYear || '2026-2027';
+
+    if (isNaN(fromSem) || isNaN(toSem)) {
+      return res.status(400).json({ error: 'Invalid semester selection.' });
+    }
 
     const isTargetValid = toSem === fromSem + 1 || (fromSem === 3 && toSem === 5) || (fromSem === 5 && toSem === 7);
     if (!isTargetValid) {
@@ -255,6 +305,16 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
       }
 
       const name = `${student.user?.firstName || ''} ${student.user?.lastName || ''}`.trim() || student.usn || 'Student';
+
+      if (curYear && curYear !== 'All' && student.currentAcademicYear && student.currentAcademicYear !== curYear) {
+        skippedList.push({
+          id,
+          name,
+          usn: student.usn,
+          reason: `Current academic year mismatch. Expected ${curYear}, found ${student.currentAcademicYear}`
+        });
+        return;
+      }
 
       if (student.semester !== fromSem) {
         skippedList.push({
@@ -308,6 +368,16 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
     for (const student of lockedStudents) {
       const name = student.usn || student.id;
       // Re-verify after locking
+      if (curYear && curYear !== 'All' && student.currentAcademicYear && student.currentAcademicYear !== curYear) {
+        skippedList.push({
+          id: student.id,
+          name,
+          usn: student.usn,
+          reason: 'Student current academic year changed concurrently'
+        });
+        continue;
+      }
+
       if (student.semester !== fromSem) {
         skippedList.push({
           id: student.id,
@@ -344,14 +414,14 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
       });
     }
 
-    // Create Promotion Batch
+    // Create Promotion Batch with manual promotionAcademicYear
     const batch = await PromotionBatch.create({
-      academicYear: acYear,
+      academicYear: promYear,
       fromSemester: fromSem,
       toSemester: toSem,
       promotedBy: operatorId,
       studentCount: finalPromoteIds.length,
-      remarks: remarks || `Bulk Promotion of ${finalPromoteIds.length} students`
+      remarks: remarks || `Bulk Promotion of ${finalPromoteIds.length} students to ${promYear} (${toSem}th Sem)`
     }, { transaction });
 
     // Update students & insert history
@@ -360,7 +430,7 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
 
       await student.update({
         semester: toSem,
-        currentAcademicYear: acYear,
+        currentAcademicYear: promYear,
         lastPromotedAt: new Date(),
         lastPromotedBy: operatorId
       }, { transaction });
@@ -369,24 +439,32 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
         studentId: student.id,
         fromSemester: fromSem,
         toSemester: toSem,
-        academicYear: acYear,
+        academicYear: promYear,
         promotedBy: operatorId,
         remarks: remarks || null,
         promotionBatchId: batch.id,
         source: 'ADMIN_BULK'
       }, { transaction });
+
+      if (student.userId) {
+        await admissionService.invalidateCache(student.userId).catch(() => {});
+      }
     }
 
     await transaction.commit();
 
     return res.status(200).json({
       success: true,
-      message: `${finalPromoteIds.length} students promoted successfully.`,
+      message: `${finalPromoteIds.length} students promoted successfully from ${fromSem}th Sem (${curYear || 'current'}) to ${toSem}th Sem (${promYear}).`,
       data: {
         batchId: batch.id,
         promotedCount: finalPromoteIds.length,
         skippedCount: skippedList.length,
-        skipped: skippedList
+        skipped: skippedList,
+        currentAcademicYear: curYear,
+        currentSemester: fromSem,
+        promotionAcademicYear: promYear,
+        targetSemester: toSem
       }
     });
   } catch (err) {

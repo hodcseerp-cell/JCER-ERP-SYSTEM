@@ -8,24 +8,15 @@ import {
   RefreshCw, 
   ChevronLeft, 
   ChevronRight,
-  TrendingUp, 
   Users, 
-  FileSpreadsheet, 
   CheckCircle2, 
   AlertTriangle,
-  HelpCircle,
-  Clock,
-  X,
   ArrowLeft,
   ShieldCheck,
-  Building2,
-  Calendar,
-  GraduationCap,
-  Check,
-  Send,
   UserCheck,
   UserX,
-  FileText
+  Calendar,
+  Layers
 } from 'lucide-react';
 
 interface StudentData {
@@ -63,17 +54,29 @@ export const AdminPromotionPage: React.FC = () => {
   // Page view mode: 'LIST' | 'CONFIRM' | 'OUTCOME'
   const [viewStep, setViewStep] = useState<'LIST' | 'CONFIRM' | 'OUTCOME'>('LIST');
 
-  // Filters
-  const [semesterFilter, setSemesterFilter] = useState<string>('All');
+  // Queue Selection Filters (used to find/filter students)
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<string>('2026-2027');
+  const [currentSemester, setCurrentSemester] = useState<string>('1');
   const [departmentFilter, setDepartmentFilter] = useState<string>('All');
   const [admissionTypeFilter, setAdmissionTypeFilter] = useState<string>('All');
-  const [academicYearFilter, setAcademicYearFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Promotion Details (manually selected target year & calculated next semester)
+  const [promotionAcademicYear, setPromotionAcademicYear] = useState<string>('2026-2027');
 
   // Lists & data
   const [students, setStudents] = useState<StudentData[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string; code: string }[]>([]);
-  const [academicYears, setAcademicYears] = useState<string[]>([]);
+  const [academicYears, setAcademicYears] = useState<string[]>([
+    '2024-2025',
+    '2025-2026',
+    '2026-2027',
+    '2027-2028',
+    '2028-2029',
+    '2029-2030',
+    '2030-2031',
+    '2031-2032'
+  ]);
   const [loading, setLoading] = useState<boolean>(true);
   const [promoting, setPromoting] = useState<boolean>(false);
 
@@ -101,20 +104,21 @@ export const AdminPromotionPage: React.FC = () => {
     fetchFilters();
   }, []);
 
+  // Changing CURRENT ACADEMIC YEAR, CURRENT SEMESTER, DEPT, ADMISSION TYPE, SEARCH or PAGE refetches students
+  // Changing PROMOTION ACADEMIC YEAR intentionally does NOT trigger this effect!
   useEffect(() => {
     fetchStudents();
     setSelectedStudentIds([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [semesterFilter, departmentFilter, admissionTypeFilter, academicYearFilter, searchQuery, page]);
+  }, [currentSemester, departmentFilter, admissionTypeFilter, currentAcademicYear, searchQuery, page]);
 
   const fetchFilters = async () => {
     try {
       const res = await API.get('/admin/promotion/filters');
       if (res.data?.success) {
-        setDepartments(res.data.data.departments);
-        setAcademicYears(res.data.data.academicYears);
+        setDepartments(res.data.data.departments || []);
         if (res.data.data.academicYears?.length > 0) {
-          setAcademicYearFilter(res.data.data.academicYears[0]);
+          setAcademicYears(res.data.data.academicYears);
         }
       }
     } catch (err: any) {
@@ -127,10 +131,10 @@ export const AdminPromotionPage: React.FC = () => {
       setLoading(true);
       const res = await API.get('/admin/promotion/students', {
         params: {
-          semester: semesterFilter,
+          semester: currentSemester,
           departmentId: departmentFilter,
           admissionType: admissionTypeFilter,
-          academicYear: academicYearFilter,
+          academicYear: currentAcademicYear,
           search: searchQuery,
           page,
           limit
@@ -147,6 +151,9 @@ export const AdminPromotionPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const fromSemNum = currentSemester !== 'All' ? Number(currentSemester) : null;
+  const targetSemester = (fromSemNum !== null && !isNaN(fromSemNum) && fromSemNum < 8) ? fromSemNum + 1 : null;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -168,21 +175,32 @@ export const AdminPromotionPage: React.FC = () => {
       return;
     }
 
-    if (semesterFilter === 'All') {
+    if (currentSemester === 'All' || fromSemNum === null) {
       toast.error('Please select a specific current semester in the filters to enable promotion.');
       return;
     }
 
-    const fromSem = Number(semesterFilter);
-    const toSem = fromSem + 1;
+    if (!targetSemester) {
+      toast.error('Selected semester cannot be promoted further.');
+      return;
+    }
+
+    if (!promotionAcademicYear) {
+      toast.error('Please select the Promotion Academic Year.');
+      return;
+    }
 
     try {
       setPreviewLoading(true);
-      setViewStep('CONFIRM'); // Switch to dedicated confirmation page! Bottom bar vanishes!
+      setViewStep('CONFIRM');
       const res = await API.post('/admin/promotion/preview', {
         studentIds: selectedStudentIds,
-        fromSemester: fromSem,
-        toSemester: toSem
+        currentAcademicYear: currentAcademicYear,
+        currentSemester: fromSemNum,
+        fromSemester: fromSemNum,
+        promotionAcademicYear: promotionAcademicYear,
+        targetSemester: targetSemester,
+        toSemester: targetSemester
       });
       if (res.data?.success) {
         setEligibleCount(res.data.data.eligibleCount);
@@ -199,16 +217,19 @@ export const AdminPromotionPage: React.FC = () => {
   };
 
   const handleExecutePromotion = async () => {
-    const fromSem = Number(semesterFilter);
-    const toSem = fromSem + 1;
+    if (fromSemNum === null || !targetSemester) return;
 
     try {
       setPromoting(true);
       const res = await API.post('/admin/promotion/bulk', {
         studentIds: selectedStudentIds,
-        fromSemester: fromSem,
-        toSemester: toSem,
-        academicYear: academicYearFilter,
+        currentAcademicYear: currentAcademicYear,
+        currentSemester: fromSemNum,
+        fromSemester: fromSemNum,
+        promotionAcademicYear: promotionAcademicYear,
+        academicYear: promotionAcademicYear,
+        targetSemester: targetSemester,
+        toSemester: targetSemester,
         remarks
       });
 
@@ -230,9 +251,6 @@ export const AdminPromotionPage: React.FC = () => {
     setViewStep('LIST');
     fetchStudents();
   };
-
-  const fromSemNum = semesterFilter !== 'All' ? Number(semesterFilter) : null;
-  const targetSemester = (fromSemNum !== null && !isNaN(fromSemNum)) ? fromSemNum + 1 : null;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEDICATED CONFIRMATION PAGE (viewStep === 'CONFIRM')
@@ -259,66 +277,56 @@ export const AdminPromotionPage: React.FC = () => {
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-black text-[#0F4C81] dark:text-white tracking-tight flex items-center gap-3">
             <ArrowUpCircle className="w-8 h-8 text-[#0F4C81]" />
-            CONFIRM BULK ACADEMIC PROMOTION
+            CONFIRM PROMOTION
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 font-medium pl-11">
-            Review the pre-promotion analysis below for candidate eligibility before committing batch updates.
+            Review the promotion details and candidate eligibility before confirming.
           </p>
         </div>
 
         {previewLoading ? (
           <div className="py-24 text-center space-y-4 bg-white dark:bg-slate-900 border rounded-3xl p-12 shadow-sm animate-pulse">
             <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto" />
-            <p className="text-xs font-black text-slate-600 uppercase tracking-wider">Analyzing student eligibility rules &amp; VTU constraints...</p>
+            <p className="text-xs font-black text-slate-600 uppercase tracking-wider">Analyzing student eligibility...</p>
           </div>
         ) : (
           <div className="space-y-6">
             
-            {/* 3 Metric Cards Overview */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">Total Selected</span>
-                  <span className="text-3xl font-black text-slate-900 dark:text-white mt-1 block">{selectedStudentIds.length}</span>
-                </div>
-                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-600">
-                  <Users size={22} />
-                </div>
+            {/* 4 Summary Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">Current Year</span>
+                <span className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1 block font-mono">{currentAcademicYear}</span>
               </div>
-
-              <div className="bg-emerald-50/70 dark:bg-emerald-950/30 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider block">Eligible Candidates</span>
-                  <span className="text-3xl font-black text-emerald-700 dark:text-emerald-300 mt-1 block">{eligibleCount}</span>
-                </div>
-                <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/50 rounded-2xl flex items-center justify-center text-emerald-600">
-                  <UserCheck size={22} />
-                </div>
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">Current Sem</span>
+                <span className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1 block">{fromSemNum ? `${getOrdinal(fromSemNum)} Sem` : 'N/A'}</span>
               </div>
-
-              <div className="bg-rose-50/70 dark:bg-rose-950/30 p-5 rounded-2xl border border-rose-200 dark:border-rose-900/50 shadow-sm flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-rose-600 dark:text-rose-400 tracking-wider block">Skipped / Ineligible</span>
-                  <span className="text-3xl font-black text-rose-700 dark:text-rose-300 mt-1 block">{skippedCount}</span>
-                </div>
-                <div className="w-12 h-12 bg-rose-100 dark:bg-rose-900/50 rounded-2xl flex items-center justify-center text-rose-600">
-                  <UserX size={22} />
-                </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase text-emerald-700 dark:text-emerald-400 tracking-wider block">Promotion Year</span>
+                <span className="text-sm font-black text-emerald-800 dark:text-emerald-300 mt-1 block font-mono">{promotionAcademicYear}</span>
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase text-emerald-700 dark:text-emerald-400 tracking-wider block">Promote To</span>
+                <span className="text-sm font-black text-emerald-800 dark:text-emerald-300 mt-1 block">{targetSemester ? `${getOrdinal(targetSemester)} Sem` : 'N/A'}</span>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 shadow-sm col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-extrabold uppercase text-blue-700 dark:text-blue-400 tracking-wider block">Selected Students</span>
+                <span className="text-xl font-black text-blue-800 dark:text-blue-300 mt-1 block">{selectedStudentIds.length}</span>
               </div>
             </div>
 
-            {/* Promotion Transition Banner */}
+            {/* Clear Message Box */}
             <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-3xl p-6 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="space-y-1 text-center sm:text-left">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-300 block">Semester Promotion Route</span>
-                <h3 className="text-lg font-black tracking-tight">
-                  {getOrdinal(Number(semesterFilter))} Semester &rarr; {targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'No Next Semester'}
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-300 block">Promotion Summary</span>
+                <h3 className="text-base sm:text-lg font-black tracking-tight leading-relaxed">
+                  "{eligibleCount} selected student{eligibleCount === 1 ? '' : 's'} will be promoted from {fromSemNum ? `${getOrdinal(fromSemNum)} Semester` : 'N/A'} to {targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'N/A'} for Academic Year {promotionAcademicYear}."
                 </h3>
-                <p className="text-xs text-blue-200 font-medium">Academic Cycle: {academicYearFilter}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <span className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-2xl text-xs font-bold border border-white/20">
-                  {eligibleCount} Student(s) to be updated
+                  {eligibleCount} Eligible &bull; {skippedCount} Skipped
                 </span>
               </div>
             </div>
@@ -356,7 +364,7 @@ export const AdminPromotionPage: React.FC = () => {
                           </div>
                           <div className="text-right">
                             <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-extrabold rounded-full border border-emerald-200/60 dark:border-emerald-900/50">
-                              {getOrdinal(Number(semesterFilter))} &rarr; {targetSemester ? getOrdinal(targetSemester) : 'N/A'} Sem
+                              {fromSemNum ? getOrdinal(fromSemNum) : 'N/A'} &rarr; {targetSemester ? getOrdinal(targetSemester) : 'N/A'} Sem ({promotionAcademicYear})
                             </span>
                           </div>
                         </div>
@@ -406,7 +414,7 @@ export const AdminPromotionPage: React.FC = () => {
                       rows={4}
                       value={remarks}
                       onChange={e => setRemarks(e.target.value)}
-                      placeholder="e.g. Regular VTU 2026 Academic Promotion for 1st Year CSE Students..."
+                      placeholder="e.g. Regular Academic Promotion to next semester..."
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-3.5 text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
                     />
                   </div>
@@ -426,7 +434,7 @@ export const AdminPromotionPage: React.FC = () => {
                       ) : (
                         <>
                           <CheckCircle2 size={16} />
-                          <span>CONFIRM &amp; EXECUTE PROMOTION</span>
+                          <span>CONFIRM PROMOTION</span>
                         </>
                       )}
                     </button>
@@ -435,9 +443,9 @@ export const AdminPromotionPage: React.FC = () => {
                       type="button"
                       onClick={() => setViewStep('LIST')}
                       disabled={promoting}
-                      className="w-full py-3 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors"
+                      className="w-full py-3 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                     >
-                      Cancel &amp; Return to Table
+                      CANCEL
                     </button>
                   </div>
                 </div>
@@ -468,7 +476,7 @@ export const AdminPromotionPage: React.FC = () => {
               PROMOTION EXECUTED SUCCESSFULLY
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-lg mx-auto">
-              The selected candidates have been officially promoted to their next academic semester.
+              The selected candidates have been officially promoted to {targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'next semester'} for Academic Year {promotionAcademicYear}.
             </p>
           </div>
 
@@ -520,7 +528,7 @@ export const AdminPromotionPage: React.FC = () => {
   // MAIN SELECTION TABLE VIEW (viewStep === 'LIST')
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className={`space-y-6 p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-900/10 min-h-screen text-slate-800 dark:text-slate-100 ${selectedStudentIds.length > 0 && semesterFilter !== 'All' ? 'pb-44' : ''}`}>
+    <div className={`space-y-6 p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-900/10 min-h-screen text-slate-800 dark:text-slate-100 ${selectedStudentIds.length > 0 && currentSemester !== 'All' ? 'pb-44' : ''}`}>
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
@@ -533,93 +541,139 @@ export const AdminPromotionPage: React.FC = () => {
         </div>
         <button
           onClick={() => { fetchStudents(); setSelectedStudentIds([]); }}
-          className="px-4 py-2 bg-white dark:bg-slate-800 border rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 self-start sm:self-auto shadow-sm"
+          className="px-4 py-2 bg-white dark:bg-slate-800 border rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 self-start sm:self-auto shadow-sm cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Queue
         </button>
       </div>
 
       {/* Filters Box */}
-      <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b pb-2">
-          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Queue Selection Filters</span>
+      <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+        
+        {/* Section 1: QUEUE SELECTION FILTERS */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+            <Layers size={14} className="text-blue-600" />
+            <span className="text-[11px] font-black uppercase text-blue-700 dark:text-blue-400 tracking-wider">
+              QUEUE SELECTION FILTERS
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {/* 1. CURRENT ACADEMIC YEAR * */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                CURRENT ACADEMIC YEAR <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={currentAcademicYear}
+                onChange={(e) => { setCurrentAcademicYear(e.target.value); setPage(1); }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {academicYears.map(yr => (
+                  <option key={yr} value={yr}>{yr}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. CURRENT SEMESTER * */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                CURRENT SEMESTER <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={currentSemester}
+                onChange={(e) => { setCurrentSemester(e.target.value); setPage(1); }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="All">All Semesters</option>
+                <option value="1">1st Semester</option>
+                <option value="2">2nd Semester</option>
+                <option value="3">3rd Semester</option>
+                <option value="4">4th Semester</option>
+                <option value="5">5th Semester</option>
+                <option value="6">6th Semester</option>
+                <option value="7">7th Semester</option>
+                <option value="8">8th Semester</option>
+              </select>
+            </div>
+
+            {/* 3. DEPARTMENT */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                DEPARTMENT
+              </label>
+              <select
+                value={departmentFilter}
+                onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="All">All Departments</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. ADMISSION TYPE */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                ADMISSION TYPE
+              </label>
+              <select
+                value={admissionTypeFilter}
+                onChange={(e) => { setAdmissionTypeFilter(e.target.value); setPage(1); }}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="All">All Types</option>
+                <option value="FRESH">Fresh Admission (Regular)</option>
+                <option value="LATERAL">Lateral Entry</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-          {/* Current Semester Filter */}
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Current Semester</label>
-            <select
-              value={semesterFilter}
-              onChange={(e) => { setSemesterFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="All">All Semesters</option>
-              <option value="1">1st Semester</option>
-              <option value="2">2nd Semester</option>
-              <option value="3">3rd Semester</option>
-              <option value="4">4th Semester</option>
-              <option value="5">5th Semester</option>
-              <option value="6">6th Semester</option>
-              <option value="7">7th Semester</option>
-              <option value="8">8th Semester</option>
-            </select>
+        {/* Section 2: PROMOTION DETAILS */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+            <Calendar size={14} className="text-emerald-600" />
+            <span className="text-[11px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">
+              PROMOTION DETAILS
+            </span>
           </div>
 
-          {/* Department Filter */}
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Department</label>
-            <select
-              value={departmentFilter}
-              onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="All">All Departments</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-              ))}
-            </select>
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {/* PROMOTION ACADEMIC YEAR * */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                PROMOTION ACADEMIC YEAR <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={promotionAcademicYear}
+                onChange={(e) => setPromotionAcademicYear(e.target.value)}
+                className="w-full bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-800 rounded-xl px-3 py-2.5 text-xs font-black text-emerald-900 dark:text-emerald-300 outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                {academicYears.map(yr => (
+                  <option key={yr} value={yr}>{yr}</option>
+                ))}
+              </select>
+            </div>
 
-          {/* Admission Type Filter */}
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Admission Type</label>
-            <select
-              value={admissionTypeFilter}
-              onChange={(e) => { setAdmissionTypeFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="All">All Types</option>
-              <option value="FRESH">Fresh Admission (Regular)</option>
-              <option value="LATERAL">Lateral Entry</option>
-            </select>
-          </div>
-
-          {/* Academic Year Filter */}
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Academic Year</label>
-            <select
-              value={academicYearFilter}
-              onChange={(e) => { setAcademicYearFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {academicYears.map(yr => (
-                <option key={yr} value={yr}>{yr}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Promote To target (Read Only info) */}
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Promote To (Target)</label>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 border rounded-xl px-3 py-2 text-xs font-black text-slate-700 dark:text-slate-200">
-              {targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'Select Semester'}
+            {/* PROMOTE TO */}
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                PROMOTE TO
+              </label>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-black text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                <span>{targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'Select Current Semester'}</span>
+                {targetSemester && <CheckCircle2 size={14} className="text-emerald-500" />}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Search */}
-        <div className="pt-1">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
           <div className="relative max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -627,7 +681,7 @@ export const AdminPromotionPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               placeholder="Search USN, Name or Email..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -736,7 +790,7 @@ export const AdminPromotionPage: React.FC = () => {
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(prev => Math.max(1, prev - 1))}
-                className="p-1.5 border rounded-lg hover:bg-white disabled:opacity-30"
+                className="p-1.5 border rounded-lg hover:bg-white disabled:opacity-30 cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -746,7 +800,7 @@ export const AdminPromotionPage: React.FC = () => {
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
-                className="p-1.5 border rounded-lg hover:bg-white disabled:opacity-30"
+                className="p-1.5 border rounded-lg hover:bg-white disabled:opacity-30 cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -756,31 +810,31 @@ export const AdminPromotionPage: React.FC = () => {
       </div>
 
       {/* Bulk Promotion trigger floating bar (ONLY SHOWN IN 'LIST' VIEW MODE!) */}
-      {selectedStudentIds.length > 0 && semesterFilter !== 'All' && viewStep === 'LIST' && (
-        <div className="fixed bottom-28 left-6 right-6 md:left-[316px] bg-white dark:bg-slate-950 border-2 border-blue-600 rounded-2xl p-4 shadow-2xl flex items-center justify-between z-[60] transition-all">
+      {selectedStudentIds.length > 0 && currentSemester !== 'All' && viewStep === 'LIST' && (
+        <div className="fixed bottom-28 left-6 right-6 md:left-[316px] bg-white dark:bg-slate-950 border-2 border-blue-600 rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 z-[60] transition-all">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-black text-xs">
+            <div className="w-9 h-9 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-black text-xs shadow-inner shrink-0">
               {selectedStudentIds.length}
             </div>
             <div>
-              <span className="text-xs font-black uppercase tracking-wider block text-slate-400">Selected Candidate(s)</span>
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                Ready to promote from {getOrdinal(Number(semesterFilter))} Semester to {targetSemester ? `${getOrdinal(targetSemester)} Semester` : 'No Next Semester'}.
+              <span className="text-[10px] font-black uppercase tracking-wider block text-slate-400">Selected Candidate(s) for Promotion</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                {currentAcademicYear} ({fromSemNum ? `${getOrdinal(fromSemNum)} Sem` : 'N/A'}) &rarr; <span className="text-emerald-600 font-extrabold">{promotionAcademicYear} ({targetSemester ? `${getOrdinal(targetSemester)} Sem` : 'N/A'})</span>
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 self-end sm:self-auto">
             <button
               onClick={() => setSelectedStudentIds([])}
-              className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={handleTriggerPreview}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow shadow-emerald-500/20 cursor-pointer"
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-95 transition-all"
             >
-              <ArrowUpCircle className="w-4 h-4" /> Promote Selected ({selectedStudentIds.length})
+              <ArrowUpCircle className="w-4 h-4" /> PROMOTE SELECTED ({selectedStudentIds.length})
             </button>
           </div>
         </div>
