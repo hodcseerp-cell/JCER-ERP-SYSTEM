@@ -49,92 +49,147 @@ jobs:
           key: ${{ secrets.KVM_SSH_PRIVATE_KEY }}
           port: ${{ secrets.KVM_SSH_PORT || 22 }}
           script_stop: true
+
           script: |
             set -euo pipefail
 
             echo "============================================================"
             echo "🚀 1. NAVIGATING TO STANDARDIZED PROJECT DIRECTORY"
             echo "============================================================"
+
             cd /var/www/jcer-erp
-            
+
             echo "============================================================"
-            echo "📥 2. PULLING LATEST CODE FROM MAIN"
+            echo "🔐 2. CONFIGURING GITHUB SSH ACCESS"
             echo "============================================================"
+
+            export GIT_SSH_COMMAND="ssh -i /home/deploy/.ssh/jcer_erp_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+            echo "Testing GitHub SSH authentication..."
+            ssh -i /home/deploy/.ssh/jcer_erp_deploy \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -T git@github.com || true
+
+            echo "============================================================"
+            echo "📥 3. PULLING LATEST CODE FROM MAIN"
+            echo "============================================================"
+
             git fetch origin main
             git reset --hard origin/main
 
+            echo "============================================================"
+            echo "📦 4. BUILDING DOCKER IMAGES"
+            echo "============================================================"
+
             cd /var/www/jcer-erp/Admission_process
 
-            echo "============================================================"
-            echo "📦 3. BUILDING DOCKER IMAGES"
-            echo "============================================================"
             docker compose build
 
             echo "============================================================"
-            echo "🗄️  4. STARTING DATABASE & CACHE SERVICES"
+            echo "🗄️ 5. STARTING DATABASE & CACHE SERVICES"
             echo "============================================================"
+
             docker compose up -d postgres redis
 
             echo "============================================================"
-            echo "⏳ 5. WAITING UNTIL POSTGRESQL AND REDIS BECOME HEALTHY"
+            echo "⏳ 6. WAITING FOR POSTGRESQL AND REDIS"
             echo "============================================================"
+
             for service in postgres redis; do
+
               echo "Polling health status of service: ${service}..."
+
               TIMEOUT=60
               ELAPSED=0
+
               while [ $ELAPSED -lt $TIMEOUT ]; do
-                CONTAINER_ID=$(docker compose ps -q "$service" || echo "")
+
+                CONTAINER_ID=$(docker compose ps -q "$service" || true)
+
                 if [ -n "$CONTAINER_ID" ]; then
-                  HEALTH_STATE=$(docker inspect --format='{{json .State.Health.Status}}' "$CONTAINER_ID" 2>/dev/null || echo '"starting"')
+
+                  HEALTH_STATE=$(docker inspect \
+                    --format='{{json .State.Health.Status}}' \
+                    "$CONTAINER_ID" \
+                    2>/dev/null || echo '"starting"')
+
                   if [ "$HEALTH_STATE" = '"healthy"' ]; then
                     echo "✅ Service ${service} is HEALTHY!"
                     break
                   fi
+
                 fi
+
                 sleep 2
                 ELAPSED=$((ELAPSED + 2))
+
               done
 
               if [ $ELAPSED -ge $TIMEOUT ]; then
+
                 echo "❌ TIMEOUT: Service ${service} failed to become healthy within ${TIMEOUT}s!"
+
                 docker compose logs --tail=50 "$service"
+
                 exit 1
+
               fi
+
             done
 
             echo "============================================================"
-            echo "🚀 6. STARTING ALL PRODUCTION CONTAINERS"
+            echo "🚀 7. STARTING ALL PRODUCTION CONTAINERS"
             echo "============================================================"
+
             docker compose up -d --remove-orphans
 
             echo "============================================================"
-            echo "🩺 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
+            echo "🩺 8. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
             echo "============================================================"
+
             HEALTH_URL="http://127.0.0.1/health"
+
             MAX_RETRIES=12
             COUNT=0
             SUCCESS=0
 
             while [ $COUNT -lt $MAX_RETRIES ]; do
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_URL || echo "000")
+
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+
               if [ "$HTTP_STATUS" = "200" ]; then
+
                 echo "✅ Backend Health check PASSED via Nginx reverse proxy (HTTP $HTTP_STATUS)!"
+
                 SUCCESS=1
                 break
+
               fi
-              echo "⏳ Waiting for backend container to become ready... (Attempt $((COUNT+1))/$MAX_RETRIES, status: $HTTP_STATUS)"
+
+              echo "⏳ Waiting for backend container to become ready..."
+              echo "Attempt $((COUNT+1))/$MAX_RETRIES, status: $HTTP_STATUS"
+
               sleep 4
-              COUNT=$((COUNT+1))
+
+              COUNT=$((COUNT + 1))
+
             done
 
             if [ $SUCCESS -ne 1 ]; then
-              echo "❌ Health check FAILED! Displaying container diagnostic logs:"
+
+              echo "❌ Health check FAILED!"
+              echo "Displaying container diagnostic logs..."
+
               docker compose logs --tail=100 backend
               docker compose logs --tail=50 frontend
+
               exit 1
+
             fi
 
             echo "============================================================"
             echo "🎉 DEPLOYMENT COMPLETED AND VERIFIED SUCCESSFULLY!"
             echo "============================================================"
+
             docker compose ps
