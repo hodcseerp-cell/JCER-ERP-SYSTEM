@@ -24,6 +24,6 @@ EXPOSE 5000
 
 # Health check verifies /api/health
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 5000) + '/api/health', (r) => {if (r.statusCode !== 200) process.exit(1)})"
+  CMD node -e "const req = require('http').request({ host: '127.0.0.1', port: process.env.PORT || 5000, path: '/api/health', timeout: 3000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => { req.destroy(); process.exit(1); }); req.end();"
 
 CMD ["node", "dist/index.js"]
