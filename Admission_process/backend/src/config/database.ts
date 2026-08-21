@@ -5,7 +5,8 @@ import logger from '../utils/logger.util';
 
 dotenv.config();
 
-const useSSL = process.env.DB_SSL === 'true';
+const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_PUBLIC_URL;
+const useSSL = process.env.DB_SSL === 'true' || (dbUrl ? dbUrl.includes('sslmode=require') : false);
 const dialectOptions = useSSL
   ? {
       ssl: {
@@ -15,8 +16,8 @@ const dialectOptions = useSSL
     }
   : {};
 
-const sequelize = process.env.DATABASE_URL
-  ? new Sequelize(process.env.DATABASE_URL, {
+const sequelize = dbUrl
+  ? new Sequelize(dbUrl, {
       dialect: 'postgres',
       dialectOptions,
       logging: process.env.NODE_ENV === 'development' ? console.log : false,

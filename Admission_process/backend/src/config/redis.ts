@@ -33,11 +33,11 @@ const memoryClient = {
 let redisClient: any = memoryClient;
 
 if (process.env.NODE_ENV !== 'test') {
-  const host = process.env.REDIS_HOST || '127.0.0.1';
-  const port = process.env.REDIS_PORT || '6379';
-  const password = process.env.REDIS_PASSWORD || '';
+  const host = process.env.REDIS_HOST || process.env.REDISHOST || '127.0.0.1';
+  const port = process.env.REDIS_PORT || process.env.REDISPORT || '6379';
+  const password = process.env.REDIS_PASSWORD || process.env.REDISPASSWORD || '';
   
-  const redisUrl = process.env.REDIS_URL || process.env.REDISURL || (
+  const redisUrl = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL || process.env.REDIS_PUBLIC_URL || process.env.REDISURL || (
     password 
       ? `redis://:${password}@${host}:${port}` 
       : `redis://${host}:${port}`
