@@ -48,13 +48,16 @@ jobs:
           username: ${{ secrets.KVM_USER || 'deploy' }}
           key: ${{ secrets.KVM_SSH_PRIVATE_KEY }}
           port: ${{ secrets.KVM_SSH_PORT || 22 }}
+
+          timeout: 60s
+          command_timeout: 30m
           script_stop: true
 
           script: |
             set -euo pipefail
 
             echo "============================================================"
-            echo "🚀 1. NAVIGATING TO STANDARDIZED PROJECT DIRECTORY"
+            echo "🚀 1. NAVIGATING TO PROJECT DIRECTORY"
             echo "============================================================"
 
             cd /var/www/jcer-erp
@@ -63,13 +66,13 @@ jobs:
             echo "🔐 2. CONFIGURING GITHUB SSH ACCESS"
             echo "============================================================"
 
-            export GIT_SSH_COMMAND="ssh -i /home/deploy/.ssh/jcer_erp_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+            export GIT_SSH_COMMAND="ssh -i /home/deploy/.ssh/jcer_erp_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10"
 
-            echo "Testing GitHub SSH authentication..."
-            ssh -i /home/deploy/.ssh/jcer_erp_deploy \
-              -o IdentitiesOnly=yes \
-              -o StrictHostKeyChecking=yes \
-              -T git@github.com || true
+            echo "Testing GitHub repository access..."
+
+            git ls-remote origin HEAD
+
+            echo "✅ GitHub repository SSH access confirmed!"
 
             echo "============================================================"
             echo "📥 3. PULLING LATEST CODE FROM MAIN"
@@ -78,6 +81,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            echo "✅ Latest code pulled successfully!"
+
             echo "============================================================"
             echo "📦 4. BUILDING DOCKER IMAGES"
             echo "============================================================"
@@ -85,6 +90,8 @@ jobs:
             cd /var/www/jcer-erp/Admission_process
 
             docker compose build
+
+            echo "✅ Docker images built successfully!"
 
             echo "============================================================"
             echo "🗄️ 5. STARTING DATABASE & CACHE SERVICES"
@@ -130,7 +137,7 @@ jobs:
 
                 echo "❌ TIMEOUT: Service ${service} failed to become healthy within ${TIMEOUT}s!"
 
-                docker compose logs --tail=50 "$service"
+                docker compose logs --tail=100 "$service"
 
                 exit 1
 
@@ -181,8 +188,14 @@ jobs:
               echo "❌ Health check FAILED!"
               echo "Displaying container diagnostic logs..."
 
+              echo "================ BACKEND LOGS ================"
               docker compose logs --tail=100 backend
-              docker compose logs --tail=50 frontend
+
+              echo "================ FRONTEND LOGS ================"
+              docker compose logs --tail=100 frontend
+
+              echo "================ CONTAINER STATUS ================"
+              docker compose ps
 
               exit 1
 
