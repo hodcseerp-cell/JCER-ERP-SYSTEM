@@ -155,7 +155,7 @@ jobs:
             echo "🩺 8. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
             echo "============================================================"
 
-            HEALTH_URL="http://127.0.0.1/api/health"
+            HEALTH_URL="http://127.0.0.1:5000/api/health"
 
             MAX_RETRIES=12
             COUNT=0
