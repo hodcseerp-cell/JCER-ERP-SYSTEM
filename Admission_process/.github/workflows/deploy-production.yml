@@ -108,33 +108,33 @@ jobs:
             docker compose up -d --remove-orphans
 
             echo "============================================================"
-            echo "🩺 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
+            echo "🏥 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
             echo "============================================================"
-            HEALTH_URL="http://127.0.0.1:5000/api/health"
-            MAX_RETRIES=12
-            COUNT=0
-            SUCCESS=0
 
-            while [ $COUNT -lt $MAX_RETRIES ]; do
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_URL || echo "000")
-              if [ "$HTTP_STATUS" = "200" ]; then
-                echo "✅ Backend Health check PASSED via Nginx reverse proxy (HTTP $HTTP_STATUS)!"
-                SUCCESS=1
-                break
-              fi
-              echo "⏳ Waiting for backend container to become ready... (Attempt $((COUNT+1))/$MAX_RETRIES, status: $HTTP_STATUS)"
-              sleep 4
-              COUNT=$((COUNT+1))
-            done
+            echo "Waiting 10 seconds for services to stabilize..."
+            sleep 10
 
-            if [ $SUCCESS -ne 1 ]; then
-              echo "❌ Health check FAILED! Displaying container diagnostic logs:"
+            echo "Checking backend health directly..."
+
+            if docker compose exec -T backend wget -qO- http://localhost:5000/api/health > /dev/null; then
+              echo "✅ Backend health check PASSED!"
+            else
+              echo "❌ Backend health check FAILED!"
+
+              echo "================ BACKEND LOGS ================"
               docker compose logs --tail=100 backend
-              docker compose logs --tail=50 frontend
+
+              echo "================ FRONTEND LOGS ================"
+              docker compose logs --tail=100 frontend
+
+              echo "================ CONTAINER STATUS ================"
+              docker compose ps
+
               exit 1
             fi
 
             echo "============================================================"
             echo "🎉 DEPLOYMENT COMPLETED AND VERIFIED SUCCESSFULLY!"
             echo "============================================================"
+
             docker compose ps
