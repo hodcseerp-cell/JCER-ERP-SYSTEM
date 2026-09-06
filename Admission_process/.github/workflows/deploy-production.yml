@@ -107,25 +107,36 @@ jobs:
             echo "============================================================"
             docker compose up -d --remove-orphans
 
-            echo "🏥 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
+            echo "🔬 7. VERIFYING BACKEND CONTAINER HEALTH"
             echo "================================================"
 
-            sleep 10
+            MAX_RETRIES=12
+            COUNT=0
+            SUCCESS=0
 
-            echo "Checking backend health..."
+            while [ $COUNT -lt $MAX_RETRIES ]; do
+              HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' college_erp_backend 2>/dev/null || echo "unknown")
 
-            if docker compose exec -T backend node -e "fetch('http://127.0.0.1:5000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then
-              echo "✅ Backend health check PASSED!"
-            else
-              echo "❌ Backend health check FAILED!"
+              echo "Attempt $((COUNT+1))/$MAX_RETRIES - Backend status: $HEALTH_STATUS"
 
-              echo "================ BACKEND LOGS ================"
+              if [ "$HEALTH_STATUS" = "healthy" ]; then
+                echo "✅ Backend container is HEALTHY!"
+                SUCCESS=1
+                break
+              fi
+
+              echo "⏳ Waiting for backend container to become healthy..."
+              sleep 5
+              COUNT=$((COUNT+1))  
+            done
+
+            if [ $SUCCESS -ne 1 ]; then
+              echo "❌ Backend container health check FAILED!"
+
+              echo "================ BACKEND LOGS ================="
               docker compose logs --tail=100 backend
 
-              echo "================ FRONTEND LOGS ================"
-              docker compose logs --tail=100 frontend
-
-              echo "================ CONTAINER STATUS ================"
+              echo "================ CONTAINER STATUS ============="
               docker compose ps
 
               exit 1
