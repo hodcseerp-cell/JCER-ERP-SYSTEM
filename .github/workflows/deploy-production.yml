@@ -155,7 +155,7 @@ jobs:
             echo "🩺 8. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
             echo "============================================================"
 
-            HEALTH_URL="http://127.0.0.1/health"
+            HEALTH_URL="http://127.0.0.1/api/health"
 
             MAX_RETRIES=12
             COUNT=0
@@ -163,7 +163,11 @@ jobs:
 
             while [ $COUNT -lt $MAX_RETRIES ]; do
 
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || true)
+
+              if [ -z "$HTTP_STATUS" ]; then
+                HTTP_STATUS="000"
+              fi
 
               if [ "$HTTP_STATUS" = "200" ]; then
 
@@ -178,7 +182,6 @@ jobs:
               echo "Attempt $((COUNT+1))/$MAX_RETRIES, status: $HTTP_STATUS"
 
               sleep 4
-
               COUNT=$((COUNT + 1))
 
             done
