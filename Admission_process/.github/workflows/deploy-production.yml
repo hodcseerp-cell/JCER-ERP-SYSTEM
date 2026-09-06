@@ -107,31 +107,37 @@ jobs:
             echo "============================================================"
             docker compose up -d --remove-orphans
 
-            echo "🔬 7. VERIFYING BACKEND CONTAINER HEALTH"
-            echo "================================================"
+            echo "============================================================"
+            echo "🔬 7. VERIFYING BACKEND API HEALTH"
+            echo "============================================================"
 
-            MAX_RETRIES=12
+            MAX_RETRIES=24
             COUNT=0
             SUCCESS=0
 
+            echo "Waiting for backend API to become ready..."
+
             while [ $COUNT -lt $MAX_RETRIES ]; do
-              HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' college_erp_backend 2>/dev/null || echo "unknown")
+              STATUS=$(docker compose exec -T backend node -e "fetch('http://127.0.0.1:5000/api/health').then(r => process.stdout.write(String(r.status))).catch(() => process.stdout.write('000'))" 2>/dev/null || true)
+              
+              if [ -z "$STATUS" ]; then
+                STATUS="000"
+              fi
+              echo "Attempt $((COUNT+1))/$MAX_RETRIES - API status: $STATUS"
 
-              echo "Attempt $((COUNT+1))/$MAX_RETRIES - Backend status: $HEALTH_STATUS"
-
-              if [ "$HEALTH_STATUS" = "healthy" ]; then
-                echo "✅ Backend container is HEALTHY!"
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ Backend API is HEALTHY!"
                 SUCCESS=1
                 break
               fi
 
-              echo "⏳ Waiting for backend container to become healthy..."
+              echo "⏳ Waiting 5 seconds..."
               sleep 5
-              COUNT=$((COUNT+1))  
+              COUNT=$((COUNT+1))
             done
 
             if [ $SUCCESS -ne 1 ]; then
-              echo "❌ Backend container health check FAILED!"
+              echo "❌ Backend API health check FAILED!"
 
               echo "================ BACKEND LOGS ================="
               docker compose logs --tail=100 backend
