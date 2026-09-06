@@ -60,13 +60,40 @@ export interface AdmissionApplication {
   academicYear?: string | null;
   cancellationReason?: string | null;
   cancellationRemarks?: string | null;
+  cancellationAdminRemarks?: string | null;
   cancellationRequestedAt?: string | null;
   cancellationRequestedById?: string | null;
   cancellationApprovedAt?: string | null;
-  cancellationApprovedById?: string | null;
-  cancellationRejectedAt?: string | null;
-  cancellationRejectedById?: string | null;
-  cancellationAdminRemarks?: string | null;
+  verifiedByAdmin?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+  } | null;
+  correctionRequestedBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+  } | null;
+  rejectedByAdmin?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+  } | null;
+  approvedByAdmin?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+  } | null;
+  rejectedByAdminId?: string | null;
+  rejectedAt?: string | null;
   user: {
     id: string;
     email: string;

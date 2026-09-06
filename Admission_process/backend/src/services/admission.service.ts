@@ -1089,6 +1089,10 @@ class AdmissionService {
         ]
       },
       { model: Department, as: 'branch', required: false },
+      { model: User, as: 'verifiedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+      { model: User, as: 'correctionRequestedBy', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+      { model: User, as: 'rejectedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+      { model: User, as: 'approvedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
       {
         model: AdmissionPersonalDetail,
         as: 'studentpersonaldetails',
@@ -1159,6 +1163,10 @@ class AdmissionService {
           ]
         },
         { model: Department, as: 'branch' },
+        { model: User, as: 'verifiedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'] },
+        { model: User, as: 'correctionRequestedBy', attributes: ['id', 'firstName', 'lastName', 'email', 'username'] },
+        { model: User, as: 'rejectedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'] },
+        { model: User, as: 'approvedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'] },
         { model: AdmissionPersonalDetail, as: 'studentpersonaldetails' },
         { model: AdmissionParentDetail, as: 'studentparentdetails' },
         { model: AdmissionAddress, as: 'studentaddress' },
@@ -1280,6 +1288,7 @@ class AdmissionService {
         await admission.update({
           applicationStatus: 'APPROVED',
           adminRemarks: remarks || null,
+          verifiedByAdminId: adminUserId,
           reviewedBy: adminUserId,
           reviewedAt: new Date(),
           verifiedAt: new Date(),
@@ -1474,6 +1483,8 @@ class AdmissionService {
           adminRemarks: remarks || null,
           rejectionReason: status === 'REJECTED' ? finalRejectionReason || remarks || null : null,
           rejectionReasonCode: status === 'REJECTED' ? rejectionReasonCode || null : null,
+          rejectedByAdminId: status === 'REJECTED' ? adminUserId : null,
+          rejectedAt: status === 'REJECTED' ? new Date() : null,
           reviewedBy: adminUserId,
           reviewedAt: new Date(),
         }, { transaction });

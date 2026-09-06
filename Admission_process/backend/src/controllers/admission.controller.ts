@@ -998,29 +998,29 @@ export const updateAdmissionStatus = async (
       deadline
     );
 
-    // Log audit status change
+    // Log audit status change with student identification
     if (status === 'ENROLLED' && enrollmentNumber) {
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
+        req,
         userId: req.user!.id,
         action: 'ADMIN_APPROVED_ADMISSION',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        details: { admissionId: id, enrollmentNumber, oldStatus },
+        admissionOrId: id,
+        details: { enrollmentNumber, oldStatus, newStatus: status },
       });
     } else if (status === 'APPROVED') {
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
+        req,
         userId: req.user!.id,
         action: 'ADMIN_VERIFIED_DOCUMENTS',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        details: { admissionId: id, oldStatus, newStatus: status },
+        admissionOrId: id,
+        details: { oldStatus, newStatus: status },
       });
     } else if (status === 'REJECTED') {
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
+        req,
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
+        admissionOrId: id,
         details: {
           action: 'ADMISSION_REJECTED',
           reason: rejectionReasonCode,
@@ -1029,11 +1029,11 @@ export const updateAdmissionStatus = async (
         },
       });
     } else if (status === 'CORRECTION_REQUIRED') {
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
+        req,
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
+        admissionOrId: id,
         details: {
           action: 'ADMISSION_CORRECTION_REQUIRED',
           sections,
@@ -1043,12 +1043,12 @@ export const updateAdmissionStatus = async (
         },
       });
     } else {
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
+        req,
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        details: { admissionId: id, oldStatus, newStatus: status },
+        admissionOrId: id,
+        details: { oldStatus, newStatus: status },
       });
     }
 
@@ -1073,12 +1073,12 @@ export const verifyAdmissionChecklist = async (
     
     await admissionService.verifyChecklist(id, req.user!.id, payload);
     
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
+      req,
       userId: req.user!.id,
       action: 'ADMIN_VERIFIED_DOCUMENTS',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      details: { admissionId: id, payload },
+      admissionOrId: id,
+      details: { payload },
     });
     
     return res.json({ message: 'Validation checklist updated successfully' });
@@ -1102,12 +1102,12 @@ export const saveDocumentStatuses = async (
 
     await admissionService.saveDocumentStatuses(id, statuses);
 
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
+      req,
       userId: req.user!.id,
       action: 'ADMIN_UPDATED_DOCUMENT_STATUSES',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      details: { admissionId: id, statuses },
+      admissionOrId: id,
+      details: { statuses },
     });
 
     return res.json({ success: true, message: 'Document statuses saved successfully.' });
@@ -1158,13 +1158,13 @@ export const requestAdmissionCancellation = async (
     await admission.save();
     await admissionService.invalidateCache(admission.userId);
 
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
       userId: req.user!.id,
       action: 'ADMISSION_STATUS_CHANGE',
-      ipAddress: req.ip,
+      ip: req.ip,
       userAgent: req.headers['user-agent'],
+      admissionOrId: admission,
       details: {
-        admissionId: admission.id,
         action: 'ADMISSION_CANCELLATION_REQUESTED',
         reason,
         remarks: remarks || '',
@@ -1239,13 +1239,13 @@ export const processCancellationRequest = async (
 
       await admissionService.invalidateCache(admission.userId);
 
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
-        ipAddress: req.ip,
+        ip: req.ip,
         userAgent: req.headers['user-agent'],
+        admissionOrId: admission,
         details: {
-          admissionId: id,
           action: 'ADMISSION_CANCELLATION_APPROVED',
           remarks: remarks || '',
           performedBy: req.user!.id,
@@ -1262,13 +1262,13 @@ export const processCancellationRequest = async (
       await admission.save();
       await admissionService.invalidateCache(admission.userId);
 
-      await AuditLog.create({
+      await securityEvents.logAdmissionAudit({
         userId: req.user!.id,
         action: 'ADMISSION_STATUS_CHANGE',
-        ipAddress: req.ip,
+        ip: req.ip,
         userAgent: req.headers['user-agent'],
+        admissionOrId: admission,
         details: {
-          admissionId: id,
           action: 'ADMISSION_CANCELLATION_REJECTED',
           remarks: remarks || '',
           performedBy: req.user!.id,
@@ -1342,13 +1342,13 @@ export const directCancelAdmission = async (
       });
     }
 
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
       userId: req.user!.id,
       action: 'ADMISSION_STATUS_CHANGE',
-      ipAddress: req.ip,
+      ip: req.ip,
       userAgent: req.headers['user-agent'],
+      admissionOrId: admission,
       details: {
-        admissionId: id,
         action: 'ADMISSION_CANCELLED_DIRECT',
         reason,
         remarks: remarks || '',
@@ -1430,12 +1430,13 @@ export const verifyFeeReceipt = async (
 
     const result = await admissionService.verifyFeeReceipt(id, req.user!.id, { approve, remarks, rejectionReason });
     
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
       userId: req.user!.id,
       action: approve ? 'ADMIN_VERIFIED_FEE_RECEIPT' : 'ADMIN_REJECTED_FEE_RECEIPT',
-      ipAddress: req.ip,
+      ip: req.ip,
       userAgent: req.headers['user-agent'],
-      details: { admissionId: id, approve, remarks, rejectionReason },
+      admissionOrId: id,
+      details: { approve, remarks, rejectionReason },
     });
 
     return res.json(result);
@@ -1811,6 +1812,9 @@ export const deleteAdmissionById = async (
       transaction
     });
 
+    // Capture student identification for historical audit snapshot before deleting records
+    const studentIdent = await securityEvents.resolveStudentIdentification(admission);
+
     // Perform database deletes in order
     await AdmissionDocument.destroy({ where: { admissionId: id }, transaction });
     await AdmissionAcademicDetail.destroy({ where: { admissionId: id }, transaction });
@@ -1856,6 +1860,7 @@ export const deleteAdmissionById = async (
         timestamp: new Date(),
         admissionId: id,
         applicationNumber: admission.applicationNumber,
+        studentName: studentIdent.studentName,
         userId,
         performedBy: req.user!.id,
       },
@@ -2085,6 +2090,10 @@ export const listUsnEligibleApplicants = async (
           ]
         },
         { model: Department, as: 'branch', attributes: ['id', 'name', 'code'] },
+        { model: User, as: 'verifiedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+        { model: User, as: 'correctionRequestedBy', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+        { model: User, as: 'rejectedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
+        { model: User, as: 'approvedByAdmin', attributes: ['id', 'firstName', 'lastName', 'email', 'username'], required: false },
         { model: AdmissionPersonalDetail, as: 'studentpersonaldetails', attributes: ['firstName', 'middleName', 'lastName'] },
       ],
       order,
@@ -2874,12 +2883,13 @@ export const exportSingleStudentZip = async (
     await zip.finalize();
 
     // Log individual zip download
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
       userId: req.user!.id,
       action: 'INDIVIDUAL_ZIP_DOWNLOAD',
-      ipAddress: req.ip || null,
-      userAgent: req.headers['user-agent'] || null,
-      details: { admissionId: id, studentName, documentCount }
+      ip: req.ip || undefined,
+      userAgent: req.headers['user-agent'] || undefined,
+      admissionOrId: id,
+      details: { studentName, documentCount }
     });
 
   } catch (err) {

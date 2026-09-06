@@ -572,12 +572,18 @@ export const uploadProvisionalDocument = async (req: AuthenticatedRequest, res: 
     }
 
     // 4. Record Audit Log for document replacement/upload
+    const userRecord = await User.findByPk(userId, { attributes: ['firstName', 'lastName'] });
+    const studentName = userRecord ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim() : 'Student';
+
     await AuditLog.create({
       userId,
       action: isReplacement ? 'REPLACE_DOCUMENT_CORRECTION' : 'UPLOAD_PROVISIONAL_DOCUMENT',
       ipAddress: req.ip || null,
       userAgent: req.get('user-agent') || null,
       details: {
+        admissionId: application.id,
+        applicationNumber: application.provisionalAdmissionNumber || `PROV-${application.id}`,
+        studentName,
         documentId: docRecord.id,
         provisionalAdmissionId: application.id,
         documentType,

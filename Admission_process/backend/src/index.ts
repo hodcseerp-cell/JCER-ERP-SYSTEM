@@ -302,11 +302,23 @@ async function startServer() {
           ) THEN
             ALTER TABLE "admissions" ADD COLUMN "usn" VARCHAR(50) UNIQUE;
           END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'rejectedByAdminId'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "rejectedByAdminId" UUID;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'admissions' AND column_name = 'rejectedAt'
+          ) THEN
+            ALTER TABLE "admissions" ADD COLUMN "rejectedAt" TIMESTAMPTZ;
+          END IF;
         END
         $$;
       `);
     } catch (e: any) {
-      console.warn('Pre-cast migration for admissions correction workflow columns skipped:', e.message);
+      console.warn('Pre-cast migration for admissions correction & rejection workflow columns skipped:', e.message);
     }
 
     // Pre-cast: ensure users.lastActivityAt column and index exist
@@ -650,6 +662,105 @@ async function startServer() {
       }
     } catch (seedErr: any) {
       console.warn('Seeding check failed or skipped:', seedErr.message);
+    }
+
+    // Ensure all privileged accounts (Admin 1, Admin 2, Principal) exist safely without duplication
+    try {
+      const { default: User } = await import('./models/User');
+      const { default: Admin } = await import('./models/Admin');
+      const bcrypt = (await import('bcryptjs')).default;
+
+      // 1. Ensure Admin 1
+      const admin1Email = (process.env.INITIAL_ADMIN_EMAIL || 'arihantdesai483@gmail.com').trim().toLowerCase();
+      const admin1Pass = process.env.INITIAL_ADMIN_PASSWORD || 'Desai@2004';
+      const existingAdmin1 = await User.findOne({ where: { email: admin1Email } });
+      if (!existingAdmin1) {
+        const hash1 = await bcrypt.hash(admin1Pass, 10);
+        const newAdmin1 = await User.create({
+          username: admin1Email,
+          email: admin1Email,
+          passwordHash: hash1,
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          firstName: 'Shivakumar',
+          lastName: 'Biradar',
+          phone: '9876543200',
+          mustChangePassword: false,
+        });
+        await Admin.create({
+          userId: newAdmin1.id,
+          designation: 'Senior Admission Officer',
+          employeeId: 'EMP-001',
+        });
+        console.log(`✓ Admin 1 account initialized: ${admin1Email}`);
+      } else {
+        const adminProfile = await Admin.findOne({ where: { userId: existingAdmin1.id } });
+        if (!adminProfile) {
+          await Admin.create({
+            userId: existingAdmin1.id,
+            designation: 'Senior Admission Officer',
+            employeeId: 'EMP-001',
+          });
+        }
+      }
+
+      // 2. Ensure Admin 2 (if configured in .env)
+      const admin2Email = process.env.INITIAL_ADMIN2_EMAIL ? process.env.INITIAL_ADMIN2_EMAIL.trim().toLowerCase() : null;
+      const admin2Pass = process.env.INITIAL_ADMIN2_PASSWORD || 'Desai@2004';
+      if (admin2Email) {
+        const existingAdmin2 = await User.findOne({ where: { email: admin2Email } });
+        if (!existingAdmin2) {
+          const hash2 = await bcrypt.hash(admin2Pass, 10);
+          const newAdmin2 = await User.create({
+            username: admin2Email,
+            email: admin2Email,
+            passwordHash: hash2,
+            role: 'ADMIN',
+            status: 'ACTIVE',
+            firstName: 'Admin',
+            lastName: 'Two',
+            phone: '9876543209',
+            mustChangePassword: false,
+          });
+          await Admin.create({
+            userId: newAdmin2.id,
+            designation: 'Admission Officer',
+            employeeId: 'EMP-002',
+          });
+          console.log(`✓ Admin 2 account initialized: ${admin2Email}`);
+        } else {
+          const admin2Profile = await Admin.findOne({ where: { userId: existingAdmin2.id } });
+          if (!admin2Profile) {
+            await Admin.create({
+              userId: existingAdmin2.id,
+              designation: 'Admission Officer',
+              employeeId: 'EMP-002',
+            });
+          }
+        }
+      }
+
+      // 3. Ensure Principal
+      const principalEmail = (process.env.INITIAL_PRINCIPAL_EMAIL || 'arihantdesai47@gmail.com').trim().toLowerCase();
+      const principalPass = process.env.INITIAL_PRINCIPAL_PASSWORD || 'Desai@2004';
+      const existingPrincipal = await User.findOne({ where: { email: principalEmail } });
+      if (!existingPrincipal) {
+        const principalHash = await bcrypt.hash(principalPass, 10);
+        await User.create({
+          username: principalEmail,
+          email: principalEmail,
+          passwordHash: principalHash,
+          role: 'PRINCIPAL',
+          status: 'ACTIVE',
+          firstName: 'Dr. S.V.',
+          lastName: 'Gorbal',
+          phone: '9876543201',
+          mustChangePassword: false,
+        });
+        console.log(`✓ Principal account initialized: ${principalEmail}`);
+      }
+    } catch (accErr: any) {
+      console.warn('⚠️ Privileged accounts bootstrap notice:', accErr.message);
     }
 
     // Run Database Row-Level Security (RLS) setup if enabled

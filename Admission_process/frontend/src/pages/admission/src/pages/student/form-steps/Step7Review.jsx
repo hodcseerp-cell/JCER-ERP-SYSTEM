@@ -19,6 +19,7 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { downloadAdmissionPDF } from '../../../utils/pdfGenerator';
+import { formatDateDDMMYYYY } from '../../../../../../utils/date.util';
 
 const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null, applicationStatus }) => {
     const [loading, setLoading] = useState(!externalDetails);
@@ -362,7 +363,7 @@ const Step7Review = ({ onPrev, readOnly = false, details: externalDetails = null
                         <DataItem label="Middle Name" value={pd.middleName} />
                         <DataItem label="Last Name" value={pd.lastName} />
                         <DataItem label="Caste" value={pd.caste} />
-                        <DataItem label="Date of Birth" value={pd.dateOfBirth ? new Date(pd.dateOfBirth.split('/').reverse().join('-')).toLocaleDateString() : null} />
+                        <DataItem label="Date of Birth" value={formatDateDDMMYYYY(pd.dateOfBirth)} />
                         <DataItem label="Gender" value={pd.gender} />
                         <DataItem label="Category" value={pd.category} />
                         <DataItem label="Religion" value={pd.religion} />

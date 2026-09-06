@@ -8,7 +8,7 @@ import {
   CheckCircle2, X, RefreshCw 
 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { getAcademicYear } from '../../../utils/date.util';
+import { getAcademicYear, formatDateDDMMYYYY } from '../../../utils/date.util';
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   DRAFT: 'bg-neutral-100 text-neutral-800 border-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700',
@@ -540,7 +540,7 @@ export const StudentViewPage: React.FC = () => {
     return token ? `${url}?token=${encodeURIComponent(token)}` : url;
   };
 
-  const getTimelineBadge = (label: string, dateStr?: string | Date | null) => {
+  const getTimelineBadge = (label: string, dateStr?: string | Date | null, actorName?: string | null) => {
     if (!dateStr) return null;
     const date = new Date(dateStr);
     return (
@@ -549,7 +549,9 @@ export const StudentViewPage: React.FC = () => {
           <CheckCircle2 size={10} />
         </div>
         <div className="space-y-0.5">
-          <p className="font-extrabold text-neutral-800 dark:text-neutral-200">{label}</p>
+          <p className="font-extrabold text-neutral-800 dark:text-neutral-200">
+            {label}{actorName ? <span className="text-violet-600 dark:text-violet-400 font-semibold ml-1.5">by {actorName}</span> : ''}
+          </p>
           <p className="font-semibold text-neutral-400 dark:text-neutral-500">
             {date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at{' '}
             {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -770,7 +772,7 @@ export const StudentViewPage: React.FC = () => {
                 <FormField label="Middle Name" value={isEditMode ? editData?.studentpersonaldetails?.middleName : pd?.middleName} isEdit={isEditMode} onChange={(val) => handleFieldChange('studentpersonaldetails', 'middleName', val)} />
                 <FormField label="Last Name" value={isEditMode ? editData?.studentpersonaldetails?.lastName : pd?.lastName} isEdit={isEditMode} onChange={(val) => handleFieldChange('studentpersonaldetails', 'lastName', val)} />
                 <FormField label="Gender" value={isEditMode ? editData?.studentpersonaldetails?.gender : pd?.gender} isEdit={isEditMode} type="select" options={[{ label: 'Male', value: 'MALE' }, { label: 'Female', value: 'FEMALE' }, { label: 'Other', value: 'OTHER' }]} onChange={(val) => handleFieldChange('studentpersonaldetails', 'gender', val)} />
-                <FormField label="Date of Birth" value={isEditMode ? editData?.studentpersonaldetails?.dateOfBirth : pd?.dateOfBirth} isEdit={isEditMode} type="date" onChange={(val) => handleFieldChange('studentpersonaldetails', 'dateOfBirth', val)} />
+                <FormField label="Date of Birth" value={isEditMode ? editData?.studentpersonaldetails?.dateOfBirth : formatDateDDMMYYYY(pd?.dateOfBirth)} isEdit={isEditMode} type="date" onChange={(val) => handleFieldChange('studentpersonaldetails', 'dateOfBirth', val)} />
                 <FormField label="Nationality" value={isEditMode ? editData?.studentpersonaldetails?.nationality : pd?.nationality} isEdit={isEditMode} onChange={(val) => handleFieldChange('studentpersonaldetails', 'nationality', val)} />
                 <FormField label="Religion" value={isEditMode ? editData?.studentpersonaldetails?.religion : pd?.religion} isEdit={isEditMode} onChange={(val) => handleFieldChange('studentpersonaldetails', 'religion', val)} />
                 <FormField label="Caste" value={isEditMode ? editData?.studentpersonaldetails?.caste : pd?.caste} isEdit={isEditMode} onChange={(val) => handleFieldChange('studentpersonaldetails', 'caste', val)} />
@@ -1143,8 +1145,10 @@ export const StudentViewPage: React.FC = () => {
               <div className="space-y-0.5 pl-1.5 border-l-2 border-neutral-200 dark:border-neutral-850">
                 {getTimelineBadge('Application Created', student.createdAt)}
                 {getTimelineBadge('Submitted Under Review', student.submittedAt)}
-                {getTimelineBadge('Verified / Approved by Officer', student.verifiedAt)}
-                {getTimelineBadge('Admission Finalized (Enrolled)', student.applicationStatus === 'ENROLLED' ? student.updatedAt : null)}
+                {getTimelineBadge('Correction Requested', student.correctionRequestedAt, student.correctionRequestedBy ? `${student.correctionRequestedBy.firstName || ''} ${student.correctionRequestedBy.lastName || ''}`.trim() || student.correctionRequestedBy.username || student.correctionRequestedBy.email : null)}
+                {getTimelineBadge('Verified / Approved by Officer', student.verifiedAt, student.verifiedByAdmin ? `${student.verifiedByAdmin.firstName || ''} ${student.verifiedByAdmin.lastName || ''}`.trim() || student.verifiedByAdmin.username || student.verifiedByAdmin.email : null)}
+                {getTimelineBadge('Admission Finalized (Enrolled)', student.applicationStatus === 'ENROLLED' ? (student.enrolledAt || student.updatedAt) : null, student.approvedByAdmin ? `${student.approvedByAdmin.firstName || ''} ${student.approvedByAdmin.lastName || ''}`.trim() || student.approvedByAdmin.username || student.approvedByAdmin.email : (student.verifiedByAdmin ? `${student.verifiedByAdmin.firstName || ''} ${student.verifiedByAdmin.lastName || ''}`.trim() || student.verifiedByAdmin.username || student.verifiedByAdmin.email : null))}
+                {getTimelineBadge('Application Rejected', student.rejectedAt, student.rejectedByAdmin ? `${student.rejectedByAdmin.firstName || ''} ${student.rejectedByAdmin.lastName || ''}`.trim() || student.rejectedByAdmin.username || student.rejectedByAdmin.email : null)}
               </div>
             </div>
 

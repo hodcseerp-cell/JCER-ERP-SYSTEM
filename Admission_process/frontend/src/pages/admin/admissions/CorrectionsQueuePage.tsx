@@ -64,7 +64,7 @@ const CorrectionCard: React.FC<CorrectionCardProps> = ({ app, onReview }) => {
       <div className="px-5 py-4 space-y-3.5 flex-1">
 
         {/* Meta */}
-        <div className="flex flex-wrap gap-3 text-[11px] text-neutral-500 font-semibold">
+        <div className="flex flex-wrap gap-3 text-[11px] text-neutral-500 font-semibold items-center">
           <span className="flex items-center gap-1.5">
             <BookOpen size={11} className="text-indigo-400" />
             {app.branch?.code || '—'} · {app.admissionType || '—'}
@@ -73,6 +73,12 @@ const CorrectionCard: React.FC<CorrectionCardProps> = ({ app, onReview }) => {
             <Clock size={11} className="text-amber-400" />
             Sent: {sentAt}
           </span>
+          {app.correctionRequestedBy && (
+            <span className="flex items-center gap-1.5 text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200">
+              <User size={11} className="text-orange-500" />
+              By: {`${app.correctionRequestedBy.firstName || ''} ${app.correctionRequestedBy.lastName || ''}`.trim() || app.correctionRequestedBy.username || app.correctionRequestedBy.email}
+            </span>
+          )}
         </div>
 
         {/* Flagged sections */}

@@ -16,6 +16,7 @@ import admissionService from '../services/admission.service';
 import emailService from '../services/email.service';
 import db from '../config/database';
 import AnalyticsService from '../services/analytics.service';
+import securityEvents from '../services/securityEvents.service';
 
 interface AuthRequest extends Request {
   user?: { id: string; role: string };
@@ -371,14 +372,13 @@ export const decideAdmission = async (
     }
 
     // Audit Log recording Principal Name, Date & Time, Selected Reason, Optional Remarks
-    await AuditLog.create({
+    await securityEvents.logAdmissionAudit({
       userId: req.user!.id,
       action: targetStatus === 'ENROLLED' ? 'PRINCIPAL_ENROLL' : 'PRINCIPAL_REJECT_ADMISSION',
-      ipAddress: req.ip,
+      ip: req.ip,
       userAgent: req.headers['user-agent'],
+      admissionOrId: admission || id,
       details: {
-        admissionId: id,
-        applicationNumber: admission?.applicationNumber,
         principalName,
         academicYear: admission?.academicYear,
         timestamp: new Date(),

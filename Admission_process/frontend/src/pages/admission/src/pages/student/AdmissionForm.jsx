@@ -15,7 +15,7 @@ import api from '../../../../../services/api';
 import toast from 'react-hot-toast';
 import StepIndicator from '../../components/StepIndicator';
 import useApplicationStatus from '../../hooks/useApplicationStatus';
-import { getAcademicYear } from '../../../../../utils/date.util';
+import { getAcademicYear, formatDateDDMMYYYY } from '../../../../../utils/date.util';
 import Step1Admission from './form-steps/Step1Admission';
 import Step2Personal from './form-steps/Step2Personal';
 import Step3Parent from './form-steps/Step3Parent';
@@ -223,15 +223,7 @@ const AdmissionForm = () => {
                 }
 
                 if (stepNumber === 2 && stepData.dateOfBirth) {
-                    try {
-                        const dateObj = new Date(stepData.dateOfBirth);
-                        if (!isNaN(dateObj.getTime())) {
-                            const d = String(dateObj.getDate()).padStart(2, '0');
-                            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-                            const y = dateObj.getFullYear();
-                            stepData.dateOfBirth = `${d}/${m}/${y}`;
-                        }
-                    } catch (e) {}
+                    stepData.dateOfBirth = formatDateDDMMYYYY(stepData.dateOfBirth);
                 }
 
                 setFormData(prev => ({ ...prev, ...stepData }));
@@ -605,7 +597,7 @@ const AdmissionForm = () => {
                                 <div class="section-title">2. PERSONAL DETAILS</div>
                                 <div class="section-content"><table><tbody>
                                     <tr><td class="label">Full Name</td><td class="value">${applicantName || '—'}</td></tr>
-                                    <tr><td class="label">Date of Birth</td><td class="value">${pd.dateOfBirth || '—'}</td></tr>
+                                    <tr><td class="label">Date of Birth</td><td class="value">${formatDateDDMMYYYY(pd.dateOfBirth) || '—'}</td></tr>
                                     <tr><td class="label">Gender</td><td class="value">${pd.gender || '—'}</td></tr>
                                     <tr><td class="label">Category</td><td class="value">${pd.category || '—'}</td></tr>
                                     <tr><td class="label">Religion</td><td class="value">${pd.religion || '—'}</td></tr>

@@ -73,6 +73,25 @@ export async function seed(exitOnComplete = false) {
       profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&fit=crop',
     });
 
+    // Admin 2 User (if configured)
+    const admin2Email = process.env.INITIAL_ADMIN2_EMAIL;
+    const admin2Pass = process.env.INITIAL_ADMIN2_PASSWORD || 'Desai@2004';
+    let admin2User: User | null = null;
+    if (admin2Email && admin2Email.trim() !== '') {
+      const admin2Hash = await bcrypt.hash(admin2Pass, 10);
+      admin2User = await User.create({
+        username: admin2Email.trim(),
+        email: admin2Email.trim(),
+        passwordHash: admin2Hash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        firstName: 'Admin',
+        lastName: 'Two',
+        phone: '9876543209',
+        profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&fit=crop',
+      });
+    }
+
     // Principal User
     await User.create({
       username: principalEmail,
@@ -120,7 +139,14 @@ export async function seed(exitOnComplete = false) {
       designation: 'Senior Admission Officer',
       employeeId: 'EMP-001',
     });
-    console.log('✓ Admin profile created.');
+    if (admin2User) {
+      await Admin.create({
+        userId: admin2User.id,
+        designation: 'Admission Officer',
+        employeeId: 'EMP-002',
+      });
+    }
+    console.log('✓ Admin profiles created.');
 
     await Teacher.create({
       userId: teacherUser.id,

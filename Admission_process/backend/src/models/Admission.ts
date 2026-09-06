@@ -68,6 +68,10 @@ class Admission extends Model {
   public enrolledAt!: Date | null;
   public principalRemarks!: string | null;
 
+  // Rejection Accountability
+  public rejectedByAdminId!: string | null;
+  public rejectedAt!: Date | null;
+
   // Approval Accountability
   public approvedByAdminId!: string | null;
   public approvalRemarks!: string | null;
@@ -106,6 +110,10 @@ class Admission extends Model {
   public studentaddress?: any;
   public studentacademicdetails?: any;
   public studentdocuments?: any;
+  public verifiedByAdmin?: any;
+  public correctionRequestedBy?: any;
+  public rejectedByAdmin?: any;
+  public approvedByAdmin?: any;
 }
 
 Admission.init(
@@ -216,6 +224,15 @@ Admission.init(
     },
     rejectionReasonCode: {
       type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    rejectedByAdminId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: User, key: 'id' },
+    },
+    rejectedAt: {
+      type: DataTypes.DATE,
       allowNull: true,
     },
     documentsVerified: {
@@ -365,5 +382,9 @@ Admission.init(
 
 Admission.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 Admission.belongsTo(Department, { as: 'branch', foreignKey: 'branchId' });
+Admission.belongsTo(User, { as: 'verifiedByAdmin', foreignKey: 'verifiedByAdminId' });
+Admission.belongsTo(User, { as: 'correctionRequestedBy', foreignKey: 'correctionRequestedById' });
+Admission.belongsTo(User, { as: 'rejectedByAdmin', foreignKey: 'rejectedByAdminId' });
+Admission.belongsTo(User, { as: 'approvedByAdmin', foreignKey: 'approvedByAdminId' });
 
 export default Admission;

@@ -262,6 +262,90 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
     }
   };
 
+  const getActionAttribution = (app: AdmissionApplication, currentStatusTab: string) => {
+    const formatAdminName = (u?: { firstName: string; lastName: string; username?: string; email?: string } | null) => {
+      if (!u) return null;
+      const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+      return fullName || u.username || u.email || null;
+    };
+
+    switch (currentStatusTab) {
+      case 'APPROVED': {
+        const name = formatAdminName(app.verifiedByAdmin);
+        return name ? (
+          <span className="font-bold text-indigo-700 dark:text-indigo-400 inline-flex items-center gap-1">
+            <ShieldCheck size={12} className="text-indigo-500 shrink-0" /> {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+      case 'CORRECTION_REQUIRED': {
+        const name = formatAdminName(app.correctionRequestedBy);
+        return name ? (
+          <span className="font-bold text-orange-700 dark:text-orange-400 inline-flex items-center gap-1">
+            <Clock size={12} className="text-orange-500 shrink-0" /> {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+      case 'REJECTED': {
+        const name = formatAdminName(app.rejectedByAdmin);
+        return name ? (
+          <span className="font-bold text-rose-700 dark:text-rose-400 inline-flex items-center gap-1">
+            <XCircle size={12} className="text-rose-500 shrink-0" /> {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+      case 'ENROLLED': {
+        const name = formatAdminName(app.approvedByAdmin) || formatAdminName(app.verifiedByAdmin);
+        return name ? (
+          <span className="font-bold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
+            <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+      case 'RESUBMITTED': {
+        const name = formatAdminName(app.correctionRequestedBy);
+        return name ? (
+          <span className="font-bold text-purple-700 dark:text-purple-400 inline-flex items-center gap-1">
+            <RefreshCw size={12} className="text-purple-500 shrink-0" /> {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+      default: {
+        let name: string | null = null;
+        let colorCls = 'text-neutral-700 dark:text-neutral-300';
+        if (app.applicationStatus === 'REJECTED') {
+          name = formatAdminName(app.rejectedByAdmin);
+          colorCls = 'text-rose-700 dark:text-rose-400';
+        } else if (app.applicationStatus === 'ENROLLED') {
+          name = formatAdminName(app.approvedByAdmin) || formatAdminName(app.verifiedByAdmin);
+          colorCls = 'text-emerald-700 dark:text-emerald-400';
+        } else if (app.applicationStatus === 'APPROVED' || app.applicationStatus === 'PRINCIPAL_APPROVED') {
+          name = formatAdminName(app.verifiedByAdmin);
+          colorCls = 'text-indigo-700 dark:text-indigo-400';
+        } else if (app.applicationStatus === 'CORRECTION_REQUIRED' || app.applicationStatus === 'RESUBMITTED') {
+          name = formatAdminName(app.correctionRequestedBy);
+          colorCls = 'text-orange-700 dark:text-orange-400';
+        }
+        return name ? (
+          <span className={`font-bold ${colorCls}`}>
+            {name}
+          </span>
+        ) : <span className="text-neutral-400">—</span>;
+      }
+    }
+  };
+
+  const getActionColumnHeader = (currentStatusTab: string) => {
+    switch (currentStatusTab) {
+      case 'APPROVED': return 'Verified By';
+      case 'CORRECTION_REQUIRED': return 'Sent for Correction By';
+      case 'REJECTED': return 'Rejected By';
+      case 'ENROLLED': return 'Approved By';
+      case 'RESUBMITTED': return 'Correction Flagged By';
+      default: return 'Action By';
+    }
+  };
+
   const tabs = [
     { name: "Queue", status: "QUEUE", count: status === "QUEUE" && data?.total !== undefined ? data.total : (stats.submitted + stats.underReview + (stats.resubmitted || 0)), color: "bg-amber-500" },
     { name: "Resubmitted", status: "RESUBMITTED", count: status === "RESUBMITTED" && data?.total !== undefined ? data.total : (stats.resubmitted || 0), color: "bg-purple-500" },
@@ -495,19 +579,20 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                 <th className="px-4 py-3 font-bold">Entrance / Merit</th>
                 <th className="px-4 py-3 font-bold">Submitted Date</th>
                 <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-bold">{getActionColumnHeader(status)}</th>
                 <th className="px-4 py-3 font-bold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 bg-white dark:bg-transparent">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-neutral-400 font-bold uppercase tracking-widest text-[10px]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-neutral-400 font-bold uppercase tracking-widest text-[10px]">
                     <LoaderPulse />
                   </td>
                 </tr>
               ) : data?.applications.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-neutral-400 font-bold uppercase tracking-widest text-[10px]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-neutral-400 font-bold uppercase tracking-widest text-[10px]">
                     No applications in this stage pipeline.
                   </td>
                 </tr>
@@ -571,6 +656,9 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                         <td className="px-4 py-3">
                           {getStatusBadge(app)}
                         </td>
+                        <td className="px-4 py-3 font-semibold text-neutral-600 dark:text-neutral-300">
+                          {getActionAttribution(app, status)}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1.5">
                             {app.applicationStatus === 'ENROLLED' ? (
@@ -599,7 +687,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                       {/* Tab 3: APPROVED Credentials details block */}
                       {status === 'ENROLLED' && (
                         <tr>
-                          <td colSpan={8} className="px-6 py-3 bg-emerald-50/10 dark:bg-emerald-950/5 border-b border-neutral-100 dark:border-neutral-800/80">
+                          <td colSpan={9} className="px-6 py-3 bg-emerald-50/10 dark:bg-emerald-950/5 border-b border-neutral-100 dark:border-neutral-800/80">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs font-semibold">
                               <div className="flex flex-wrap items-center gap-6">
                                 <div className="flex items-center gap-2">

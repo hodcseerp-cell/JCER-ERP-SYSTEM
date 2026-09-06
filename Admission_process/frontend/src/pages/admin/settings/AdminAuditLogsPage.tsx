@@ -16,6 +16,9 @@ export interface AuditLogItem {
   ipAddress: string;
   userAgent: string | null;
   details: any;
+  studentName?: string | null;
+  applicationNumber?: string | null;
+  admissionId?: string | null;
   createdAt: string;
 }
 
@@ -30,6 +33,11 @@ const ACTION_COLOR_MAP: Record<string, { bg: string; text: string; border: strin
   DOCUMENT_DOWNLOAD: { bg: 'bg-cyan-50 dark:bg-cyan-950/20', text: 'text-cyan-700 dark:text-cyan-400', border: 'border-cyan-200 dark:border-cyan-900/40' },
   ADMISSION_STEP_EDIT: { bg: 'bg-sky-50 dark:bg-sky-950/20', text: 'text-sky-700 dark:text-sky-400', border: 'border-sky-200 dark:border-sky-900/40' },
   ADMISSION_STATUS_UPDATE: { bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-700 dark:text-purple-400', border: 'border-purple-200 dark:border-purple-900/40' },
+  ADMIN_VERIFIED_DOCUMENTS: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-900/40' },
+  SENT_FOR_CORRECTION: { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-900/40' },
+  ADMISSION_REJECTED: { bg: 'bg-rose-50 dark:bg-rose-950/20', text: 'text-rose-700 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-900/40' },
+  ADMISSION_APPROVED: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-900/40' },
+  PRINCIPAL_ENROLL: { bg: 'bg-teal-50 dark:bg-teal-950/20', text: 'text-teal-700 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-900/40' },
 };
 
 export const AdminAuditLogsPage: React.FC = () => {
@@ -81,7 +89,7 @@ export const AdminAuditLogsPage: React.FC = () => {
     toast.info('Log filters reset.');
   };
 
-  // Filter logs by search keyword on client
+  // Filter logs by search keyword on client (User, Action, Student Name, Application Number, IP, Details)
   const filteredLogs = logs.filter(log => {
     if (!search.trim()) return true;
     const query = search.toLowerCase().trim();
@@ -91,6 +99,9 @@ export const AdminAuditLogsPage: React.FC = () => {
       log.userName.toLowerCase().includes(query) ||
       (log.userEmail && log.userEmail.toLowerCase().includes(query)) ||
       (log.ipAddress && log.ipAddress.toLowerCase().includes(query)) ||
+      (log.studentName && log.studentName.toLowerCase().includes(query)) ||
+      (log.applicationNumber && log.applicationNumber.toLowerCase().includes(query)) ||
+      (log.admissionId && log.admissionId.toLowerCase().includes(query)) ||
       detailsStr.includes(query)
     );
   });
@@ -112,7 +123,7 @@ export const AdminAuditLogsPage: React.FC = () => {
       toast.warning('No activity logs available to export.');
       return;
     }
-    const headers = ['Log ID', 'Timestamp', 'User', 'Role', 'Email', 'Action', 'IP Address', 'Details'];
+    const headers = ['Log ID', 'Timestamp', 'User', 'Role', 'Email', 'Action', 'Student Name', 'Application Number', 'Admission ID', 'IP Address', 'Details'];
     const rows = filteredLogs.map(l => [
       l.id,
       new Date(l.createdAt).toLocaleString(),
@@ -120,6 +131,9 @@ export const AdminAuditLogsPage: React.FC = () => {
       l.userRole,
       l.userEmail || 'N/A',
       l.action,
+      `"${l.studentName || '—'}"`,
+      `"${l.applicationNumber || '—'}"`,
+      `"${l.admissionId || '—'}"`,
       l.ipAddress,
       `"${l.details ? JSON.stringify(l.details).replace(/"/g, '""') : 'N/A'}"`
     ]);
@@ -342,6 +356,7 @@ export const AdminAuditLogsPage: React.FC = () => {
                   <th className="py-4 px-4">Timestamp</th>
                   <th className="py-4 px-4">User / Actor</th>
                   <th className="py-4 px-4">Action</th>
+                  <th className="py-4 px-4">Student / Application</th>
                   <th className="py-4 px-4">IP Address</th>
                   <th className="py-4 px-4">Activity Summary</th>
                   <th className="py-4 px-4 text-right">Details</th>
@@ -378,6 +393,27 @@ export const AdminAuditLogsPage: React.FC = () => {
 
                       <td className="py-4 px-4 whitespace-nowrap">
                         {getActionBadge(log.action)}
+                      </td>
+
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        {log.studentName || log.applicationNumber ? (
+                          <div>
+                            <p className="font-bold text-neutral-900 dark:text-white leading-tight">
+                              {log.studentName || 'Student Name Unavailable'}
+                            </p>
+                            {log.applicationNumber ? (
+                              <p className="font-mono text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 mt-0.5 tracking-wider">
+                                {log.applicationNumber}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-neutral-400 mt-0.5 font-medium">
+                                {log.admissionId ? `ID: ${log.admissionId.slice(0, 8)}...` : '—'}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 font-semibold">—</span>
+                        )}
                       </td>
 
                       <td className="py-4 px-4 whitespace-nowrap font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
@@ -486,6 +522,23 @@ export const AdminAuditLogsPage: React.FC = () => {
                   <p className="font-mono text-neutral-900 dark:text-white mt-1">{selectedLog.ipAddress}</p>
                 </div>
               </div>
+
+              {(selectedLog.studentName || selectedLog.applicationNumber || selectedLog.admissionId) && (
+                <div className="p-4 bg-violet-50/60 dark:bg-violet-950/20 rounded-2xl border border-violet-100 dark:border-violet-900/30 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 block">Student Name</span>
+                    <p className="font-bold text-neutral-900 dark:text-white mt-0.5">{selectedLog.studentName || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 block">Application No</span>
+                    <p className="font-mono font-bold text-neutral-900 dark:text-white mt-0.5">{selectedLog.applicationNumber || '—'}</p>
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 block">Admission ID</span>
+                    <p className="font-mono text-[11px] text-neutral-600 dark:text-neutral-300 truncate mt-0.5">{selectedLog.admissionId || '—'}</p>
+                  </div>
+                </div>
+              )}
 
               {selectedLog.userAgent && (
                 <div>

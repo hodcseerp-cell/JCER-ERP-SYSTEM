@@ -36,7 +36,10 @@ const getUserPayload = async (user: User) => {
     id: user.id,
     email: user.email,
     role: user.role,
-    name: `${user.firstName} ${user.lastName}`,
+    name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
     profileImage: user.profileImage,
     mustChangePassword: user.mustChangePassword,
     system,
@@ -636,24 +639,61 @@ export const updateProfile = async (req: Request, res: Response, next: NextFunct
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { phone, firstName, lastName } = req.body;
+    const { phone, firstName, lastName, name } = req.body;
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
 
     const updateData: any = {};
-    if (phone !== undefined) updateData.phone = phone;
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
+    if (phone !== undefined) {
+      updateData.phone = String(phone).trim();
+    }
+
+    if (firstName !== undefined || lastName !== undefined) {
+      if (firstName !== undefined) {
+        const cleanFirst = String(firstName).trim();
+        if (!cleanFirst) {
+          return res.status(400).json({ success: false, error: 'First name cannot be empty.' });
+        }
+        if (cleanFirst.length > 60) {
+          return res.status(400).json({ success: false, error: 'First name cannot exceed 60 characters.' });
+        }
+        updateData.firstName = cleanFirst;
+      }
+      if (lastName !== undefined) {
+        const cleanLast = String(lastName).trim();
+        if (cleanLast.length > 60) {
+          return res.status(400).json({ success: false, error: 'Last name cannot exceed 60 characters.' });
+        }
+        updateData.lastName = cleanLast;
+      }
+    } else if (name !== undefined && typeof name === 'string') {
+      const cleanName = name.trim();
+      if (!cleanName) {
+        return res.status(400).json({ success: false, error: 'Profile name cannot be empty.' });
+      }
+      if (cleanName.length < 2) {
+        return res.status(400).json({ success: false, error: 'Profile name must be at least 2 characters long.' });
+      }
+      if (cleanName.length > 100) {
+        return res.status(400).json({ success: false, error: 'Profile name cannot exceed 100 characters.' });
+      }
+      const parts = cleanName.split(/\s+/);
+      updateData.firstName = parts[0];
+      updateData.lastName = parts.slice(1).join(' ');
+    }
 
     await user.update(updateData);
+
+    const updatedUserPayload = await getUserPayload(user);
+    logger.info(`EVENT: PROFILE_UPDATED | USER_ID: ${userId} | ROLE: ${user.role} | NEW_NAME: ${updatedUserPayload.name}`);
 
     return res.status(200).json({
       success: true,
       message: 'Profile details updated successfully.',
       data: {
-        user: await getUserPayload(user),
+        user: updatedUserPayload,
       },
     });
   } catch (error) {

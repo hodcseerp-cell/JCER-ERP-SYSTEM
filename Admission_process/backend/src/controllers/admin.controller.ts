@@ -8,6 +8,7 @@ import Student from '../models/Student';
 import Department from '../models/Department';
 import Fee from '../models/Fee';
 import Admission from '../models/Admission';
+import AdmissionPersonalDetail from '../models/AdmissionPersonalDetail';
 import AuditLog from '../models/AuditLog';
 import SystemConfiguration from '../models/SystemConfiguration';
 import securityEvents from '../services/securityEvents.service';
@@ -352,8 +353,47 @@ export const getAuditLogs = async (
       }, {} as Record<string, any>);
     }
 
+    // Collect admission IDs for legacy enrichment if studentName is missing
+    const legacyAdmissionIds: string[] = [];
+    logs.forEach(l => {
+      const admId = l.details?.admissionId;
+      if (admId && typeof admId === 'string' && !l.details?.studentName) {
+        legacyAdmissionIds.push(admId);
+      }
+    });
+
+    let admissionsMap: Record<string, { studentName: string; applicationNumber: string }> = {};
+    if (legacyAdmissionIds.length > 0) {
+      try {
+        const legacyAdmissions = await Admission.findAll({
+          where: { id: { [Op.in]: Array.from(new Set(legacyAdmissionIds)) } },
+          include: [
+            { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'username', 'email'] },
+            { model: AdmissionPersonalDetail, as: 'studentpersonaldetails', attributes: ['firstName', 'middleName', 'lastName'] }
+          ]
+        });
+        legacyAdmissions.forEach(adm => {
+          const pd = adm.studentpersonaldetails;
+          const pdName = pd ? `${pd.firstName || ''} ${pd.middleName ? pd.middleName + ' ' : ''}${pd.lastName || ''}`.trim() : '';
+          const u = adm.user;
+          const userName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : '';
+          admissionsMap[adm.id] = {
+            studentName: pdName || userName || u?.username || u?.email || 'Unknown Student',
+            applicationNumber: adm.applicationNumber || 'N/A'
+          };
+        });
+      } catch (e) {
+        console.error('Failed to populate legacy admission metadata for logs:', e);
+      }
+    }
+
     const data = logs.map(log => {
       const u = log.userId ? usersMap[log.userId] : null;
+      const legacyInfo = log.details?.admissionId ? admissionsMap[log.details.admissionId] : null;
+      const studentName = log.details?.studentName || legacyInfo?.studentName || null;
+      const applicationNumber = log.details?.applicationNumber || legacyInfo?.applicationNumber || null;
+      const admissionId = log.details?.admissionId || null;
+
       return {
         id: log.id,
         action: log.action,
@@ -364,6 +404,9 @@ export const getAuditLogs = async (
         ipAddress: log.ipAddress || '127.0.0.1',
         userAgent: log.userAgent,
         details: log.details,
+        studentName,
+        applicationNumber,
+        admissionId,
         createdAt: log.createdAt,
       };
     });

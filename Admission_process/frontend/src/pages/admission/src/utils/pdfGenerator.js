@@ -1,4 +1,4 @@
-import { getAcademicYear } from '../../../../utils/date.util';
+import { getAcademicYear, formatDateDDMMYYYY } from '../../../../utils/date.util';
 
 /**
  * Shared PDF/Print generator for student admission application acknowledgment forms.
@@ -183,7 +183,7 @@ export const downloadAdmissionPDF = async (api, toast, applicationId = null) => 
                             <div class="section-content">
                                 <table><tbody>
                                     <tr><td class="label">Full Name</td><td class="value">${applicantName || '—'}</td></tr>
-                                    <tr><td class="label">Date of Birth</td><td class="value">${pd.dateOfBirth || '—'}</td></tr>
+                                    <tr><td class="label">Date of Birth</td><td class="value">${formatDateDDMMYYYY(pd.dateOfBirth) || '—'}</td></tr>
                                     <tr><td class="label">Gender</td><td class="value">${pd.gender || '—'}</td></tr>
                                     <tr><td class="label">Category</td><td class="value">${pd.category || '—'}</td></tr>
                                     <tr><td class="label">Religion</td><td class="value">${pd.religion || '—'}</td></tr>

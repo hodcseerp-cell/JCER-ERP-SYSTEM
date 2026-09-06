@@ -12,6 +12,7 @@ import admissionService, {
   AdmissionStatus,
 } from '../../services/admission.service';
 import API from '../../services/api';
+import { formatDateDDMMYYYY } from '../../utils/date.util';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -481,7 +482,7 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({ de
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { icon: User,     label: 'Full Name',    value: selected.studentpersonaldetails ? `${selected.studentpersonaldetails.firstName} ${selected.studentpersonaldetails.middleName ? selected.studentpersonaldetails.middleName + ' ' : ''}${selected.studentpersonaldetails.lastName}`.replace(/\s+/g, ' ').trim() : selected.user ? `${selected.user.firstName} ${selected.user.lastName}` : '' },
-                    { icon: Calendar, label: 'Date of Birth', value: selected.studentpersonaldetails?.dateOfBirth || '—' },
+                    { icon: Calendar, label: 'Date of Birth', value: formatDateDDMMYYYY(selected.studentpersonaldetails?.dateOfBirth) || '—' },
                     { icon: User,     label: 'Gender',       value: selected.studentpersonaldetails?.gender || '—' },
                     { icon: BookOpen, label: 'Category',     value: selected.studentpersonaldetails?.category || '—' },
                     { icon: Phone,    label: 'Phone',        value: selected.studentpersonaldetails?.phone || selected.user?.phone || '—' },

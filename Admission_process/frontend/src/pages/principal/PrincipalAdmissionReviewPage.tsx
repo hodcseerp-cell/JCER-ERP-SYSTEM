@@ -8,7 +8,7 @@ import {
   AlertCircle, CheckSquare, Award, FileSignature, ChevronRight, X, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { getAcademicYear } from '../../utils/date.util';
+import { getAcademicYear, formatDateDDMMYYYY } from '../../utils/date.util';
 
 // ─── Document Thumbnail / Preview Component ──────────────────────────────────
 const DocumentItem: React.FC<{ field: string; appId: string; label: string; onPreview: (url: string, label: string, isPdf: boolean) => void }> = ({ field, appId, label, onPreview }) => {
@@ -251,9 +251,14 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
       ? `${app.user.firstName || ''} ${app.user.lastName || ''}`.trim()
       : 'Guest Student';
 
-  const displayReviewedBy = (app.reviewedBy && !app.reviewedBy.includes('-') && app.reviewedBy.length < 35)
-    ? app.reviewedBy
-    : 'Admissions Officer - Shivakumar Biradar';
+  const formatAdminName = (u?: { firstName?: string; lastName?: string; username?: string; email?: string } | null) => {
+    if (!u) return null;
+    const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+    return fullName || u.username || u.email || null;
+  };
+
+  const displayReviewedBy = formatAdminName(app.verifiedByAdmin) 
+    || ((app.reviewedBy && !app.reviewedBy.includes('-') && app.reviewedBy.length < 35) ? app.reviewedBy : 'Admissions Officer');
 
   const rawDate = app.feeVerifiedAt || app.verifiedAt || app.updatedAt;
   const displayVerificationDate = rawDate
@@ -454,7 +459,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
               <FormField label="Middle Name" value={pd?.middleName} />
               <FormField label="Last Name" value={pd?.lastName} />
               <FormField label="Gender" value={pd?.gender} />
-              <FormField label="Date of Birth" value={pd?.dateOfBirth} />
+              <FormField label="Date of Birth" value={formatDateDDMMYYYY(pd?.dateOfBirth)} />
               <FormField label="Category" value={pd?.category} />
               <FormField label="Caste" value={pd?.caste} />
               <FormField label="Religion" value={pd?.religion} />
@@ -641,7 +646,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
                 <p><span className="text-slate-400">Admission No:</span> <strong className="text-slate-800 dark:text-slate-200">#{app.applicationNumber}</strong></p>
                 <p><span className="text-slate-400">Branch:</span> <strong className="text-slate-800 dark:text-slate-200">{app.branch?.name} ({app.branch?.code})</strong></p>
                 <p><span className="text-slate-400">Quota:</span> <strong className="text-slate-800 dark:text-slate-200">{app.admissionType}</strong></p>
-                <p><span className="text-slate-400">Verified By:</span> <strong className="text-slate-800 dark:text-slate-200">{app.reviewedBy || 'Nodal Officer'}</strong></p>
+                <p><span className="text-slate-400">Verified By:</span> <strong className="text-slate-800 dark:text-slate-200">{formatAdminName(app.verifiedByAdmin) || app.reviewedBy || 'Admissions Officer'}</strong></p>
                 <p><span className="text-slate-400">Eligibility:</span> <strong className="text-emerald-600">✅ Eligible</strong></p>
               </div>
             </div>
@@ -649,7 +654,7 @@ export const PrincipalAdmissionReviewPage: React.FC = () => {
             {/* Read-only Informational Checklist */}
             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 space-y-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
               <p className="flex items-center gap-2">
-                <CheckCircle2 size={14} className="text-emerald-600" /> Documents Verified by Admin
+                <CheckCircle2 size={14} className="text-emerald-600" /> Documents Verified by {formatAdminName(app.verifiedByAdmin) || 'Admin'}
               </p>
               <p className="flex items-center gap-2">
                 <CheckCircle2 size={14} className="text-emerald-600" /> Eligibility Criteria Verified

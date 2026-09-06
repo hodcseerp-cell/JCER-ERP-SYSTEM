@@ -13,7 +13,10 @@ import {
   Loader2,
   Shield,
   Eye,
-  EyeOff
+  EyeOff,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 import API from '../../services/api';
 import UpdateEmailModal from '../../components/profile/UpdateEmailModal';
@@ -23,6 +26,22 @@ export const AdminProfilePage: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
   
   const [phone, setPhone] = useState(user?.phone || '9980979654');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [firstName, setFirstName] = useState(user?.firstName || user?.name?.split(' ')[0] || '');
+  const [lastName, setLastName] = useState(user?.lastName || user?.name?.split(' ').slice(1).join(' ') || '');
+  const [savingName, setSavingName] = useState(false);
+
+  React.useEffect(() => {
+    if (user) {
+      if (user.phone) setPhone(user.phone);
+      if (!isEditingName) {
+        const parts = (user.name || '').trim().split(/\s+/);
+        setFirstName(user.firstName || parts[0] || '');
+        setLastName(user.lastName !== undefined ? user.lastName : parts.slice(1).join(' '));
+      }
+    }
+  }, [user, isEditingName]);
+
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -79,12 +98,65 @@ export const AdminProfilePage: React.FC = () => {
     }
   };
 
+  const handleSaveName = async () => {
+    const cleanFirst = firstName.trim();
+    const cleanLast = lastName.trim();
+    const cleanFullName = `${cleanFirst} ${cleanLast}`.trim();
+
+    if (!cleanFirst) {
+      toast.error('First name cannot be empty.');
+      return;
+    }
+    if (cleanFullName.length < 2) {
+      toast.error('Full name must be at least 2 characters.');
+      return;
+    }
+    if (cleanFullName.length > 100) {
+      toast.error('Full name cannot exceed 100 characters.');
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      const res = await API.put('/auth/profile', {
+        firstName: cleanFirst,
+        lastName: cleanLast,
+        name: cleanFullName
+      });
+
+      if (res.data?.success && res.data?.data?.user) {
+        const updatedUser = res.data.data.user;
+        dispatch(updateUser(updatedUser));
+        setIsEditingName(false);
+        toast.success('🎉 Profile name updated successfully!');
+      } else {
+        toast.error(res.data?.error || 'Failed to update profile name.');
+      }
+    } catch (err: any) {
+      console.error('Failed to update name:', err);
+      toast.error(err.response?.data?.error || 'Failed to update profile name.');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
-      const res = await API.put('/auth/profile', { phone });
-      if (res.data?.success) {
-        dispatch(updateUser({ phone }));
+      const cleanFirst = firstName.trim();
+      const cleanLast = lastName.trim();
+      const cleanFullName = `${cleanFirst} ${cleanLast}`.trim();
+
+      const res = await API.put('/auth/profile', {
+        phone,
+        firstName: cleanFirst || undefined,
+        lastName: cleanLast || undefined,
+        name: cleanFullName || undefined,
+      });
+
+      if (res.data?.success && res.data?.data?.user) {
+        dispatch(updateUser(res.data.data.user));
+        setIsEditingName(false);
         toast.success('Profile details saved successfully!');
       } else {
         toast.error('Failed to save profile details.');
@@ -169,16 +241,95 @@ export const AdminProfilePage: React.FC = () => {
               </button>
             </div>
 
-            <div>
+            <div className="w-full">
               <span className="px-3 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-black uppercase tracking-wider">
                 ADMINISTRATOR
               </span>
-              <h3 className="text-lg font-black text-neutral-900 dark:text-white mt-2">
-                {user?.name || 'Arihant Desai'}
-              </h3>
-              <p className="text-xs text-neutral-400 font-bold mt-0.5">
-                Administrator
-              </p>
+
+              {!isEditingName ? (
+                <div className="mt-2 flex flex-col items-center justify-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <h3 className="text-lg font-black text-neutral-900 dark:text-white">
+                      {user?.name || 'Administrator'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingName(true);
+                        const parts = (user?.name || '').trim().split(/\s+/);
+                        setFirstName(user?.firstName || parts[0] || '');
+                        setLastName(user?.lastName || parts.slice(1).join(' ') || '');
+                      }}
+                      className="p-1.5 text-neutral-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded-lg transition-colors cursor-pointer"
+                      title="Edit Admin Name"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-neutral-400 font-bold mt-0.5">
+                    Administrator
+                  </p>
+                </div>
+              ) : (
+                <div className="w-full mt-3 p-4 bg-violet-50/60 dark:bg-violet-950/30 border border-violet-200/80 dark:border-violet-800/60 rounded-2xl space-y-3 animate-fade-in text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
+                      <Edit2 size={12} /> Edit Display Name
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingName(false)}
+                      className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">First Name *</label>
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="e.g. Shivakumar"
+                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-bold focus:outline-none focus:border-violet-500 text-neutral-900 dark:text-white"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">Last Name</label>
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="e.g. Biradar"
+                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-bold focus:outline-none focus:border-violet-500 text-neutral-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingName(false)}
+                      disabled={savingName}
+                      className="px-3 py-1.5 text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveName}
+                      disabled={savingName}
+                      className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    >
+                      {savingName ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check size={13} />}
+                      <span>Save Name</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -7,6 +7,7 @@ import {
     AlertCircle, ThumbsUp, ThumbsDown, Eye
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatDateDDMMYYYY } from '../../../../../utils/date.util';
 
 const STATUS_STYLE = {
     DRAFT: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -237,7 +238,7 @@ const StudentDetail = () => {
                 <Section title="Personal Details" icon={User}>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
                         <Field label="Full Name" value={`${pd.firstName} ${pd.middleName || ''} ${pd.lastName}`} />
-                        <Field label="Date of Birth" value={pd.dateOfBirth} />
+                        <Field label="Date of Birth" value={formatDateDDMMYYYY(pd.dateOfBirth)} />
                         <Field label="Gender" value={pd.gender} />
                         <Field label="Category" value={pd.category} />
                         <Field label="Religion" value={pd.religion} />

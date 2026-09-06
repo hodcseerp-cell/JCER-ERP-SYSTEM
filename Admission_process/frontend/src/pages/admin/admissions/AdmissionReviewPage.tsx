@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import admissionService, { AdmissionApplication } from '../../../services/admission.service';
 import API from '../../../services/api';
 import { ArrowLeft, User, Users, GraduationCap, CheckCircle2, XCircle, FileText, MapPin, ExternalLink, ShieldCheck, Maximize2, Image, Layers, Clock, Send, X, AlertTriangle, Loader2, Trash2, Ban, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { getAcademicYear } from '../../../utils/date.util';
+import { getAcademicYear, formatDateDDMMYYYY } from '../../../utils/date.util';
 import { DocumentVerificationWorkspace } from './DocumentVerificationWorkspace';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -999,6 +1000,15 @@ export const AdmissionReviewPage: React.FC = () => {
 
   const missingFields = getMissingFields(app);
 
+  const getAdminDisplayName = (
+    u?: { firstName?: string; lastName?: string; username?: string; email?: string } | null,
+    fallback = 'Unknown Admin'
+  ): string => {
+    if (!u) return fallback;
+    const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+    return fullName || u.username || u.email || fallback;
+  };
+
   return (
     <CorrectionContext.Provider value={{ 
       remarks: app?.correctionRemarks || null, 
@@ -1058,6 +1068,56 @@ export const AdmissionReviewPage: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* Admin Action Attribution Banner */}
+      {(() => {
+        if (app.applicationStatus === 'APPROVED' || app.applicationStatus === 'PRINCIPAL_APPROVED') {
+          const adminName = getAdminDisplayName(app.verifiedByAdmin);
+          const dateStr = app.verifiedAt ? format(new Date(app.verifiedAt), 'dd MMM yyyy, hh:mm a') : (app.updatedAt ? format(new Date(app.updatedAt), 'dd MMM yyyy, hh:mm a') : null);
+          return (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold text-indigo-900 dark:text-indigo-200 shadow-sm animate-fade-in">
+              <ShieldCheck size={16} className="text-indigo-600 shrink-0" />
+              <span>
+                <strong>✓ Verified</strong>{adminName !== '—' && adminName !== 'Unknown Admin' ? <> by <span className="font-bold text-indigo-700 dark:text-indigo-300">{adminName}</span></> : ''}{dateStr ? <> on <span className="font-medium">{dateStr}</span></> : ''}
+              </span>
+            </div>
+          );
+        } else if (app.applicationStatus === 'CORRECTION_REQUIRED' || app.applicationStatus === 'RESUBMITTED') {
+          const adminName = getAdminDisplayName(app.correctionRequestedBy);
+          const dateStr = app.correctionRequestedAt ? format(new Date(app.correctionRequestedAt), 'dd MMM yyyy, hh:mm a') : (app.updatedAt ? format(new Date(app.updatedAt), 'dd MMM yyyy, hh:mm a') : null);
+          return (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl text-xs font-semibold text-orange-900 dark:text-orange-200 shadow-sm animate-fade-in">
+              <Clock size={16} className="text-orange-600 shrink-0" />
+              <span>
+                <strong>↻ Sent for correction</strong>{adminName !== '—' && adminName !== 'Unknown Admin' ? <> by <span className="font-bold text-orange-700 dark:text-orange-300">{adminName}</span></> : ''}{dateStr ? <> on <span className="font-medium">{dateStr}</span></> : ''}
+              </span>
+            </div>
+          );
+        } else if (app.applicationStatus === 'REJECTED') {
+          const adminName = getAdminDisplayName(app.rejectedByAdmin);
+          const dateStr = app.rejectedAt ? format(new Date(app.rejectedAt), 'dd MMM yyyy, hh:mm a') : (app.updatedAt ? format(new Date(app.updatedAt), 'dd MMM yyyy, hh:mm a') : null);
+          return (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold text-rose-900 dark:text-rose-200 shadow-sm animate-fade-in">
+              <XCircle size={16} className="text-rose-600 shrink-0" />
+              <span>
+                <strong>✕ Rejected</strong>{adminName !== '—' && adminName !== 'Unknown Admin' ? <> by <span className="font-bold text-rose-700 dark:text-rose-300">{adminName}</span></> : ''}{dateStr ? <> on <span className="font-medium">{dateStr}</span></> : ''}
+              </span>
+            </div>
+          );
+        } else if (app.applicationStatus === 'ENROLLED') {
+          const adminName = getAdminDisplayName(app.approvedByAdmin) !== 'Unknown Admin' ? getAdminDisplayName(app.approvedByAdmin) : getAdminDisplayName(app.verifiedByAdmin);
+          const dateStr = app.enrolledAt ? format(new Date(app.enrolledAt), 'dd MMM yyyy, hh:mm a') : (app.updatedAt ? format(new Date(app.updatedAt), 'dd MMM yyyy, hh:mm a') : null);
+          return (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold text-emerald-900 dark:text-emerald-200 shadow-sm animate-fade-in">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <span>
+                <strong>✓ Approved & Enrolled</strong>{adminName !== '—' && adminName !== 'Unknown Admin' ? <> by <span className="font-bold text-emerald-700 dark:text-emerald-300">{adminName}</span></> : ''}{dateStr ? <> on <span className="font-medium">{dateStr}</span></> : ''}
+              </span>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Resubmitted Banner */}
       {app.applicationStatus === 'RESUBMITTED' && (
@@ -1193,7 +1253,7 @@ export const AdmissionReviewPage: React.FC = () => {
             <FormField label="Middle Name" value={pd?.middleName} />
             <FormField label="Last Name" value={pd?.lastName} />
             <FormField label="Gender" value={pd?.gender} />
-            <FormField label="Date of Birth" value={pd?.dateOfBirth} />
+            <FormField label="Date of Birth" value={formatDateDDMMYYYY(pd?.dateOfBirth)} />
             <FormField label="Nationality" value={pd?.nationality} />
             <FormField label="Religion" value={pd?.religion} />
             <FormField label="Caste" value={pd?.caste} />
@@ -1749,7 +1809,9 @@ export const AdmissionReviewPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <AlertTriangle size={18} className="text-amber-600 shrink-0" />
                   <div>
-                    <p className="text-sm font-extrabold text-amber-800 dark:text-amber-400">Correction Request Sent to Student</p>
+                    <p className="text-sm font-extrabold text-amber-800 dark:text-amber-400">
+                      Correction Request Sent {getAdminDisplayName(app.correctionRequestedBy) !== 'Unknown Admin' ? `by ${getAdminDisplayName(app.correctionRequestedBy)}` : 'to Student'}
+                    </p>
                     <p className="text-xs text-amber-700 dark:text-amber-500 font-semibold mt-0.5">Student is reviewing and will resubmit. Status will update to RESUBMITTED.</p>
                   </div>
                 </div>
@@ -1766,10 +1828,21 @@ export const AdmissionReviewPage: React.FC = () => {
             {app.applicationStatus === 'APPROVED' && (
               <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-800/60 rounded-xl p-4 text-center w-full">
                 <p className="text-sm font-black text-emerald-800 dark:text-emerald-400 flex items-center justify-center gap-2">
-                  <CheckCircle2 size={18} /> Verified by Admin
+                  <CheckCircle2 size={18} /> Verified by {getAdminDisplayName(app.verifiedByAdmin, 'Admin')}
                 </p>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 font-semibold mt-1">
-                  Application verified by Admin. Sent to Principal for final approval.
+                  Application verified by {getAdminDisplayName(app.verifiedByAdmin, 'Admin')}. Sent to Principal for final approval.
+                </p>
+              </div>
+            )}
+
+            {app.applicationStatus === 'REJECTED' && (
+              <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-250 dark:border-rose-800/60 rounded-xl p-4 text-center w-full">
+                <p className="text-sm font-black text-rose-800 dark:text-rose-400 flex items-center justify-center gap-2">
+                  <XCircle size={18} /> Rejected by {getAdminDisplayName(app.rejectedByAdmin, 'Admin')}
+                </p>
+                <p className="text-xs text-rose-600 dark:text-rose-500 font-semibold mt-1">
+                  Application was rejected by {getAdminDisplayName(app.rejectedByAdmin, 'Admin')}.
                 </p>
               </div>
             )}
