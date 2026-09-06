@@ -107,14 +107,12 @@ jobs:
             echo "============================================================"
             docker compose up -d --remove-orphans
 
-            echo "============================================================"
             echo "🏥 7. PERFORMING POST-DEPLOYMENT HEALTH CHECK"
-            echo "============================================================"
+            echo "================================================"
 
-            echo "Waiting 10 seconds for services to stabilize..."
             sleep 10
 
-            echo "Checking backend health directly..."
+            echo "Checking backend health..."
 
             if docker compose exec -T backend node -e "fetch('http://127.0.0.1:5000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then
               echo "✅ Backend health check PASSED!"
