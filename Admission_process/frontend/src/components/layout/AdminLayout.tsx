@@ -481,18 +481,33 @@ export const AdminLayout: React.FC = () => {
                       <Link
                         key={item.name}
                         to={item.path}
-                        className={`w-full h-[40px] px-3.5 rounded-xl flex items-center justify-between transition-all duration-200 relative group ${
+                        className={`w-full h-[40px] px-3.5 rounded-xl flex items-center justify-between transition-colors duration-150 relative group ${
                           isActive
-                            ? 'bg-violet-50 text-violet-900 font-bold dark:bg-violet-950/20 dark:text-violet-250 shadow-none'
-                            : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-50 dark:hover:bg-neutral-800/40 hover:scale-[1.01]'
+                            ? 'bg-violet-50 text-violet-900 font-bold dark:bg-violet-950/20 dark:text-violet-250 shadow-none hover:bg-violet-600 hover:!text-white dark:hover:bg-violet-600 dark:hover:!text-white'
+                            : 'text-neutral-500 dark:text-neutral-400 hover:bg-violet-600 hover:!text-white dark:hover:bg-violet-600 dark:hover:!text-white'
                         }`}
                       >
                         {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-violet-600 dark:bg-violet-400 rounded-r" />
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-violet-600 dark:bg-violet-400 rounded-r group-hover:!bg-white group-hover:bg-white transition-colors duration-150" />
                         )}
                         <div className="flex items-center space-x-3">
-                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-violet-600 dark:text-violet-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
-                          <span className="text-[11px] font-semibold">{item.name}</span>
+                          <Icon
+                            className={`w-4 h-4 flex-shrink-0 transition-colors duration-150 ${
+                              isActive
+                                ? 'text-violet-600 dark:text-violet-400 group-hover:!text-white group-hover:text-white'
+                                : 'text-neutral-400 group-hover:!text-white group-hover:text-white'
+                            }`}
+                            strokeWidth={isActive ? 2.5 : 2}
+                          />
+                          <span
+                            className={`text-[11px] font-semibold transition-colors duration-150 ${
+                              isActive
+                                ? 'text-violet-900 dark:text-violet-250 group-hover:!text-white group-hover:text-white'
+                                : 'text-neutral-600 dark:text-neutral-300 group-hover:!text-white group-hover:text-white'
+                            }`}
+                          >
+                            {item.name}
+                          </span>
                         </div>
                         {item.badge !== undefined && item.badge > 0 && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-500 text-white leading-none scale-90">

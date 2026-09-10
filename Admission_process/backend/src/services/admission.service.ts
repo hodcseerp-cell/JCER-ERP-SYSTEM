@@ -1460,10 +1460,19 @@ class AdmissionService {
           await user.update(userUpdates, { transaction });
         }
 
+        const isPrincipal = adminUser.role === 'PRINCIPAL';
+        const preservedAdminId = isPrincipal
+          ? (admission.approvedByAdminId && admission.approvedByAdminId !== adminUserId
+              ? admission.approvedByAdminId
+              : (admission.verifiedByAdminId || null))
+          : adminUserId;
+
         await admission.update({
           applicationStatus: 'ENROLLED',
           approvalRemarks: remarks || null,
-          approvedByAdminId: adminUserId,
+          approvedByAdminId: preservedAdminId,
+          principalReviewedBy: isPrincipal ? adminUserId : admission.principalReviewedBy,
+          principalApprovedAt: isPrincipal ? new Date() : admission.principalApprovedAt,
           reviewedBy: adminUserId,
           reviewedAt: new Date(),
           enrolledAt: new Date(),

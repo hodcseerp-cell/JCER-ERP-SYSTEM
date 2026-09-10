@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast';
 import { compressDocumentImage, validateFileType } from '../../../utils/imageCompressor';
 import MobileUploadBottomSheet from '../../../../../../components/common/MobileUploadBottomSheet';
+import SmartDocumentScannerModal from '../../../components/scanner/SmartDocumentScannerModal';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const ACCEPTED_MIME     = 'image/jpeg,image/jpg,image/png';
@@ -287,6 +288,14 @@ const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, app
 
     const [reuploadedDocs, setReuploadedDocs] = useState([]);
 
+    // Smart Document Scanner Modal State
+    const [scannerState, setScannerState] = useState({
+        isOpen: false,
+        file: null,
+        docId: null,
+        label: '',
+    });
+
     // Cleanup object URLs on unmount
     useEffect(() => {
         return () => {
@@ -441,11 +450,50 @@ const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, app
         }
     }, [docStates, DOCS, onUploadSuccess, reuploadedDocs]); // eslint-disable-line
 
+    // ── Smart Scanner Selection Handlers ─────────────────────────────────────
+    const onSelectFileForScanner = useCallback((docId, file) => {
+        const doc = DOCS.find(d => d.id === docId);
+        if (!doc || !file) return;
+
+        if (fileInputRefs.current[docId]) {
+            fileInputRefs.current[docId].value = '';
+        }
+
+        // Validate file type
+        const typeCheck = validateFileType(file);
+        if (!typeCheck.valid) {
+            toast.error(typeCheck.error);
+            return;
+        }
+
+        // Size check
+        if (file.size > MAX_ORIGINAL_SIZE) {
+            toast.error('File is too large. Please select an image under 10 MB.');
+            return;
+        }
+
+        // Open Smart Scanner Modal
+        setScannerState({
+            isOpen: true,
+            file,
+            docId,
+            label: doc.label,
+        });
+    }, [DOCS]);
+
+    const handleScannerConfirm = useCallback(async (processedFile) => {
+        const docId = scannerState.docId;
+        setScannerState({ isOpen: false, file: null, docId: null, label: '' });
+        if (docId && processedFile) {
+            await handleFilePicked(docId, processedFile);
+        }
+    }, [scannerState.docId, handleFilePicked]);
+
     const handleFileInputChange = useCallback((e, docId) => {
         const file = e.target.files?.[0];
         e.target.value = '';
-        if (file) handleFilePicked(docId, file);
-    }, [handleFilePicked]);
+        if (file) onSelectFileForScanner(docId, file);
+    }, [onSelectFileForScanner]);
 
     // ── Mobile Upload Bottom Sheet Handlers ───────────────────────────────────
     const isMobileDevice = useCallback(() => {
@@ -489,7 +537,7 @@ const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, app
         e.target.value = '';
         const docId = activeDocIdRef.current;
         if (file && docId) {
-            handleFilePicked(docId, file);
+            onSelectFileForScanner(docId, file);
         }
     };
 
@@ -536,8 +584,8 @@ const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, app
     const handleDrop      = useCallback((e, docId) => {
         e.preventDefault(); e.stopPropagation(); setDragOver(null);
         const file = e.dataTransfer.files?.[0];
-        if (file) handleFilePicked(docId, file);
-    }, [handleFilePicked]);
+        if (file) onSelectFileForScanner(docId, file);
+    }, [onSelectFileForScanner]);
 
     // ── Submit (Save & Continue Navigation Only) ──────────────────────────────
     const handleSubmit = async (e) => {
@@ -1268,6 +1316,16 @@ const Step6Documents = ({ onNext, onPrev, data, stepStatus, onUploadSuccess, app
                     onClose={() => setActiveMobileDoc(null)}
                     documentLabel={activeMobileDoc?.label}
                     onSelectOption={handleBottomSheetSelectOption}
+                />
+
+                {/* Smart Document Scanner & Crop System Modal */}
+                <SmartDocumentScannerModal
+                    isOpen={scannerState.isOpen}
+                    file={scannerState.file}
+                    documentLabel={scannerState.label}
+                    docType={scannerState.docId}
+                    onClose={() => setScannerState({ isOpen: false, file: null, docId: null, label: '' })}
+                    onConfirmUpload={handleScannerConfirm}
                 />
             </form>
     );

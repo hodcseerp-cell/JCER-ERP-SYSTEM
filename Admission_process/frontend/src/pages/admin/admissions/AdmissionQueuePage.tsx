@@ -295,7 +295,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
         ) : <span className="text-neutral-400">—</span>;
       }
       case 'ENROLLED': {
-        const name = formatAdminName(app.approvedByAdmin) || formatAdminName(app.verifiedByAdmin);
+        const name = formatAdminName(app.verifiedByAdmin) || formatAdminName(app.approvedByAdmin);
         return name ? (
           <span className="font-bold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
             <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> {name}
@@ -317,7 +317,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
           name = formatAdminName(app.rejectedByAdmin);
           colorCls = 'text-rose-700 dark:text-rose-400';
         } else if (app.applicationStatus === 'ENROLLED') {
-          name = formatAdminName(app.approvedByAdmin) || formatAdminName(app.verifiedByAdmin);
+          name = formatAdminName(app.verifiedByAdmin) || formatAdminName(app.approvedByAdmin);
           colorCls = 'text-emerald-700 dark:text-emerald-400';
         } else if (app.applicationStatus === 'APPROVED' || app.applicationStatus === 'PRINCIPAL_APPROVED') {
           name = formatAdminName(app.verifiedByAdmin);

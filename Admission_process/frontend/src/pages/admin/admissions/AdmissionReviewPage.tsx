@@ -1105,7 +1105,9 @@ export const AdmissionReviewPage: React.FC = () => {
             </div>
           );
         } else if (app.applicationStatus === 'ENROLLED') {
-          const adminName = getAdminDisplayName(app.approvedByAdmin) !== 'Unknown Admin' ? getAdminDisplayName(app.approvedByAdmin) : getAdminDisplayName(app.verifiedByAdmin);
+          const adminName = (getAdminDisplayName(app.verifiedByAdmin) !== 'Unknown Admin' && getAdminDisplayName(app.verifiedByAdmin) !== '—')
+            ? getAdminDisplayName(app.verifiedByAdmin)
+            : getAdminDisplayName(app.approvedByAdmin);
           const dateStr = app.enrolledAt ? format(new Date(app.enrolledAt), 'dd MMM yyyy, hh:mm a') : (app.updatedAt ? format(new Date(app.updatedAt), 'dd MMM yyyy, hh:mm a') : null);
           return (
             <div className="flex items-center gap-2.5 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold text-emerald-900 dark:text-emerald-200 shadow-sm animate-fade-in">

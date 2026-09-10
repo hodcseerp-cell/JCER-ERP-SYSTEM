@@ -1,13 +1,12 @@
 /// <reference types="vite-plugin-pwa/react" />
 import React, { useState, useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { Download, RefreshCw, X, Sparkles } from 'lucide-react';
+import { Download, RefreshCw, X } from 'lucide-react';
 import pwaManager from '../utils/pwaManager';
 
 const PwaManager: React.FC = () => {
     // ─── PWA Update Lifecycle ───
     const {
-        offlineReady: [offlineReady, setOfflineReady],
         needRefresh: [needRefresh, setNeedRefresh],
         updateServiceWorker,
     } = useRegisterSW({
@@ -76,24 +75,6 @@ const PwaManager: React.FC = () => {
                             Refresh App
                         </button>
                     </div>
-                </div>
-            )}
-
-            {/* 2. Offline Ready Banner */}
-            {offlineReady && (
-                <div className="bg-emerald-950/95 text-emerald-100 rounded-xl shadow-2xl border border-emerald-800/30 p-4 flex items-center justify-between gap-4 animate-slide-in backdrop-blur-md">
-                    <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-lg bg-emerald-800/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
-                            <Sparkles className="size-4" />
-                        </div>
-                        <p className="text-xs font-bold tracking-tight">Portal is ready to use offline.</p>
-                    </div>
-                    <button 
-                        onClick={() => setOfflineReady(false)}
-                        className="text-emerald-500 hover:text-emerald-300 p-1 hover:bg-emerald-800/20 rounded transition-colors"
-                    >
-                        <X size={14} />
-                    </button>
                 </div>
             )}
 
