@@ -1,0 +1,323 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { logout } from '../../store/authSlice';
+import API from '../../services/api';
+import { RootState } from '../../store';
+import { GlobalFooter } from '../common/GlobalFooter';
+import {
+  LayoutDashboard,
+  Calendar,
+  Building2,
+  Layers,
+  Grid,
+  BookOpen,
+  UserCheck,
+  UserPlus,
+  Users,
+  ShieldCheck,
+  ClipboardList,
+  History,
+  LogOut,
+  Sun,
+  Moon,
+  ChevronDown,
+  User,
+  Shield,
+  FileCheck2,
+} from 'lucide-react';
+import deanService from '../../services/dean.service';
+import usePwa from '../../hooks/usePwa';
+import PwaConfirmationModal from '../common/PwaConfirmationModal';
+
+interface MenuItem {
+  name: string;
+  path: string;
+  icon: React.ElementType;
+  badge?: number;
+}
+
+interface MenuGroup {
+  title: string;
+  items: MenuItem[];
+}
+
+export const DeanLayout: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useDispatch();
+  const { user } = useSelector((state: RootState) => state.auth);
+
+  const [academicYear, setAcademicYear] = useState<string>('2026-27');
+  const [pendingAuthCount, setPendingAuthCount] = useState<number>(0);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    // Initial fetch of dashboard info for active year and pending auth count
+    deanService.getDashboardData()
+      .then((data) => {
+        if (data.academicYear) setAcademicYear(data.academicYear);
+        if (data.stats?.pendingRequests !== undefined) setPendingAuthCount(data.stats.pendingRequests);
+      })
+      .catch((err) => console.warn('Could not load Dean dashboard metadata:', err));
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const { canInstall, handleInstall, triggerRefresh, confirmRefresh, showRefreshModal, setShowRefreshModal } = usePwa();
+
+  const handleLogout = () => {
+    dispatch(logout());
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  const menuGroups: MenuGroup[] = [
+    {
+      title: 'OVERVIEW',
+      items: [
+        { name: 'Dashboard', path: '/dean/dashboard', icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: 'ACADEMIC STRUCTURE',
+      items: [
+        { name: 'Academic Years', path: '/dean/academic/years', icon: Calendar },
+        { name: 'Departments', path: '/dean/academic/departments', icon: Building2 },
+        { name: 'Semesters', path: '/dean/academic/semesters', icon: Layers },
+        { name: 'Sections', path: '/dean/academic/sections', icon: Grid },
+        { name: 'Subjects', path: '/dean/academic/subjects', icon: BookOpen },
+      ],
+    },
+    {
+      title: 'HOD MANAGEMENT',
+      items: [
+        { name: 'HOD List', path: '/dean/hods', icon: Users },
+        { name: 'Create HOD', path: '/dean/hods/create', icon: UserPlus },
+        { name: 'HOD Assignments', path: '/dean/hods/assignments', icon: UserCheck },
+        { name: 'HOD History', path: '/dean/hods/history', icon: History },
+      ],
+    },
+    {
+      title: 'FACULTY MANAGEMENT',
+      items: [
+        { name: 'Faculty List', path: '/dean/faculty', icon: Users },
+        {
+          name: 'Faculty Authorization',
+          path: '/dean/faculty/authorizations',
+          icon: ShieldCheck,
+          badge: pendingAuthCount > 0 ? pendingAuthCount : undefined,
+        },
+        { name: 'Faculty Assignments', path: '/dean/faculty/assignments', icon: FileCheck2 },
+      ],
+    },
+  ];
+
+  const pageTitles: Record<string, string> = {
+    '/dean/dashboard': 'Dean Academics Overview',
+    '/dean/academic/years': 'Academic Years Management',
+    '/dean/academic/departments': 'Departments Directory',
+    '/dean/academic/semesters': 'Academic Semesters',
+    '/dean/academic/sections': 'Department Sections',
+    '/dean/academic/subjects': 'College Subjects Curriculum',
+    '/dean/hods': 'HOD Directory & Management',
+    '/dean/hods/create': 'Register New HOD',
+    '/dean/hods/assignments': 'Assign HOD to Department',
+    '/dean/hods/history': 'HOD Assignment History',
+    '/dean/faculty': 'Faculty Directory',
+    '/dean/faculty/authorizations': 'Faculty Creation Authorizations',
+    '/dean/faculty/assignments': 'Academic Faculty Assignments',
+  };
+
+  const getPageTitle = () => {
+    if (location.pathname.startsWith('/dean/academic/departments/')) {
+      return 'Department Academic Details';
+    }
+    if (location.pathname.startsWith('/dean/faculty/authorizations/')) {
+      return 'Review Faculty Authorization';
+    }
+    if (location.pathname.startsWith('/dean/hods/') && location.pathname !== '/dean/hods/create' && location.pathname !== '/dean/hods/assignments' && location.pathname !== '/dean/hods/history') {
+      return 'HOD Profile & History';
+    }
+    return pageTitles[location.pathname] || 'Dean Academics Portal';
+  };
+
+  return (
+    <div className="min-h-screen max-w-full overflow-x-hidden flex text-neutral-900 dark:text-neutral-100 transition-colors duration-300 font-sans pb-6 pr-6">
+
+      {/* ── FLOATING SIDEBAR ── */}
+      <aside className="fixed left-6 top-6 bottom-6 w-[280px] min-w-[280px] max-w-[280px] flex-shrink-0 flex flex-col justify-between py-6 px-4 rounded-[32px] glass-bar z-40">
+        
+        {/* Top: Logo + Navigation */}
+        <div className="flex flex-col w-full">
+          <Link to="/dean/dashboard" className="flex items-center space-x-2.5 px-1.5 mb-5 hover:opacity-95 transition-all">
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-neutral-100 dark:border-neutral-850 shadow-sm">
+              <img
+                src="/logo.png"
+                alt="JCER Logo"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-extrabold text-[15px] tracking-wider uppercase text-neutral-900 dark:text-white leading-none">JCER ERP</span>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">Dean Academics</span>
+            </div>
+          </Link>
+
+          {/* Grouped Navigation */}
+          <nav className="flex flex-col space-y-3.5 overflow-y-auto max-h-[calc(100vh-270px)] pr-1 select-none custom-scrollbar">
+            {menuGroups.map((group) => (
+              <div key={group.title} className="flex flex-col space-y-0.5">
+                <span className="px-3.5 text-[9px] font-black tracking-widest text-neutral-400 dark:text-neutral-500 uppercase mb-1">
+                  {group.title}
+                </span>
+                <div className="flex flex-col space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActive = location.pathname === item.path || (item.path !== '/dean/dashboard' && location.pathname.startsWith(item.path));
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.path}
+                        className={`w-full h-[38px] px-3.5 rounded-xl flex items-center justify-between transition-all duration-200 relative group ${
+                          isActive
+                            ? 'bg-amber-500/10 text-amber-700 font-bold dark:bg-amber-500/20 dark:text-amber-300 shadow-none'
+                            : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100/50 dark:hover:bg-neutral-800/40 hover:scale-[1.01]'
+                        }`}
+                      >
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-amber-600 dark:bg-amber-400 rounded-r" />
+                        )}
+                        <div className="flex items-center space-x-3">
+                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
+                          <span className="text-[11px] font-semibold truncate">{item.name}</span>
+                        </div>
+                        {item.badge && !isActive && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-600 text-white leading-none scale-90">
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </div>
+
+        {/* Bottom User Info & Logout */}
+        <div className="pt-3 border-t border-neutral-105 dark:border-neutral-800/40 flex flex-col gap-2.5 w-full">
+          <div className="rounded-xl p-2.5 border text-[10px] space-y-1 bg-neutral-50/50 dark:bg-neutral-800/25 border-neutral-200/50 dark:border-neutral-800/55">
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-400 font-medium">Role</span>
+              <span className="font-bold text-amber-700 dark:text-amber-300">Dean Academics</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-400 font-medium">Academic Year</span>
+              <span className="font-bold text-neutral-800 dark:text-neutral-200">{academicYear}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all border border-rose-200/40 dark:border-rose-900/40"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── MAIN CONTENT AREA ── */}
+      <div className="flex-1 ml-[304px] pl-2 flex flex-col min-h-screen">
+        
+        {/* Top Header */}
+        <header className="sticky top-6 z-30 h-16 rounded-2xl glass-header mb-6 flex items-center justify-between px-6">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-lg font-bold text-neutral-900 dark:text-white tracking-tight">
+              {getPageTitle()}
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Academic Year Pill */}
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300 text-xs font-bold shadow-xs">
+              <Calendar className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>AY: {academicYear}</span>
+            </div>
+
+            {/* Profile Dropdown */}
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                className="flex items-center space-x-2.5 p-1.5 pr-3 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all border border-neutral-200/60 dark:border-neutral-700/60"
+              >
+                <div className="w-7 h-7 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-xs overflow-hidden">
+                  {user?.profileImage ? (
+                    <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>DA</span>
+                  )}
+                </div>
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="text-xs font-bold leading-tight text-neutral-900 dark:text-white">
+                    {user?.name || `${user?.firstName || 'Dean'} ${user?.lastName || 'Academics'}`}
+                  </span>
+                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-tight">
+                    dean@college.com
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+              </button>
+
+              {profileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-neutral-900 shadow-xl border border-neutral-200/80 dark:border-neutral-800 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800">
+                    <p className="text-xs font-bold text-neutral-900 dark:text-white">{user?.name || 'Dean Academics'}</p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">{user?.email || 'dean@college.com'}</p>
+                  </div>
+                  <div className="py-1">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Log Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic Page Content */}
+        <main className="flex-1 pb-10">
+          <Outlet />
+        </main>
+
+        <GlobalFooter />
+      </div>
+
+      <PwaConfirmationModal
+        isOpen={showRefreshModal}
+        onClose={() => setShowRefreshModal(false)}
+        onConfirm={confirmRefresh}
+      />
+    </div>
+  );
+};
+
+export default DeanLayout;

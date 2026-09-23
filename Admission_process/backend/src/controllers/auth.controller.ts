@@ -5,6 +5,8 @@ import sequelize from '../config/database';
 import User from '../models/User';
 import Student from '../models/Student';
 import Admission from '../models/Admission';
+import HOD from '../models/HOD';
+import Department from '../models/Department';
 import authService from '../services/auth.service';
 import securityEvents from '../services/securityEvents.service';
 import otpService from '../services/otp.service';
@@ -32,6 +34,22 @@ const getUserPayload = async (user: User) => {
   const system = (user.role === 'STUDENT' && (!admission || admission.applicationStatus !== 'ENROLLED') && !student)
     ? 'ADMISSION'
     : 'ERP';
+
+  let department: { id: string; name: string; code: string } | undefined = undefined;
+  if (user.role === 'HOD') {
+    const hod = await HOD.findOne({
+      where: { userId: user.id, isActive: true },
+      include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'code'] }],
+    });
+    if (hod && (hod as any).department) {
+      department = {
+        id: (hod as any).department.id,
+        name: (hod as any).department.name,
+        code: (hod as any).department.code,
+      };
+    }
+  }
+
   return {
     id: user.id,
     email: user.email,
@@ -42,6 +60,7 @@ const getUserPayload = async (user: User) => {
     phone: user.phone,
     profileImage: user.profileImage,
     mustChangePassword: user.mustChangePassword,
+    department,
     system,
   };
 };
@@ -604,14 +623,21 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+    }
+
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Incorrect current password' });
+    // If currentPassword is provided, verify it
+    if (currentPassword) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Incorrect current password' });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);

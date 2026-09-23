@@ -24,6 +24,8 @@ import { studentRouter, applicationRouter, adminAdmissionRouter } from './routes
 import principalRoutes from './routes/principal.routes';
 import provisionalRoutes from './routes/provisional.routes';
 import promotionRoutes from './routes/promotion.routes';
+import deanRoutes from './routes/dean.routes';
+import hodRoutes from './routes/hod.routes';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -282,6 +284,12 @@ v1Router.use('/admin', adminRoutes);
 
 // Principal Dashboard routes
 v1Router.use('/principal', principalRoutes);
+
+// Dean Academics Dashboard routes
+v1Router.use('/dean', deanRoutes);
+
+// HOD Dashboard routes
+v1Router.use('/hod', hodRoutes);
 
 // Mount the v1 router to both versioned and legacy base paths
 app.use('/api', v1Router);

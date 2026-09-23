@@ -14,6 +14,8 @@ import { activityHeartbeat } from './services/activityHeartbeat';
 import ProtectedLayout from './components/layout/ProtectedLayout';
 import AdminLayout from './components/layout/AdminLayout';
 import PrincipalLayout from './components/layout/PrincipalLayout';
+import DeanLayout from './components/layout/DeanLayout';
+import HodLayout from './components/layout/HodLayout';
 import TopLoadingBar from './components/common/TopLoadingBar';
 import PwaManager from './components/PwaManager';
 
@@ -25,6 +27,37 @@ import { ProvisionalAcknowledgement } from './pages/common/ProvisionalAcknowledg
 import ModuleUnavailablePage from './pages/common/ModuleUnavailablePage';
 import PrivacyPolicyPage from './pages/common/PrivacyPolicyPage';
 import TermsOfUsePage from './pages/common/TermsOfUsePage';
+
+// ─── Dean Pages ───────────────────────────────────────────────────────────────
+import DeanDashboardPage from './pages/dean/DeanDashboardPage';
+import AcademicYearsPage from './pages/dean/academic/AcademicYearsPage';
+import DepartmentsPage from './pages/dean/academic/DepartmentsPage';
+import DepartmentAcademicInfoPage from './pages/dean/academic/DepartmentAcademicInfoPage';
+import SemestersPage from './pages/dean/academic/SemestersPage';
+import SectionsPage from './pages/dean/academic/SectionsPage';
+import SubjectsPage from './pages/dean/academic/SubjectsPage';
+import HodListPage from './pages/dean/hod/HodListPage';
+import CreateHodPage from './pages/dean/hod/CreateHodPage';
+import HodDetailPage from './pages/dean/hod/HodDetailPage';
+import HodAssignmentPage from './pages/dean/hod/HodAssignmentPage';
+import HodHistoryPage from './pages/dean/hod/HodHistoryPage';
+import FacultyListPage from './pages/dean/faculty/FacultyListPage';
+import FacultyAuthorizationPage from './pages/dean/faculty/FacultyAuthorizationPage';
+import FacultyReviewPage from './pages/dean/faculty/FacultyReviewPage';
+import FacultyAssignmentsPage from './pages/dean/faculty/FacultyAssignmentsPage';
+
+// ─── HOD Pages ────────────────────────────────────────────────────────────────
+import HodDashboardPage from './pages/hod/HodDashboardPage';
+import HodDepartmentPage from './pages/hod/placeholders/HodDepartmentPage';
+import HodFacultyPage from './pages/hod/placeholders/HodFacultyPage';
+import HodFacultyAuthPage from './pages/hod/placeholders/HodFacultyAuthPage';
+import HodSubjectsPage from './pages/hod/placeholders/HodSubjectsPage';
+import HodWorkloadPage from './pages/hod/placeholders/HodWorkloadPage';
+import HodTimetablePage from './pages/hod/placeholders/HodTimetablePage';
+import HodReportsPage from './pages/hod/placeholders/HodReportsPage';
+import HodNotificationsPage from './pages/hod/placeholders/HodNotificationsPage';
+import HodProfilePage from './pages/hod/placeholders/HodProfilePage';
+import HodSettingsPage from './pages/hod/placeholders/HodSettingsPage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -105,6 +138,8 @@ const RoleBasedRedirect: React.FC = () => {
   }
   if (role === 'ADMIN' || role === 'SUPER_ADMIN') return <Navigate to="/admin/dashboard" replace />;
   if (role === 'PRINCIPAL') return <Navigate to="/principal/dashboard" replace />;
+  if (role === 'DEAN') return <Navigate to="/dean/dashboard" replace />;
+  if (role === 'HOD') return <Navigate to="/hod/dashboard" replace />;
 
   return <Navigate to="/module-unavailable" replace />;
 };
@@ -279,6 +314,49 @@ export const App: React.FC = () => (
               <Route path="analytics"              element={<CollegeAnalyticsPage />} />
               <Route path="reports"                element={<ReportGenerationPage />} />
               <Route path="profile"                element={<PrincipalProfilePage />} />
+            </Route>
+
+            {/* ── Dean Academics Portal ── */}
+            <Route path="dean" element={<DeanLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<DeanDashboardPage />} />
+
+              {/* Academic Structure */}
+              <Route path="academic/years" element={<AcademicYearsPage />} />
+              <Route path="academic/departments" element={<DepartmentsPage />} />
+              <Route path="academic/departments/:id" element={<DepartmentAcademicInfoPage />} />
+              <Route path="academic/semesters" element={<SemestersPage />} />
+              <Route path="academic/sections" element={<SectionsPage />} />
+              <Route path="academic/subjects" element={<SubjectsPage />} />
+
+              {/* HOD Management */}
+              <Route path="hods" element={<HodListPage />} />
+              <Route path="hods/create" element={<CreateHodPage />} />
+              <Route path="hods/assignments" element={<HodAssignmentPage />} />
+              <Route path="hods/history" element={<HodHistoryPage />} />
+              <Route path="hods/:id" element={<HodDetailPage />} />
+
+              {/* Faculty Management */}
+              <Route path="faculty" element={<FacultyListPage />} />
+              <Route path="faculty/authorizations" element={<FacultyAuthorizationPage />} />
+              <Route path="faculty/authorizations/:id" element={<FacultyReviewPage />} />
+              <Route path="faculty/assignments" element={<FacultyAssignmentsPage />} />
+            </Route>
+
+            {/* ── HOD Portal ── */}
+            <Route path="hod" element={<HodLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<HodDashboardPage />} />
+              <Route path="department" element={<HodDepartmentPage />} />
+              <Route path="faculty" element={<HodFacultyPage />} />
+              <Route path="faculty/authorizations" element={<HodFacultyAuthPage />} />
+              <Route path="subjects" element={<HodSubjectsPage />} />
+              <Route path="workload" element={<HodWorkloadPage />} />
+              <Route path="timetable" element={<HodTimetablePage />} />
+              <Route path="reports" element={<HodReportsPage />} />
+              <Route path="notifications" element={<HodNotificationsPage />} />
+              <Route path="profile" element={<HodProfilePage />} />
+              <Route path="settings" element={<HodSettingsPage />} />
             </Route>
           </Route>
 

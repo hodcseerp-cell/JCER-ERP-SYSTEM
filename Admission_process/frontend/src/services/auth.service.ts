@@ -4,7 +4,7 @@ import { activityHeartbeat } from './activityHeartbeat';
 export interface UserSession {
   id: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'HOD' | 'TEACHER' | 'STUDENT' | 'PARENT' | 'PRINCIPAL';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'HOD' | 'TEACHER' | 'STUDENT' | 'PARENT' | 'PRINCIPAL' | 'DEAN';
   name: string;
   profileImage: string;
   mustChangePassword?: boolean;
@@ -12,6 +12,11 @@ export interface UserSession {
   firstName?: string;
   lastName?: string;
   phone?: string;
+  department?: {
+    id: string;
+    name: string;
+    code: string;
+  };
 }
 
 export interface LoginResponse {

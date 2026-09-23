@@ -1,11 +1,16 @@
 import { DataTypes, Model } from 'sequelize';
 import db from '../config/database';
+import Department from './Department';
 
 class Subject extends Model {
   public id!: string;
   public name!: string;
   public code!: string;
   public semester!: number;
+  public departmentId!: string | null;
+  public credits!: number;
+  public type!: 'Theory' | 'Practical' | 'Project' | 'Elective' | 'Seminar';
+  public status!: 'ACTIVE' | 'INACTIVE';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -22,7 +27,7 @@ Subject.init(
       allowNull: false,
     },
     code: {
-      type: DataTypes.STRING(15),
+      type: DataTypes.STRING(25),
       allowNull: false,
       unique: true,
     },
@@ -30,6 +35,29 @@ Subject.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 1,
+    },
+    departmentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'departments',
+        key: 'id',
+      },
+    },
+    credits: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 4,
+    },
+    type: {
+      type: DataTypes.ENUM('Theory', 'Practical', 'Project', 'Elective', 'Seminar'),
+      allowNull: false,
+      defaultValue: 'Theory',
+    },
+    status: {
+      type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
+      allowNull: false,
+      defaultValue: 'ACTIVE',
     },
   },
   {
@@ -43,8 +71,13 @@ Subject.init(
       {
         fields: ['semester'],
       },
+      {
+        fields: ['departmentId'],
+      },
     ],
   }
 );
+
+Subject.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
 
 export default Subject;

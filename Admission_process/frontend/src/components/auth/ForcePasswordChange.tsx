@@ -48,8 +48,8 @@ const ForcePasswordChange: React.FC = () => {
       } else {
         setError(res.data.message || 'Failed to change password.');
       }
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.message;
       setError(msg || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);

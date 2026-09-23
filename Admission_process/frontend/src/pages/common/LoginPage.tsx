@@ -60,6 +60,7 @@ export const LoginPage: React.FC = () => {
       SUPER_ADMIN: '/admin/dashboard',
       PRINCIPAL: '/principal/dashboard',
       PARENT: '/parent/dashboard',
+      DEAN: '/dean/dashboard',
     };
 
     const targetDashboard = dashboardRoutes[userRole];
