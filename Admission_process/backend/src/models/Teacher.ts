@@ -11,6 +11,9 @@ class Teacher extends Model {
   public joiningDate!: Date;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+
+  public user?: User;
+  public department?: Department;
 }
 
 Teacher.init(

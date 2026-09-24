@@ -98,7 +98,11 @@ AttendanceRecord.init(
       { fields: ['subjectId'] },
       { fields: ['date'] },
       { fields: ['status'] },
-      { fields: ['studentId', 'facultyAssignmentId', 'date', 'sessionPeriod'], unique: true },
+      {
+        fields: ['studentId', 'facultyAssignmentId', 'date', 'sessionPeriod'],
+        unique: true,
+        name: 'attendance_records_student_id_faculty_assignment_id_date_sessio',
+      },
     ],
   }
 );

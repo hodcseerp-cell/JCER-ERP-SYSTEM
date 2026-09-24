@@ -648,7 +648,7 @@ export const getHodStudentSections = async (req: AuthenticatedRequest, res: Resp
           name: sec.name,
           semester: sec.semester,
           academicYear: sec.academicYear,
-          maxCapacity: sec.maxCapacity,
+          maxCapacity: sec.capacity,
           studentCount,
         };
       })

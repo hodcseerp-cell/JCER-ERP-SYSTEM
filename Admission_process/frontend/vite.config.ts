@@ -115,9 +115,9 @@ export default defineConfig(({ mode }) => {
       host: true,
       allowedHosts: true,
       cors: true,
-      hmr: {
-        clientPort: 443,
-      },
+      hmr: process.env.HMR_CLIENT_PORT
+        ? { clientPort: Number(process.env.HMR_CLIENT_PORT) }
+        : undefined,
       proxy: {
         '/api': {
           target: backendTarget,
