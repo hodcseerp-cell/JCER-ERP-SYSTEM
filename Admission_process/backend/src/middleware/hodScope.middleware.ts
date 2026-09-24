@@ -54,7 +54,7 @@ export const resolveHodDepartmentScope = async (
     // For ADMIN and SUPER_ADMIN viewing HOD portal in administrative mode
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
       const explicitDeptId = (req.query.departmentId as string) || (req.headers['x-department-id'] as string);
-      let dept = null;
+      let dept: Department | null = null;
       if (explicitDeptId) {
         dept = await Department.findByPk(explicitDeptId);
       }
