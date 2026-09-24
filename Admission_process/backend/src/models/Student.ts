@@ -12,16 +12,19 @@ class Student extends Model {
   public batchYear!: number;
   public departmentId!: string;
   public semester!: number;
-  public dateOfBirth!: Date;
+  public dateOfBirth!: Date | null;
   public address!: string;
   public fatherName!: string;
   public motherName!: string;
   public parentPhone!: string;
   public parentEmail!: string;
   public admissionStatus!: 'PENDING' | 'VALIDATED' | 'APPROVED' | 'REJECTED';
-  public admissionType!: 'FRESH' | 'LATERAL';
+  public admissionType!: 'FRESH' | 'LATERAL' | 'EXISTING' | string;
   public initialSemester!: number;
   public section!: string | null;
+  public scheme!: string | null;
+  public gender!: string | null;
+  public previousCollege!: string | null;
   public currentAcademicYear!: string;
   public lastPromotedAt!: Date | null;
   public lastPromotedBy!: string | null;
@@ -119,6 +122,21 @@ Student.init(
     },
     section: {
       type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+    },
+    scheme: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+    },
+    gender: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+    },
+    previousCollege: {
+      type: DataTypes.STRING(255),
       allowNull: true,
       defaultValue: null,
     },

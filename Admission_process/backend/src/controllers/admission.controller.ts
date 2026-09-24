@@ -1456,10 +1456,73 @@ export const updateAdmissionDetails = async (
     const { id } = req.params;
     const payload = req.body;
 
-    const admission = await Admission.findByPk(id, { transaction });
+    let admission = await Admission.findByPk(id, { transaction });
     if (!admission) {
+      const student = await Student.findOne({
+        where: { [Op.or]: [{ id }, { userId: id }] },
+        transaction
+      });
+
+      if (student) {
+        const sanitizePayload = (obj: any) => {
+          if (!obj || typeof obj !== 'object') return obj;
+          const sanitized = { ...obj };
+          for (const key of Object.keys(sanitized)) {
+            if (sanitized[key] === '') {
+              sanitized[key] = null;
+            }
+          }
+          return sanitized;
+        };
+
+        if (payload.branchId !== undefined) {
+          student.departmentId = payload.branchId === 'ALL' || payload.branchId === '' ? student.departmentId : payload.branchId;
+        }
+        if (payload.academicYear !== undefined) student.currentAcademicYear = payload.academicYear;
+        if (payload.admissionType !== undefined) student.admissionType = payload.admissionType;
+        if (payload.semester !== undefined) {
+          const s = parseInt(payload.semester, 10);
+          if (!isNaN(s)) student.semester = s;
+        }
+
+        if (payload.user) {
+          const user = await User.findByPk(student.userId, { transaction });
+          if (user) {
+            const sanitizedUser = sanitizePayload(payload.user);
+            if (sanitizedUser.firstName !== undefined) user.firstName = sanitizedUser.firstName;
+            if (sanitizedUser.lastName !== undefined) user.lastName = sanitizedUser.lastName;
+            if (sanitizedUser.email !== undefined) user.email = sanitizedUser.email;
+            if (sanitizedUser.phone !== undefined) user.phone = sanitizedUser.phone;
+            await user.save({ transaction });
+          }
+        }
+
+        if (payload.studentpersonaldetails) {
+          const spd = sanitizePayload(payload.studentpersonaldetails);
+          if (spd.gender !== undefined) student.gender = spd.gender;
+          if (spd.dateOfBirth !== undefined) student.dateOfBirth = spd.dateOfBirth ? new Date(spd.dateOfBirth) : null;
+        }
+
+        if (payload.studentparentdetails) {
+          const spar = sanitizePayload(payload.studentparentdetails);
+          if (spar.fatherName !== undefined) student.fatherName = spar.fatherName;
+          if (spar.motherName !== undefined) student.motherName = spar.motherName;
+          if (spar.fatherPhone !== undefined || spar.parentPhone !== undefined) student.parentPhone = spar.fatherPhone || spar.parentPhone;
+          if (spar.fatherEmail !== undefined) student.parentEmail = spar.fatherEmail;
+        }
+
+        if (payload.studentaddress) {
+          const saddr = sanitizePayload(payload.studentaddress);
+          if (saddr.currentAddressLine1 !== undefined) student.address = saddr.currentAddressLine1;
+        }
+
+        await student.save({ transaction });
+        await transaction.commit();
+        return res.json({ success: true, message: 'Student details updated successfully.' });
+      }
+
       await transaction.rollback();
-      return res.status(404).json({ error: 'Admission application not found.' });
+      return res.status(404).json({ error: 'Admission or Student record not found.' });
     }
 
     const sanitizePayload = (obj: any) => {

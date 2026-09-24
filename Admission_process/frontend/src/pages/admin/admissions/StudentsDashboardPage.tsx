@@ -530,6 +530,48 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         </div>
       </div>
 
+      {/* Semester Tabs Row */}
+      <div className="space-y-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-450 dark:text-neutral-500">
+          Quick Filter by Semester
+        </label>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scroll-smooth">
+          {/* 'All Semesters' Tab */}
+          <button
+            onClick={() => {
+              setSemester('ALL');
+              setPendingSemester('ALL');
+              setPage(1);
+            }}
+            className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[75px] h-10 flex items-center justify-center text-xs font-black shadow-sm ${
+              semester === 'ALL'
+                ? 'bg-blue-600 border-blue-700 text-white'
+                : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+            }`}
+          >
+            <span className="w-full text-center leading-none">ALL SEM</span>
+          </button>
+
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                setSemester(s.toString());
+                setPendingSemester(s.toString());
+                setPage(1);
+              }}
+              className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[75px] h-10 flex items-center justify-center text-xs font-black shadow-sm ${
+                semester === s.toString()
+                  ? 'bg-blue-600 border-blue-700 text-white'
+                  : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+              }`}
+            >
+              <span className="w-full text-center leading-none">Sem {s}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Filters Panel */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-sm border border-neutral-200/60 dark:border-neutral-800">
 
@@ -578,8 +620,8 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         {showFilters && (
           <div className="px-5 pt-4 pb-5 space-y-4">
 
-            {/* Row 1: 5 primary dropdowns */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-3">
+            {/* Row 1: 6 primary dropdowns */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-3.5 gap-y-3">
               {/* Academic Year */}
               <div className="space-y-1">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Academic Year</label>
@@ -598,6 +640,31 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                       const opt = `${y}-${y + 1}`;
                       return <option key={opt} value={opt}>{opt}</option>;
                     })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Semester */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Semester</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                    <GraduationCap size={12} />
+                  </span>
+                  <select
+                    value={pendingSemester}
+                    onChange={(e) => setPendingSemester(e.target.value)}
+                    className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                  >
+                    <option value="ALL">All Semesters</option>
+                    <option value="1">1st Semester</option>
+                    <option value="2">2nd Semester</option>
+                    <option value="3">3rd Semester</option>
+                    <option value="4">4th Semester</option>
+                    <option value="5">5th Semester</option>
+                    <option value="6">6th Semester</option>
+                    <option value="7">7th Semester</option>
+                    <option value="8">8th Semester</option>
                   </select>
                 </div>
               </div>
@@ -774,11 +841,11 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               <button
                 onClick={() => {
                   setPendingSearch(''); setPendingAcademicYear('ALL'); setPendingBranchId('ALL');
-                  setPendingStatus('ENROLLED'); setPendingAdmissionType('ALL'); setPendingQualification('ALL');
+                  setPendingSemester('ALL'); setPendingStatus('ENROLLED'); setPendingAdmissionType('ALL'); setPendingQualification('ALL');
                   setPendingGender('ALL'); setPendingCategory('ALL'); setPendingDistrict('');
                   setPendingStartDate(''); setPendingEndDate('');
                   setPendingSortBy('date'); setPendingSortOrder('DESC');
-                  setSearch(''); setAcademicYear('ALL'); setBranchId('ALL');
+                  setSearch(''); setAcademicYear('ALL'); setBranchId('ALL'); setSemester('ALL');
                   setStatus('ENROLLED'); setAdmissionType('ALL'); setQualification('ALL');
                   setGender('ALL'); setCategory('ALL'); setDistrict('');
                   setStartDate(''); setEndDate(''); setSortBy('date'); setSortOrder('DESC'); setPage(1);
@@ -791,7 +858,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               <button
                 onClick={() => {
                   setSearch(pendingSearch); setAcademicYear(pendingAcademicYear);
-                  setBranchId(pendingBranchId); setStatus(pendingStatus);
+                  setBranchId(pendingBranchId); setSemester(pendingSemester); setStatus(pendingStatus);
                   setAdmissionType(pendingAdmissionType); setQualification(pendingQualification);
                   setGender(pendingGender); setCategory(pendingCategory);
                   setDistrict(pendingDistrict); setStartDate(pendingStartDate);

@@ -543,11 +543,32 @@ async function startServer() {
           ) THEN
             ALTER TABLE "faculty_assignments" ADD COLUMN "createdByHODId" UUID;
           END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'scheme'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "scheme" VARCHAR(20);
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'gender'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "gender" VARCHAR(20);
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'previousCollege'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "previousCollege" VARCHAR(255);
+          END IF;
         END
         $$;
       `);
     } catch (hodMigrationErr: any) {
-      console.warn('Pre-cast migration for HOD academic dashboard schema extensions notice:', hodMigrationErr.message);
+      console.warn('Pre-cast migration for schema extensions notice:', hodMigrationErr.message);
     }
 
     if (process.env.NODE_ENV === 'development') {
@@ -684,7 +705,8 @@ async function startServer() {
       await import('./models/ProvisionalAdmissionDocument');
       await import('./models/PromotionBatch');
       await import('./models/StudentPromotionHistory');
-      console.log('✓ Provisional & Promotion models loaded.');
+      await import('./models/ExistingStudentOnboardingBatch');
+      console.log('✓ Provisional, Promotion & Existing Onboarding models loaded.');
     } catch (err: any) {
       console.warn('Failed to load Provisional & Promotion models:', err.message);
     }

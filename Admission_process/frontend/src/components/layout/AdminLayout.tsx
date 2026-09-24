@@ -40,6 +40,7 @@ import {
   Archive,
   ArrowUpCircle,
   Download,
+  UserPlus,
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
 import usePwa from '../../hooks/usePwa';
@@ -364,6 +365,7 @@ export const AdminLayout: React.FC = () => {
       title: 'STUDENT MANAGEMENT',
       items: [
         { name: 'Students', path: '/admin/students', icon: Users },
+        { name: 'Existing Student Onboarding', path: '/admin/students/existing-onboarding', icon: UserPlus },
       ],
     },
     {
@@ -414,6 +416,7 @@ export const AdminLayout: React.FC = () => {
     '/admin/admissions/promotion':    'Academic Promotion Workspace',
     '/admin/admissions/history':      'Admission History',
     '/admin/students': 'Student Management',
+    '/admin/students/existing-onboarding': 'Existing Student Onboarding',
     '/admin/reports': 'Report Generator',
     '/admin/documents/bulk': 'Bulk Document Export',
     '/admin/notifications': 'Notifications',

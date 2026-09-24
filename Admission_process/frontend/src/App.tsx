@@ -95,6 +95,7 @@ import { AdminStudentDocumentsPage } from './pages/admin/admissions/AdminStudent
 import { BulkDocumentExportPage } from './pages/admin/admissions/BulkDocumentExportPage';
 import { AdminPromotionPage } from './pages/admin/admissions/AdminPromotionPage';
 import { StudentExportPage } from './pages/admin/admissions/StudentExportPage';
+import { ExistingStudentOnboardingPage } from './pages/admin/students/ExistingStudentOnboardingPage';
 
 import AdminNotificationsPage from './pages/admin/communications/AdminNotificationsPage';
 import AdminAnnouncementsPage from './pages/admin/communications/AdminAnnouncementsPage';
@@ -290,8 +291,9 @@ export const App: React.FC = () => (
               <Route path="documents/:applicationId" element={<AdminStudentDocumentsPage />} />
               <Route path="documents/bulk" element={<BulkDocumentExportPage />} />
 
-              <Route path="students"         element={<StudentsDashboardPage />} />
-              <Route path="student-export"   element={<StudentExportPage />} />
+              <Route path="students"                     element={<StudentsDashboardPage />} />
+              <Route path="students/existing-onboarding" element={<ExistingStudentOnboardingPage />} />
+              <Route path="student-export"               element={<StudentExportPage />} />
               <Route path="students/view/:id" element={<StudentViewPage />} />
               <Route path="users/principals" element={<PrincipalManagementPage />} />
               <Route path="credentials"      element={<CredentialManagementPage />} />

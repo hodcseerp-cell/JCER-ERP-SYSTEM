@@ -4,6 +4,7 @@ import { authorizeRoles } from '../middleware/rbac.middleware';
 import * as adminController from '../controllers/admin.controller';
 import * as userManagementController from '../controllers/user-management.controller';
 import * as onboardingController from '../controllers/onboarding.controller';
+import * as existingOnboardingController from '../controllers/existing-student-onboarding.controller';
 import multer from 'multer';
 
 import { handbookUpload } from '../middleware/upload.middleware';
@@ -40,5 +41,12 @@ router.post('/settings/handbook', handbookUpload.single('handbookPdf'), adminCon
 router.post('/onboarding/usn-registry', upload.single('file'), onboardingController.uploadUSNRegistry);
 router.get('/onboarding/usn-registry', onboardingController.getUSNRegistry);
 router.post('/onboarding/students/bulk', upload.single('file'), onboardingController.bulkUploadStudents);
+
+// Existing Student Onboarding (Pre-ERP Students)
+router.get('/onboarding/existing-students/context', existingOnboardingController.getOnboardingContext);
+router.get('/onboarding/existing-students/template', existingOnboardingController.downloadExistingStudentsTemplate);
+router.post('/onboarding/existing-students/validate', upload.single('file'), existingOnboardingController.validateExistingStudents);
+router.post('/onboarding/existing-students/import', existingOnboardingController.importExistingStudents);
+router.get('/onboarding/existing-students/history', existingOnboardingController.getOnboardingHistory);
 
 export default router;
