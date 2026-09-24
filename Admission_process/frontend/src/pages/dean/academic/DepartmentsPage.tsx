@@ -121,55 +121,51 @@ export const DepartmentsPage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Department Code</th>
-                <th className="py-3 px-6 font-semibold">Department Name</th>
-                <th className="py-3 px-6 font-semibold">Assigned HOD</th>
-                <th className="py-3 px-6 font-semibold text-center">Faculty Count</th>
-                <th className="py-3 px-6 font-semibold text-center">Student Count</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+              <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
+                <th className="py-3 px-6 text-center w-36 font-semibold">Department Code</th>
+                <th className="py-3 px-6 text-left font-semibold">Department Name</th>
+                <th className="py-3 px-6 text-left font-semibold">Assigned HOD</th>
+                <th className="py-3 px-6 text-center font-semibold w-28">Faculty Count</th>
+                <th className="py-3 px-6 text-center font-semibold w-28">Student Count</th>
+                <th className="py-3 px-6 text-center font-semibold w-24">Status</th>
+                <th className="py-3 px-6 text-center font-semibold w-60">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
               {loading ? (
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i}>
-                    <td className="py-4 px-6"><Skeleton className="w-16 h-4" /></td>
-                    <td className="py-4 px-6"><Skeleton className="w-48 h-4" /></td>
-                    <td className="py-4 px-6"><Skeleton className="w-24 h-4" /></td>
+                    <td className="py-4 px-6 text-center"><Skeleton className="w-16 h-4 mx-auto" /></td>
+                    <td className="py-4 px-6 text-left"><Skeleton className="w-48 h-4" /></td>
+                    <td className="py-4 px-6 text-left"><Skeleton className="w-28 h-4" /></td>
                     <td className="py-4 px-6 text-center"><Skeleton className="w-8 h-4 mx-auto" /></td>
                     <td className="py-4 px-6 text-center"><Skeleton className="w-8 h-4 mx-auto" /></td>
                     <td className="py-4 px-6 text-center"><Skeleton className="w-12 h-4 mx-auto" /></td>
-                    <td className="py-4 px-6 text-right"><Skeleton className="w-24 h-4 ml-auto" /></td>
+                    <td className="py-4 px-6 text-center"><Skeleton className="w-32 h-4 mx-auto" /></td>
                   </tr>
                 ))
               ) : departments.length ? (
                 departments.map((dept) => (
                   <tr key={dept.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
-                    <td className="py-4 px-6 font-extrabold text-neutral-900 dark:text-white">
-                      <span className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60">
+                    <td className="py-4 px-6 text-center font-extrabold text-neutral-900 dark:text-white">
+                      <span className="inline-block px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 font-mono text-xs">
                         {dept.code}
                       </span>
                     </td>
-                    <td className="py-4 px-6 font-semibold text-neutral-800 dark:text-neutral-200">
+                    <td className="py-4 px-6 text-left font-semibold text-neutral-800 dark:text-neutral-200">
                       {dept.name}
                     </td>
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-6 text-left">
                       {dept.hod ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-[10px]">
-                            {dept.hod.name.charAt(0)}
-                          </div>
-                          <div>
-                            <span className="font-bold text-neutral-900 dark:text-white block">{dept.hod.name}</span>
-                            <span className="text-[10px] text-neutral-400 block">{dept.hod.email}</span>
-                          </div>
-                        </div>
+                        <span className="font-bold text-neutral-900 dark:text-white block">
+                          {dept.hod.name}
+                        </span>
                       ) : (
-                        <span className="text-amber-600 dark:text-amber-400 font-bold text-[11px]">Unassigned</span>
+                        <span className="text-amber-600 dark:text-amber-400 font-bold text-[11px]">
+                          Unassigned
+                        </span>
                       )}
                     </td>
                     <td className="py-4 px-6 text-center font-bold text-neutral-700 dark:text-neutral-300">
@@ -179,12 +175,12 @@ export const DepartmentsPage: React.FC = () => {
                       {dept.studentCount}
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                         {dept.status}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="inline-flex items-center space-x-1.5">
+                    <td className="py-4 px-6 text-center">
+                      <div className="inline-flex items-center justify-center space-x-1.5">
                         <button
                           onClick={() => navigate(`/dean/academic/departments/${dept.id}`)}
                           className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold text-[11px] transition-all flex items-center space-x-1"

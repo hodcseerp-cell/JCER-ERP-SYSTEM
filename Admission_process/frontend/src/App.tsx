@@ -45,19 +45,27 @@ import FacultyListPage from './pages/dean/faculty/FacultyListPage';
 import FacultyAuthorizationPage from './pages/dean/faculty/FacultyAuthorizationPage';
 import FacultyReviewPage from './pages/dean/faculty/FacultyReviewPage';
 import FacultyAssignmentsPage from './pages/dean/faculty/FacultyAssignmentsPage';
+import DeanProfilePage from './pages/dean/DeanProfilePage';
 
 // ─── HOD Pages ────────────────────────────────────────────────────────────────
 import HodDashboardPage from './pages/hod/HodDashboardPage';
-import HodDepartmentPage from './pages/hod/placeholders/HodDepartmentPage';
-import HodFacultyPage from './pages/hod/placeholders/HodFacultyPage';
-import HodFacultyAuthPage from './pages/hod/placeholders/HodFacultyAuthPage';
-import HodSubjectsPage from './pages/hod/placeholders/HodSubjectsPage';
-import HodWorkloadPage from './pages/hod/placeholders/HodWorkloadPage';
-import HodTimetablePage from './pages/hod/placeholders/HodTimetablePage';
-import HodReportsPage from './pages/hod/placeholders/HodReportsPage';
-import HodNotificationsPage from './pages/hod/placeholders/HodNotificationsPage';
-import HodProfilePage from './pages/hod/placeholders/HodProfilePage';
-import HodSettingsPage from './pages/hod/placeholders/HodSettingsPage';
+import HodStudentsPage from './pages/hod/HodStudentsPage';
+import HodStudentsSemesterPage from './pages/hod/HodStudentsSemesterPage';
+import HodStudentsSectionPage from './pages/hod/HodStudentsSectionPage';
+import HodStudentDetailPage from './pages/hod/HodStudentDetailPage';
+import HodFacultyListPage from './pages/hod/HodFacultyListPage';
+import HodCreateFacultyPage from './pages/hod/HodCreateFacultyPage';
+import HodFacultyManagePage from './pages/hod/HodFacultyManagePage';
+import HodFacultyAssignmentsPage from './pages/hod/HodFacultyAssignmentsPage';
+import HodSubjectsPage from './pages/hod/HodSubjectsPage';
+import HodAttendanceOverviewPage from './pages/hod/HodAttendanceOverviewPage';
+import HodAttendanceDefaultersPage from './pages/hod/HodAttendanceDefaultersPage';
+import HodAcademicsOverviewPage from './pages/hod/HodAcademicsOverviewPage';
+import HodBitwiseAnalysisPage from './pages/hod/HodBitwiseAnalysisPage';
+import HodStudentPerformancePage from './pages/hod/HodStudentPerformancePage';
+import HodSheetsAccessPage from './pages/hod/HodSheetsAccessPage';
+import HodReportsPage from './pages/hod/HodReportsPage';
+import HodSettingsPage from './pages/hod/HodSettingsPage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -341,22 +349,59 @@ export const App: React.FC = () => (
               <Route path="faculty/authorizations" element={<FacultyAuthorizationPage />} />
               <Route path="faculty/authorizations/:id" element={<FacultyReviewPage />} />
               <Route path="faculty/assignments" element={<FacultyAssignmentsPage />} />
+
+              {/* Profile & Account Settings */}
+              <Route path="profile" element={<DeanProfilePage />} />
             </Route>
 
             {/* ── HOD Portal ── */}
             <Route path="hod" element={<HodLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<HodDashboardPage />} />
-              <Route path="department" element={<HodDepartmentPage />} />
-              <Route path="faculty" element={<HodFacultyPage />} />
-              <Route path="faculty/authorizations" element={<HodFacultyAuthPage />} />
+
+              {/* Students */}
+              <Route path="students" element={<HodStudentsPage />} />
+              <Route path="students/semesters" element={<HodStudentsSemesterPage />} />
+              <Route path="students/sections" element={<HodStudentsSectionPage />} />
+              <Route path="students/:id" element={<HodStudentDetailPage />} />
+
+              {/* Faculty */}
+              <Route path="faculty" element={<HodFacultyListPage />} />
+              <Route path="faculty/create" element={<HodCreateFacultyPage />} />
+              <Route path="faculty/assignments" element={<HodFacultyAssignmentsPage />} />
+              <Route path="faculty/access" element={<HodSheetsAccessPage />} />
+              <Route path="faculty/authorizations" element={<HodFacultyListPage />} />
+              <Route path="faculty/:id" element={<HodFacultyManagePage />} />
+
+              {/* Subjects */}
               <Route path="subjects" element={<HodSubjectsPage />} />
-              <Route path="workload" element={<HodWorkloadPage />} />
-              <Route path="timetable" element={<HodTimetablePage />} />
+              <Route path="subjects/assign" element={<HodFacultyAssignmentsPage />} />
+              <Route path="subjects/semesters" element={<HodSubjectsPage />} />
+
+              {/* Attendance */}
+              <Route path="attendance" element={<HodAttendanceOverviewPage />} />
+              <Route path="attendance/semesters" element={<HodAttendanceOverviewPage />} />
+              <Route path="attendance/subjects" element={<HodAttendanceOverviewPage />} />
+              <Route path="attendance/sections" element={<HodAttendanceOverviewPage />} />
+              <Route path="attendance/defaulters" element={<HodAttendanceDefaultersPage />} />
+
+              {/* Academics */}
+              <Route path="academics" element={<HodAcademicsOverviewPage />} />
+              <Route path="academics/subjects" element={<HodAcademicsOverviewPage />} />
+              <Route path="academics/bitwise" element={<HodBitwiseAnalysisPage />} />
+              <Route path="academics/performance" element={<HodStudentPerformancePage />} />
+
+              {/* Excel / Sheets */}
+              <Route path="sheets" element={<HodSheetsAccessPage />} />
+              <Route path="sheets/attendance" element={<HodSheetsAccessPage />} />
+              <Route path="sheets/marks" element={<HodSheetsAccessPage />} />
+              <Route path="sheets/access" element={<HodSheetsAccessPage />} />
+              <Route path="sheets/sync-history" element={<HodSheetsAccessPage />} />
+
+              {/* Reports & Settings */}
               <Route path="reports" element={<HodReportsPage />} />
-              <Route path="notifications" element={<HodNotificationsPage />} />
-              <Route path="profile" element={<HodProfilePage />} />
               <Route path="settings" element={<HodSettingsPage />} />
+              <Route path="profile" element={<HodSettingsPage />} />
             </Route>
           </Route>
 

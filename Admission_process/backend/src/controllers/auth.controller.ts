@@ -95,6 +95,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     if (user.status !== 'ACTIVE') {
       logger.warn(`LOGIN_FAILED: User account is ${user.status} for email: ${user.email}`);
       securityEvents.loginFailure(req, email, `Account ${user.status.toLowerCase()}`, user.id);
+      if (user.status === 'PENDING_AUTHORIZATION') {
+        return res.status(403).json({ error: 'Your account is pending administrator/dean authorization. Please wait for authorization.' });
+      }
       return res.status(403).json({ error: 'Your account is inactive or suspended' });
     }
 

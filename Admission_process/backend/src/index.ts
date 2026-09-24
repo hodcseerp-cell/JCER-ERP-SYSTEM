@@ -510,6 +510,46 @@ async function startServer() {
       console.warn('Bulk export worker retention cleanup init notice:', err.message);
     }
 
+    // Pre-cast: HOD Academic Dashboard schema extensions
+    try {
+      await sequelize.query(`ALTER TYPE "enum_users_status" ADD VALUE IF NOT EXISTS 'PENDING_AUTHORIZATION';`).catch(() => {});
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'students' AND column_name = 'section'
+          ) THEN
+            ALTER TABLE "students" ADD COLUMN "section" VARCHAR(20) DEFAULT NULL;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_assignments' AND column_name = 'attendanceAccess'
+          ) THEN
+            ALTER TABLE "faculty_assignments" ADD COLUMN "attendanceAccess" BOOLEAN DEFAULT true;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_assignments' AND column_name = 'marksAccess'
+          ) THEN
+            ALTER TABLE "faculty_assignments" ADD COLUMN "marksAccess" BOOLEAN DEFAULT true;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_assignments' AND column_name = 'createdByHODId'
+          ) THEN
+            ALTER TABLE "faculty_assignments" ADD COLUMN "createdByHODId" UUID;
+          END IF;
+        END
+        $$;
+      `);
+    } catch (hodMigrationErr: any) {
+      console.warn('Pre-cast migration for HOD academic dashboard schema extensions notice:', hodMigrationErr.message);
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log('Syncing database schema (development alter)...');
       try {

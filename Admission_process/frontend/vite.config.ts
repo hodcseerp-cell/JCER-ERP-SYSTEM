@@ -80,7 +80,8 @@ export default defineConfig(({ mode }) => {
         devOptions: {
           enabled: true,
           type: 'module',
-          navigateFallback: 'index.html'
+          navigateFallback: 'index.html',
+          suppressWarnings: true
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,woff,woff2,ttf,eot}'],

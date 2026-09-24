@@ -21,6 +21,7 @@ class Student extends Model {
   public admissionStatus!: 'PENDING' | 'VALIDATED' | 'APPROVED' | 'REJECTED';
   public admissionType!: 'FRESH' | 'LATERAL';
   public initialSemester!: number;
+  public section!: string | null;
   public currentAcademicYear!: string;
   public lastPromotedAt!: Date | null;
   public lastPromotedBy!: string | null;
@@ -115,6 +116,11 @@ Student.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 1,
+    },
+    section: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
     },
     currentAcademicYear: {
       type: DataTypes.STRING(30),

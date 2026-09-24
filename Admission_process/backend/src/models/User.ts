@@ -15,7 +15,7 @@ class User extends Model {
   public email!: string;
   public passwordHash!: string;
   public role!: 'SUPER_ADMIN' | 'ADMIN' | 'HOD' | 'TEACHER' | 'STUDENT' | 'PARENT' | 'PRINCIPAL' | 'DEAN';
-  public status!: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  public status!: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_AUTHORIZATION';
   public firstName!: string;
   public lastName!: string;
   public phone!: string;
@@ -95,7 +95,7 @@ User.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED'),
+      type: DataTypes.ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_AUTHORIZATION'),
       allowNull: false,
       defaultValue: 'ACTIVE',
     },

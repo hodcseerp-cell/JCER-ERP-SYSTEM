@@ -44,6 +44,18 @@ export const DeanDashboardPage: React.FC = () => {
 
   useEffect(() => {
     fetchDashboard();
+
+    const handleYearChanged = (e: any) => {
+      if (e?.detail?.year) {
+        setDashboardData((prev) => prev ? { ...prev, academicYear: e.detail.year } : prev);
+      }
+      fetchDashboard();
+    };
+
+    window.addEventListener('academic-year-changed', handleYearChanged);
+    return () => {
+      window.removeEventListener('academic-year-changed', handleYearChanged);
+    };
   }, []);
 
   const getGreeting = () => {
@@ -75,10 +87,11 @@ export const DeanDashboardPage: React.FC = () => {
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={() => navigate('/dean/hods/create')}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white text-neutral-900 hover:bg-neutral-100 text-xs font-bold transition-all shadow-md active:scale-95"
+              className="btn-white-action inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-100 text-xs font-black transition-all shadow-md active:scale-95 !text-black"
+              style={{ color: '#000000' }}
             >
-              <Plus className="w-4 h-4 text-amber-600" />
-              <span>Create HOD</span>
+              <Plus className="w-4 h-4 !text-black" style={{ color: '#000000' }} />
+              <span className="!text-black font-extrabold" style={{ color: '#000000' }}>Create HOD</span>
             </button>
             <button
               onClick={() => navigate('/dean/faculty/authorizations')}

@@ -54,15 +54,32 @@ export const DeanLayout: React.FC = () => {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isDark, setIsDark] = useState(false);
 
-  useEffect(() => {
-    // Initial fetch of dashboard info for active year and pending auth count
+  const refreshDeanMetadata = () => {
     deanService.getDashboardData()
       .then((data) => {
         if (data.academicYear) setAcademicYear(data.academicYear);
         if (data.stats?.pendingRequests !== undefined) setPendingAuthCount(data.stats.pendingRequests);
       })
       .catch((err) => console.warn('Could not load Dean dashboard metadata:', err));
+  };
+
+  useEffect(() => {
+    refreshDeanMetadata();
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handleYearChanged = (e: any) => {
+      if (e?.detail?.year) {
+        setAcademicYear(e.detail.year);
+      }
+      refreshDeanMetadata();
+    };
+
+    window.addEventListener('academic-year-changed', handleYearChanged);
+    return () => {
+      window.removeEventListener('academic-year-changed', handleYearChanged);
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -122,10 +139,17 @@ export const DeanLayout: React.FC = () => {
         { name: 'Faculty Assignments', path: '/dean/faculty/assignments', icon: FileCheck2 },
       ],
     },
+    {
+      title: 'ACCOUNT & SETTINGS',
+      items: [
+        { name: 'My Profile', path: '/dean/profile', icon: User },
+      ],
+    },
   ];
 
   const pageTitles: Record<string, string> = {
     '/dean/dashboard': 'Dean Academics Overview',
+    '/dean/profile': 'Dean Profile & Security Settings',
     '/dean/academic/years': 'Academic Years Management',
     '/dean/academic/departments': 'Departments Directory',
     '/dean/academic/semesters': 'Academic Semesters',
@@ -273,10 +297,10 @@ export const DeanLayout: React.FC = () => {
                 </div>
                 <div className="hidden sm:flex flex-col text-left">
                   <span className="text-xs font-bold leading-tight text-neutral-900 dark:text-white">
-                    {user?.name || `${user?.firstName || 'Dean'} ${user?.lastName || 'Academics'}`}
+                    {user?.name || `${user?.firstName || 'Dr. K.B.'} ${user?.lastName || 'Manwade'}`}
                   </span>
                   <span className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-tight">
-                    dean@college.com
+                    {user?.email || 'dean@college.com'}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
@@ -285,13 +309,23 @@ export const DeanLayout: React.FC = () => {
               {profileMenuOpen && (
                 <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-neutral-900 shadow-xl border border-neutral-200/80 dark:border-neutral-800 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800">
-                    <p className="text-xs font-bold text-neutral-900 dark:text-white">{user?.name || 'Dean Academics'}</p>
+                    <p className="text-xs font-bold text-neutral-900 dark:text-white">{user?.name || 'Dr. K.B. Manwade'}</p>
                     <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">{user?.email || 'dean@college.com'}</p>
                   </div>
                   <div className="py-1">
+                    <Link
+                      to="/dean/profile"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>My Profile</span>
+                    </Link>
+                  </div>
+                  <div className="pt-1 border-t border-neutral-100 dark:border-neutral-800">
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Log Out</span>

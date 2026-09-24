@@ -1,47 +1,46 @@
 import { DataTypes, Model } from 'sequelize';
 import db from '../config/database';
-import User from './User';
+import Student from './Student';
+import FacultyAssignment from './FacultyAssignment';
 import Department from './Department';
 import Subject from './Subject';
-import Teacher from './Teacher';
 
-class FacultyAssignment extends Model {
+class AttendanceRecord extends Model {
   public id!: string;
-  public teacherId!: string | null;
-  public userId!: string;
+  public studentId!: string;
+  public facultyAssignmentId!: string;
   public departmentId!: string;
   public subjectId!: string;
   public semester!: number;
-  public section!: string;
+  public section!: string | null;
   public academicYear!: string;
-  public attendanceAccess!: boolean;
-  public marksAccess!: boolean;
-  public createdByHODId!: string | null;
-  public status!: 'ACTIVE' | 'INACTIVE';
+  public date!: Date;
+  public sessionPeriod!: number;
+  public status!: 'PRESENT' | 'ABSENT' | 'EXCUSED';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
 
-FacultyAssignment.init(
+AttendanceRecord.init(
   {
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    teacherId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'teachers',
-        key: 'id',
-      },
-    },
-    userId: {
+    studentId: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'users',
+        model: 'students',
+        key: 'id',
+      },
+    },
+    facultyAssignmentId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'faculty_assignments',
         key: 'id',
       },
     },
@@ -67,54 +66,46 @@ FacultyAssignment.init(
     },
     section: {
       type: DataTypes.STRING(20),
-      allowNull: false,
-      defaultValue: 'A',
+      allowNull: true,
     },
     academicYear: {
       type: DataTypes.STRING(20),
       allowNull: false,
     },
-    attendanceAccess: {
-      type: DataTypes.BOOLEAN,
+    date: {
+      type: DataTypes.DATEONLY,
       allowNull: false,
-      defaultValue: true,
     },
-    marksAccess: {
-      type: DataTypes.BOOLEAN,
+    sessionPeriod: {
+      type: DataTypes.INTEGER,
       allowNull: false,
-      defaultValue: true,
-    },
-    createdByHODId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
+      defaultValue: 1,
     },
     status: {
-      type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
+      type: DataTypes.ENUM('PRESENT', 'ABSENT', 'EXCUSED'),
       allowNull: false,
-      defaultValue: 'ACTIVE',
+      defaultValue: 'PRESENT',
     },
   },
   {
     sequelize: db,
-    tableName: 'faculty_assignments',
+    tableName: 'attendance_records',
     timestamps: true,
     indexes: [
-      { fields: ['userId'] },
+      { fields: ['studentId'] },
+      { fields: ['facultyAssignmentId'] },
       { fields: ['departmentId'] },
       { fields: ['subjectId'] },
-      { fields: ['academicYear'] },
+      { fields: ['date'] },
       { fields: ['status'] },
+      { fields: ['studentId', 'facultyAssignmentId', 'date', 'sessionPeriod'], unique: true },
     ],
   }
 );
 
-FacultyAssignment.belongsTo(User, { as: 'user', foreignKey: 'userId' });
-FacultyAssignment.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
-FacultyAssignment.belongsTo(Subject, { as: 'subject', foreignKey: 'subjectId' });
-FacultyAssignment.belongsTo(Teacher, { as: 'teacher', foreignKey: 'teacherId' });
+AttendanceRecord.belongsTo(Student, { as: 'student', foreignKey: 'studentId' });
+AttendanceRecord.belongsTo(FacultyAssignment, { as: 'facultyAssignment', foreignKey: 'facultyAssignmentId' });
+AttendanceRecord.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
+AttendanceRecord.belongsTo(Subject, { as: 'subject', foreignKey: 'subjectId' });
 
-export default FacultyAssignment;
+export default AttendanceRecord;

@@ -249,6 +249,23 @@ a.light-footer-link:hover,
   color: #1d4ed8 !important;
 }
 
+/* Ensure buttons with white/light background always have visible dark/black text and icons */
+.btn-white-action,
+.btn-white-action *,
+.dark .btn-white-action,
+.dark .btn-white-action *,
+button.bg-white,
+button.bg-white *,
+.dark button.bg-white,
+.dark button.bg-white *,
+a.bg-white,
+a.bg-white *,
+.dark a.bg-white,
+.dark a.bg-white * {
+  color: #000000 !important;
+}
+
+
 /* Explicit Dark Icon override for inputs in login card */
 .dark-input-icon,
 .dark .dark-input-icon,
@@ -845,7 +862,7 @@ table thead th {
   padding: 12px 16px !important;
   border-right: 1px solid rgba(255, 255, 255, 0.15) !important; /* Vertical columns grid in header */
   vertical-align: middle !important;
-  text-align: center !important;
+  text-align: center;
 }
 
 /* Grids / Vertical lines in body column middle */
@@ -854,7 +871,7 @@ table tbody td {
   border-right: 1px solid rgba(0, 0, 0, 0.08) !important; /* Vertical grid lines for columns */
   border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
   vertical-align: middle !important;
-  text-align: center !important;
+  text-align: center;
 }
 
 .dark table tbody td {
@@ -862,9 +879,31 @@ table tbody td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
-/* Keep first column left-aligned for readability */
-table thead th:first-child,
-table tbody td:first-child {
+/* Specific alignments override general rules */
+table thead th.text-left,
+table tbody td.text-left,
+table thead th[class*="text-left"],
+table tbody td[class*="text-left"] {
+  text-align: left !important;
+}
+
+table thead th.text-center,
+table tbody td.text-center,
+table thead th[class*="text-center"],
+table tbody td[class*="text-center"] {
+  text-align: center !important;
+}
+
+table thead th.text-right,
+table tbody td.text-right,
+table thead th[class*="text-right"],
+table tbody td[class*="text-right"] {
+  text-align: right !important;
+}
+
+/* Keep first column left-aligned ONLY if it doesn't explicitly specify text-center */
+table thead th:first-child:not(.text-center):not([class*="text-center"]),
+table tbody td:first-child:not(.text-center):not([class*="text-center"]) {
   text-align: left !important;
 }
 

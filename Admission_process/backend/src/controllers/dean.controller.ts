@@ -38,7 +38,19 @@ const logAudit = async (req: AuthenticatedRequest, action: string, details: any)
 
 export const getDashboardData = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
-    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true } });
+    let currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true } });
+    if (!currentYearRecord) {
+      currentYearRecord = await AcademicYear.findOne({ where: { status: 'ACTIVE' } });
+    }
+    if (!currentYearRecord) {
+      const sysConfig = await SystemConfiguration.findOne();
+      if (sysConfig?.admissionCycle) {
+        currentYearRecord = await AcademicYear.findOne({ where: { year: sysConfig.admissionCycle } });
+      }
+    }
+    if (!currentYearRecord) {
+      currentYearRecord = await AcademicYear.findOne({ order: [['startDate', 'DESC']] });
+    }
     const currentYear = currentYearRecord?.year || '2026-27';
 
     // Counts
@@ -178,7 +190,9 @@ export const createAcademicYear = async (req: AuthenticatedRequest, res: Respons
       return res.status(400).json({ error: `Academic Year ${year} already exists.` });
     }
 
-    if (isCurrent) {
+    const shouldBeCurrent = isCurrent === true || status === 'ACTIVE';
+
+    if (shouldBeCurrent) {
       // Set all others to isCurrent = false
       await AcademicYear.update({ isCurrent: false }, { where: {}, transaction: t });
     }
@@ -188,11 +202,18 @@ export const createAcademicYear = async (req: AuthenticatedRequest, res: Respons
         year,
         startDate,
         endDate,
-        status: status || 'UPCOMING',
-        isCurrent: Boolean(isCurrent),
+        status: shouldBeCurrent ? 'ACTIVE' : (status || 'UPCOMING'),
+        isCurrent: shouldBeCurrent,
       },
       { transaction: t }
     );
+
+    if (shouldBeCurrent) {
+      const sysConfig = await SystemConfiguration.findOne({ transaction: t });
+      if (sysConfig) {
+        await sysConfig.update({ admissionCycle: year }, { transaction: t });
+      }
+    }
 
     await t.commit();
     await logAudit(req, 'CREATE_ACADEMIC_YEAR', { academicYearId: created.id, year });
@@ -215,22 +236,35 @@ export const updateAcademicYear = async (req: AuthenticatedRequest, res: Respons
       return res.status(404).json({ error: 'Academic Year not found.' });
     }
 
-    if (isCurrent) {
-      await AcademicYear.update({ isCurrent: false }, { where: {}, transaction: t });
+    // Determine if this update makes this academic year the current active session
+    const shouldBeCurrent = isCurrent === true || (isCurrent !== false && status === 'ACTIVE');
+
+    if (shouldBeCurrent) {
+      // Unset all other academic years as current
+      await AcademicYear.update(
+        { isCurrent: false },
+        { where: { id: { [Op.ne]: id } }, transaction: t }
+      );
+
+      // Keep SystemConfiguration.admissionCycle in sync for college-wide consistency
+      const sysConfig = await SystemConfiguration.findOne({ transaction: t });
+      if (sysConfig) {
+        await sysConfig.update({ admissionCycle: academicYear.year }, { transaction: t });
+      }
     }
 
     await academicYear.update(
       {
         ...(startDate && { startDate }),
         ...(endDate && { endDate }),
-        ...(status && { status }),
-        ...(isCurrent !== undefined && { isCurrent: Boolean(isCurrent) }),
+        ...(status && { status: shouldBeCurrent ? 'ACTIVE' : status }),
+        isCurrent: shouldBeCurrent ? true : (isCurrent !== undefined ? Boolean(isCurrent) : academicYear.isCurrent),
       },
       { transaction: t }
     );
 
     await t.commit();
-    await logAudit(req, 'UPDATE_ACADEMIC_YEAR', { academicYearId: id, changes: req.body });
+    await logAudit(req, 'UPDATE_ACADEMIC_YEAR', { academicYearId: id, year: academicYear.year, changes: req.body });
     return res.json({ success: true, data: academicYear });
   } catch (error) {
     await t.rollback();
@@ -1262,21 +1296,36 @@ export const approveFacultyAuthorization = async (req: AuthenticatedRequest, res
       );
     }
 
-    // 4. Create FacultyAssignment record if subject is assigned
+    // 4. Activate existing FacultyAssignment or create a new one if subject is assigned
     if (authReq.subjectId) {
-      await FacultyAssignment.create(
-        {
-          teacherId: teacher.id,
+      const existingAssignment = await FacultyAssignment.findOne({
+        where: {
           userId: authReq.facultyUserId,
-          departmentId: authReq.departmentId,
           subjectId: authReq.subjectId,
           semester: authReq.semester,
           section: authReq.section,
-          academicYear: authReq.academicYear,
-          status: 'ACTIVE',
         },
-        { transaction: t }
-      );
+        transaction: t,
+      });
+
+      if (existingAssignment) {
+        await existingAssignment.update({ status: 'ACTIVE' }, { transaction: t });
+      } else {
+        await FacultyAssignment.create(
+          {
+            teacherId: teacher.id,
+            userId: authReq.facultyUserId,
+            departmentId: authReq.departmentId,
+            subjectId: authReq.subjectId,
+            semester: authReq.semester,
+            section: authReq.section,
+            academicYear: authReq.academicYear,
+            status: 'ACTIVE',
+            createdByHODId: authReq.createdByHODId,
+          },
+          { transaction: t }
+        );
+      }
     }
 
     await t.commit();
