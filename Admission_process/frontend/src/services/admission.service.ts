@@ -58,6 +58,7 @@ export interface AdmissionApplication {
   correctionRequestedAt?: string | null;
   correctionRequestedById?: string | null;
   academicYear?: string | null;
+  entrySemester?: number | null;
   cancellationReason?: string | null;
   cancellationRemarks?: string | null;
   cancellationAdminRemarks?: string | null;

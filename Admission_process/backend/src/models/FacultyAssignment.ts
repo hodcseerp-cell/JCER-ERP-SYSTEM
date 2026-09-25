@@ -16,6 +16,7 @@ class FacultyAssignment extends Model {
   public academicYear!: string;
   public attendanceAccess!: boolean;
   public marksAccess!: boolean;
+  public googleSheetsAccess!: boolean;
   public createdByHODId!: string | null;
   public status!: 'ACTIVE' | 'INACTIVE';
   public readonly createdAt!: Date;
@@ -80,6 +81,11 @@ FacultyAssignment.init(
       defaultValue: true,
     },
     marksAccess: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    googleSheetsAccess: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,

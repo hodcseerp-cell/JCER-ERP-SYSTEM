@@ -546,6 +546,20 @@ async function startServer() {
 
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_assignments' AND column_name = 'googleSheetsAccess'
+          ) THEN
+            ALTER TABLE "faculty_assignments" ADD COLUMN "googleSheetsAccess" BOOLEAN DEFAULT true;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_authorization_requests' AND column_name = 'assignmentsData'
+          ) THEN
+            ALTER TABLE "faculty_authorization_requests" ADD COLUMN "assignmentsData" JSONB DEFAULT NULL;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
             WHERE table_name = 'students' AND column_name = 'scheme'
           ) THEN
             ALTER TABLE "students" ADD COLUMN "scheme" VARCHAR(20);

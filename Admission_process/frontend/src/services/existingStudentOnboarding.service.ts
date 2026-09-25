@@ -35,7 +35,6 @@ export interface ValidatedStudentRow {
     parentMobile: string | null;
     parentEmail: string | null;
     address: string | null;
-    previousCollege: string | null;
   };
 }
 

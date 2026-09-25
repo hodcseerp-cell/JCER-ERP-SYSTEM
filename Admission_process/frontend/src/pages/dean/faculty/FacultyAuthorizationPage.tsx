@@ -50,6 +50,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
         academicYear: selectedYear,
       });
       setRequests(data);
+      window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
     } catch (err) {
       toast.error('Failed to load faculty authorization requests');
     } finally {
@@ -77,6 +78,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
       await deanService.approveFacultyAuthorization(approveModal.id);
       toast.success('Faculty approved successfully. Faculty account is now active.');
       setApproveModal(null);
+      window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequests();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to approve faculty request');
@@ -98,6 +100,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
       toast.success('Faculty authorization request rejected.');
       setRejectModal(null);
       setRejectionReason('');
+      window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequests();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to reject faculty request');
@@ -236,7 +239,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
                       <span className="text-[10px] text-neutral-400">{reqItem.subjectCode}</span>
                     </td>
                     <td className="py-4 px-6 text-center font-semibold text-neutral-700 dark:text-neutral-300">
-                      Sem {reqItem.semester} • {reqItem.section}
+                      Sem {reqItem.semester}
                     </td>
                     <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400 font-medium">
                       {reqItem.createdBy}
@@ -322,7 +325,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-700/60 space-y-1.5 text-xs">
               <p><span className="text-neutral-400">Faculty:</span> <strong className="text-neutral-900 dark:text-white">{approveModal.facultyName}</strong></p>
               <p><span className="text-neutral-400">Department:</span> <strong className="text-neutral-900 dark:text-white">{approveModal.departmentName}</strong></p>
-              <p><span className="text-neutral-400">Subject:</span> <strong className="text-neutral-900 dark:text-white">{approveModal.subjectName} (Sem {approveModal.semester} - {approveModal.section})</strong></p>
+              <p><span className="text-neutral-400">Subject:</span> <strong className="text-neutral-900 dark:text-white">{approveModal.subjectName} (Sem {approveModal.semester})</strong></p>
             </div>
 
             <p className="text-[11px] text-neutral-500 dark:text-neutral-400">

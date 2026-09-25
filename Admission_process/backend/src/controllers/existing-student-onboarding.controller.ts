@@ -117,7 +117,6 @@ export const downloadExistingStudentsTemplate = async (
       'Parent Mobile',
       'Parent Email',
       'Address',
-      'Previous College',
     ];
 
     const sampleRows = [
@@ -141,7 +140,6 @@ export const downloadExistingStudentsTemplate = async (
         '9876543211',
         'anand.patil@example.com',
         'Belagavi, Karnataka',
-        'Govt PU College, Belagavi',
       ],
       [
         '2JR25CS065',
@@ -163,7 +161,6 @@ export const downloadExistingStudentsTemplate = async (
         '9876543213',
         'suresh.kulkarni@example.com',
         'Dharwad, Karnataka',
-        'KLE PU College, Hubli',
       ],
     ];
 
@@ -191,7 +188,6 @@ export const downloadExistingStudentsTemplate = async (
       { wch: 16 }, // Parent Mobile
       { wch: 28 }, // Parent Email
       { wch: 30 }, // Address
-      { wch: 30 }, // Previous College
     ];
 
     const wb = XLSX.utils.book_new();
@@ -248,7 +244,6 @@ const validateRow = async (
   const rawParentMobile = (row['Parent Mobile'] || row['parentMobile'] || '').toString().trim();
   const rawParentEmail = (row['Parent Email'] || row['parentEmail'] || '').toString().trim().toLowerCase();
   const rawAddress = (row['Address'] || row['address'] || '').toString().trim();
-  const rawPrevCollege = (row['Previous College'] || row['previousCollege'] || '').toString().trim();
 
   // 1. Mandatory Name
   if (!rawName) {
@@ -391,7 +386,6 @@ const validateRow = async (
       parentMobile: rawParentMobile || null,
       parentEmail: rawParentEmail || null,
       address: rawAddress || null,
-      previousCollege: rawPrevCollege || null,
     },
   };
 };
@@ -584,7 +578,6 @@ export const importExistingStudents = async (
             motherName: null,
             parentPhone: item.parentMobile || null,
             parentEmail: item.parentEmail || null,
-            previousCollege: item.previousCollege || null,
           },
           { transaction: t }
         );

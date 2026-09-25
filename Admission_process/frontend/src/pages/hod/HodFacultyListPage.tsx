@@ -15,6 +15,7 @@ import {
   Filter,
   Eye,
   FileSpreadsheet,
+  RefreshCw,
 } from 'lucide-react';
 import hodService, { HodFacultyItem } from '../../services/hod.service';
 
@@ -54,35 +55,48 @@ export const HodFacultyListPage: React.FC = () => {
   return (
     <div className="space-y-6">
       
-      {/* ── Page Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="w-6 h-6 text-indigo-600" />
-              <span>Department Faculty Management</span>
-            </h1>
-            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
-              {faculty.length} Members
+      {/* ── Page Header (Admin Style) ────────────────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="bg-neutral-900 text-white rounded-2xl px-5 py-3 shadow-sm border border-neutral-800">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
+              Teaching Faculty
             </span>
+            <div className="text-2xl font-black mt-0.5">
+              {faculty.length} <span className="text-xs font-semibold text-neutral-400">members</span>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Manage teaching assignments, monitor Dean/Principal authorizations, and control sheet permissions.
-          </p>
+
+          <div>
+            <h2 className="text-xl font-extrabold text-neutral-900 dark:text-white">
+              Faculty Management
+            </h2>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              Manage teaching staff, track Dean/Principal authorizations, and control sheet permissions.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => fetchFaculty()}
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-neutral-500 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
           <Link
             to="/hod/faculty/assignments"
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 shadow-xs flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
           >
-            <Layers className="w-3.5 h-3.5 text-indigo-600" />
+            <Layers className="w-3.5 h-3.5 text-[#0c1a40] dark:text-blue-400" />
             <span>Assignments Matrix</span>
           </Link>
 
           <Link
             to="/hod/faculty/create"
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all transform hover:-translate-y-0.5"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] hover:from-[#0a1533] hover:to-[#142c6b] text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 border border-[#1e3a8a]/40"
           >
             <UserPlus className="w-4 h-4" />
             <span>Create Faculty</span>
@@ -90,50 +104,49 @@ export const HodFacultyListPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Search & Filter ─────────────────────────────────────────────────── */}
-      <div className="glass-card rounded-2xl p-4 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 flex items-center justify-between gap-4">
+      {/* ── Search & Filter Bar ─────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
             placeholder="Search faculty by name, email, or designation..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
         </div>
 
-        <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500 font-semibold">
-          <span className="flex items-center gap-1">
+        <div className="flex items-center gap-4 text-xs text-neutral-500 font-semibold">
+          <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Active Account
           </span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Pending Approval
           </span>
         </div>
       </div>
 
-      {/* ── Faculty Table (Prompt Item 17) ───────────────────────────────────── */}
-      <div className="glass-card rounded-3xl border border-white/60 dark:border-slate-800/60 shadow-sm overflow-hidden bg-white/80 dark:bg-slate-900/80">
+      {/* ── Faculty Table (Admin Table Style) ─────────────────────────────────── */}
+      <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/90 dark:bg-slate-800/90 text-slate-500 uppercase tracking-wider font-extrabold border-b border-slate-200/60 dark:border-slate-700/60">
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
               <tr>
                 <th className="py-3.5 px-4">Faculty Member</th>
                 <th className="py-3.5 px-4">Subject</th>
-                <th className="py-3.5 px-4">Sem</th>
-                <th className="py-3.5 px-4">Section</th>
-                <th className="py-3.5 px-4">Authorization</th>
-                <th className="py-3.5 px-4">Account</th>
-                <th className="py-3.5 px-4">Sheet Access</th>
+                <th className="py-3.5 px-4 text-center">Sem</th>
+                <th className="py-3.5 px-4 text-center">Authorization</th>
+                <th className="py-3.5 px-4 text-center">Account</th>
+                <th className="py-3.5 px-4 text-center">Sheet Access</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-violet-600 border-t-transparent" />
                     <p className="mt-2 text-xs font-bold">Loading department faculty...</p>
                   </td>
                 </tr>
@@ -145,41 +158,37 @@ export const HodFacultyListPage: React.FC = () => {
                   const isRejected = member.authorizationStatus === 'REJECTED';
 
                   return (
-                    <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={member.id} className="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-xs">
+                          <div className="w-9 h-9 rounded-2xl bg-neutral-900 text-white flex items-center justify-center font-bold text-xs ring-1 ring-neutral-200 shadow-xs">
                             {member.name.charAt(0)}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900 dark:text-white">{member.name}</div>
-                            <div className="text-[11px] text-slate-400">{member.designation}</div>
+                            <div className="font-bold text-neutral-900 dark:text-white">{member.name}</div>
+                            <div className="text-[11px] text-neutral-400">{member.designation}</div>
                           </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                      <td className="py-3.5 px-4 font-semibold text-neutral-800 dark:text-neutral-200">
                         {primaryAssignment ? (
                           <div>
                             <div>{primaryAssignment.subjectName || 'Allotted Subject'}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{primaryAssignment.subjectCode}</div>
+                            <div className="text-[10px] text-neutral-400 font-mono">{primaryAssignment.subjectCode}</div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">No Subject Assigned</span>
+                          <span className="text-neutral-400 italic">No Subject Assigned</span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">
+                      <td className="py-3.5 px-4 text-center font-bold text-neutral-700 dark:text-neutral-300">
                         {primaryAssignment ? `Sem ${primaryAssignment.semester}` : '—'}
                       </td>
 
-                      <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">
-                        {primaryAssignment ? `Sec ${primaryAssignment.section}` : '—'}
-                      </td>
-
                       {/* Authorization Status Badge */}
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider ${
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider ${
                           isApproved
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                             : isRejected
@@ -190,40 +199,40 @@ export const HodFacultyListPage: React.FC = () => {
                           {member.authorizationStatus || 'APPROVED'}
                         </span>
                         {isPending && member.authority && (
-                          <div className="text-[9px] text-slate-400 font-bold mt-0.5">
-                            Req to: {member.authority}
+                          <div className="text-[9px] text-neutral-400 font-bold mt-0.5">
+                            Req: {member.authority}
                           </div>
                         )}
                       </td>
 
                       {/* Account Status Badge */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 text-center">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
                           member.accountStatus === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:border-emerald-800'
+                            : 'bg-neutral-100 text-neutral-600 border border-neutral-200 dark:border-neutral-700'
                         }`}>
                           {member.accountStatus === 'ACTIVE' ? 'Active' : 'Inactive'}
                         </span>
                       </td>
 
                       {/* Sheet Access Badge */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 text-center">
                         {primaryAssignment ? (
-                          <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                          <div className="inline-flex items-center gap-1 text-[10px] font-bold">
                             <span className={`px-1.5 py-0.5 rounded ${
-                              primaryAssignment.attendanceAccess ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'
+                              primaryAssignment.attendanceAccess ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-200 text-neutral-500'
                             }`}>
                               Attn
                             </span>
                             <span className={`px-1.5 py-0.5 rounded ${
-                              primaryAssignment.marksAccess ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-500'
+                              primaryAssignment.marksAccess ? 'bg-indigo-100 text-indigo-800' : 'bg-neutral-200 text-neutral-500'
                             }`}>
                               Marks
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">None</span>
+                          <span className="text-neutral-400 text-[10px]">None</span>
                         )}
                       </td>
 
@@ -231,7 +240,7 @@ export const HodFacultyListPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-right">
                         <Link
                           to={`/hod/faculty/${member.id}`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 font-bold text-[11px] transition-colors"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-900 hover:text-white dark:bg-neutral-800 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 text-neutral-800 dark:text-neutral-200 font-bold text-[11px] transition-all"
                         >
                           <Settings2 className="w-3.5 h-3.5" />
                           <span>Manage</span>
@@ -242,10 +251,10 @@ export const HodFacultyListPage: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No Faculty Found</p>
-                    <p className="text-xs text-slate-400 mt-1">Click "Create Faculty" to add a new faculty member to your department.</p>
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
+                    <p className="text-sm font-bold text-neutral-700 dark:text-neutral-300">No Faculty Found</p>
+                    <p className="text-xs text-neutral-400 mt-1">Click "Create Faculty" to add a new faculty member to your department.</p>
                   </td>
                 </tr>
               )}

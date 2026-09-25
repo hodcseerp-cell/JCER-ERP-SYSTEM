@@ -18,6 +18,8 @@ import {
   ChevronDown,
   User,
   Shield,
+  ShieldCheck,
+  CheckCircle2,
   Megaphone,
   FileText,
   FileCheck2,
@@ -26,6 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
+import usePrincipalNotificationCount from '../../hooks/usePrincipalNotificationCount';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import { filterMenuItems } from '../../utils/feature.util';
@@ -95,7 +98,10 @@ export const PrincipalLayout: React.FC = () => {
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [notifMenuOpen, setNotifMenuOpen] = useState(false);
+  const notifMenuRef = useRef<HTMLDivElement>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const { count: pendingFacultyAuthCount } = usePrincipalNotificationCount({ pollingIntervalMs: 10000 });
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
@@ -124,6 +130,9 @@ export const PrincipalLayout: React.FC = () => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setProfileMenuOpen(false);
+      }
+      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target as Node)) {
+        setNotifMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -154,18 +163,33 @@ export const PrincipalLayout: React.FC = () => {
         { name: 'Students', path: '/principal/students', icon: Users },
       ],
     },
+    {
+      title: 'FACULTY MANAGEMENT',
+      items: [
+        {
+          name: 'Faculty Authorization',
+          path: '/principal/faculty/authorizations',
+          icon: ShieldCheck,
+          badge: pendingFacultyAuthCount > 0 ? pendingFacultyAuthCount : undefined,
+        },
+      ],
+    },
   ];
 
   const pageTitles: Record<string, string> = {
     '/principal/dashboard': 'Principal Overview',
     '/principal/admissions': 'Admissions Queue',
     '/principal/students': 'Students Directory (Read Only)',
+    '/principal/faculty/authorizations': 'Faculty Authorization Queue',
     '/principal/analytics': 'Admission Analytics',
     '/principal/reports': 'Report Generator',
     '/principal/profile': 'My Profile',
   };
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/principal/faculty/authorizations/')) {
+      return 'Faculty Authorization Review';
+    }
     if (location.pathname.startsWith('/principal/admissions/review/')) {
       return 'Admission Review Workspace';
     }
@@ -229,7 +253,7 @@ export const PrincipalLayout: React.FC = () => {
                           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-orange-600 dark:text-orange-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
                           <span className="text-[11px] font-semibold">{item.name}</span>
                         </div>
-                        {item.badge && !isActive && (
+                        {item.badge !== undefined && item.badge > 0 && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-500 text-white leading-none scale-90">
                             {item.badge}
                           </span>
@@ -256,14 +280,37 @@ export const PrincipalLayout: React.FC = () => {
             </div>
           </div>
 
-          <Link
-            to="/principal/admissions"
-            className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0"
-            style={{ color: '#EA580C' }}
-          >
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="truncate">{pendingCount > 0 ? `${pendingCount} Pending Admissions` : 'No Pending Admissions'}</span>
-          </Link>
+          <div className="flex flex-col gap-1.5">
+            {pendingCount > 0 && (
+              <Link
+                to="/principal/admissions"
+                className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0"
+                style={{ color: '#EA580C' }}
+              >
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{pendingCount} Pending Admissions</span>
+              </Link>
+            )}
+
+            {pendingFacultyAuthCount > 0 && (
+              <Link
+                to="/principal/faculty/authorizations"
+                className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0 text-orange-600 dark:text-orange-400"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">
+                  {pendingFacultyAuthCount} Pending Faculty {pendingFacultyAuthCount === 1 ? 'Authorization' : 'Authorizations'}
+                </span>
+              </Link>
+            )}
+
+            {pendingCount === 0 && pendingFacultyAuthCount === 0 && (
+              <div className="flex items-center space-x-2 text-[10px] font-bold text-neutral-400 px-1 py-0.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                <span>All Queues Clear</span>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -281,7 +328,89 @@ export const PrincipalLayout: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center space-x-4 flex-shrink-0">
+          <div className="flex items-center space-x-3 flex-shrink-0">
+
+            {/* Notification Bell Dropdown */}
+            <div className="relative" ref={notifMenuRef}>
+              <button
+                onClick={() => setNotifMenuOpen(!notifMenuOpen)}
+                className="relative p-2 rounded-2xl border border-neutral-200/50 dark:border-neutral-800/40 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors text-neutral-600 dark:text-neutral-300 flex items-center justify-center"
+                title="Notifications"
+                aria-label="View notifications"
+              >
+                <Bell size={18} />
+                {(pendingFacultyAuthCount > 0 || pendingCount > 0) && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse shadow-xs">
+                    {pendingFacultyAuthCount + pendingCount}
+                  </span>
+                )}
+              </button>
+
+              {notifMenuOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-neutral-900 border border-neutral-200/70 dark:border-neutral-800/60 rounded-2xl shadow-2xl py-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 pb-2 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-neutral-900 dark:text-white uppercase tracking-wider">
+                      Notifications
+                    </span>
+                    {(pendingFacultyAuthCount > 0 || pendingCount > 0) ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                        {pendingFacultyAuthCount + pendingCount} pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-neutral-400">All clear</span>
+                    )}
+                  </div>
+
+                  <div className="py-2 divide-y divide-neutral-100 dark:divide-neutral-800/60 max-h-72 overflow-y-auto">
+                    {pendingFacultyAuthCount > 0 && (
+                      <Link
+                        to="/principal/faculty/authorizations"
+                        onClick={() => setNotifMenuOpen(false)}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-orange-50/50 dark:hover:bg-orange-950/20 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <ShieldCheck size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-neutral-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400">
+                            Faculty Authorization Request
+                          </p>
+                          <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                            {pendingFacultyAuthCount} faculty {pendingFacultyAuthCount === 1 ? 'request awaiting' : 'requests awaiting'} Principal review & ratification.
+                          </p>
+                        </div>
+                      </Link>
+                    )}
+
+                    {pendingCount > 0 && (
+                      <Link
+                        to="/principal/admissions"
+                        onClick={() => setNotifMenuOpen(false)}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-colors group"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <AlertCircle size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-neutral-900 dark:text-white group-hover:text-amber-600">
+                            Admissions Sign-off
+                          </p>
+                          <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                            {pendingCount} application{pendingCount > 1 ? 's' : ''} verified by admin pending final confirmation.
+                          </p>
+                        </div>
+                      </Link>
+                    )}
+
+                    {pendingFacultyAuthCount === 0 && pendingCount === 0 && (
+                      <div className="py-6 text-center text-neutral-400 text-xs">
+                        No pending requests or alerts.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Profile Dropdown */}
             <div className="relative" ref={profileMenuRef}>

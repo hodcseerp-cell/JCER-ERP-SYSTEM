@@ -703,7 +703,7 @@ export const StudentViewPage: React.FC = () => {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-bold text-neutral-500 mt-4">
-              <span>App No: <strong className="text-neutral-700 dark:text-neutral-300">{student.applicationNumber}</strong></span>
+              <span>App No: <strong className="text-neutral-700 dark:text-neutral-300">{student.applicationNumber || '—'}</strong></span>
               {student.user?.student?.enrollmentNumber && (
                 <>
                   <span className="hidden sm:inline">•</span>
@@ -712,6 +712,10 @@ export const StudentViewPage: React.FC = () => {
               )}
               <span className="hidden sm:inline">•</span>
               <span>Branch: <strong className="text-neutral-700 dark:text-neutral-300">{student.branch?.name || 'N/A'}</strong></span>
+              <span className="hidden sm:inline">•</span>
+              <span>Semester: <strong className="text-neutral-700 dark:text-neutral-300">{student.user?.student?.semester ? `Sem ${student.user.student.semester}` : (student.entrySemester ? `Sem ${student.entrySemester}` : '—')}</strong></span>
+              <span className="hidden sm:inline">•</span>
+              <span>Academic Year: <strong className="text-neutral-700 dark:text-neutral-300">{student.academicYear || '—'}</strong></span>
               <span className="hidden sm:inline">•</span>
               <span>Type: <strong className="text-neutral-700 dark:text-neutral-300">{student.admissionType || 'N/A'}</strong></span>
             </div>

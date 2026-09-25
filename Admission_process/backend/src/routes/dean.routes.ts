@@ -43,10 +43,13 @@ router.post('/hods', deanController.createHod as any);
 router.get('/hods/history', deanController.getHodHistory as any);
 router.get('/hods/:id', deanController.getHodById as any);
 router.post('/hods/assign', deanController.assignHod as any);
+router.delete('/hods/:id', deanController.deleteHod as any);
 
 // ─── Faculty Management & Authorizations ───────────────────────────────────────
 router.get('/faculty', deanController.getFacultyList as any);
 router.get('/faculty/authorizations', deanController.getFacultyAuthorizations as any);
+router.get('/faculty/authorizations/count', deanController.getFacultyAuthorizationCount as any);
+router.get('/faculty-authorizations/notification-count', deanController.getFacultyAuthorizationCount as any);
 router.get('/faculty/authorizations/:id', deanController.getFacultyAuthorizationById as any);
 router.post('/faculty/authorizations/:id/approve', deanController.approveFacultyAuthorization as any);
 router.post('/faculty/authorizations/:id/reject', deanController.rejectFacultyAuthorization as any);

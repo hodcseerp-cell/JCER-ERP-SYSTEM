@@ -278,6 +278,10 @@ const deanService = {
     const res = await API.get('/dean/hods/history');
     return res.data.data;
   },
+  deleteHod: async (id: string): Promise<any> => {
+    const res = await API.delete(`/dean/hods/${id}`);
+    return res.data;
+  },
 
   // Faculty Management & Authorizations
   getFacultyList: async (params?: { search?: string; departmentId?: string; status?: string }): Promise<FacultyRecord[]> => {
@@ -287,6 +291,10 @@ const deanService = {
   getFacultyAuthorizations: async (params?: { search?: string; departmentId?: string; status?: string; academicYear?: string }): Promise<FacultyAuthRequest[]> => {
     const res = await API.get('/dean/faculty/authorizations', { params });
     return res.data.data;
+  },
+  getFacultyAuthorizationNotificationCount: async (): Promise<{ count: number }> => {
+    const res = await API.get('/dean/faculty-authorizations/notification-count');
+    return res.data;
   },
   getFacultyAuthorizationById: async (id: string): Promise<any> => {
     const res = await API.get(`/dean/faculty/authorizations/${id}`);

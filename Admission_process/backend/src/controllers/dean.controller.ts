@@ -16,6 +16,7 @@ import Section from '../models/Section';
 import HODAssignmentHistory from '../models/HODAssignmentHistory';
 import FacultyAuthorizationRequest from '../models/FacultyAuthorizationRequest';
 import FacultyAssignment from '../models/FacultyAssignment';
+import Notification from '../models/Notification';
 import SystemConfiguration from '../models/SystemConfiguration';
 import logger from '../utils/logger.util';
 
@@ -866,7 +867,7 @@ export const createHod = async (req: AuthenticatedRequest, res: Response, next: 
         lastName: lastName.trim(),
         phone: phone?.trim() || null,
         profileImage: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&fit=crop',
-        mustChangePassword: true,
+        mustChangePassword: false,
       },
       { transaction: t }
     );
@@ -1038,6 +1039,72 @@ export const assignHod = async (req: AuthenticatedRequest, res: Response, next: 
     await logAudit(req, 'ASSIGN_HOD', { hodUserId, departmentId, academicYear, startDate });
 
     return res.json({ success: true, message: 'HOD successfully assigned to department.' });
+  } catch (error) {
+    await t.rollback();
+    return next(error);
+  }
+};
+
+export const deleteHod = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const hod = await HOD.findByPk(id, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'role'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      transaction: t,
+    });
+
+    if (!hod) {
+      await t.rollback();
+      return res.status(404).json({ error: 'HOD record not found.' });
+    }
+
+    const userId = hod.userId;
+    const hodUser = (hod as any).user;
+    const hodDept = (hod as any).department;
+
+    // 1. Delete associated assignment history
+    await HODAssignmentHistory.destroy({
+      where: {
+        [Op.or]: [{ hodId: id }, { userId }],
+      },
+      transaction: t,
+    });
+
+    // 2. Delete the HOD record
+    await hod.destroy({ transaction: t });
+
+    // 3. If the user only exists as an HOD, clean up user and related user-bound records
+    if (userId) {
+      const remainingHods = await HOD.count({ where: { userId }, transaction: t });
+      if (remainingHods === 0) {
+        const user = await User.findByPk(userId, { transaction: t });
+        if (user && user.role === 'HOD') {
+          await FacultyAuthorizationRequest.destroy({ where: { createdByHODId: userId }, transaction: t });
+          await FacultyAssignment.update({ createdByHODId: null }, { where: { createdByHODId: userId }, transaction: t });
+          await Notification.destroy({ where: { targetUserId: userId }, transaction: t });
+          await user.destroy({ transaction: t });
+        }
+      }
+    }
+
+    await t.commit();
+    await logAudit(req, 'DELETE_HOD', {
+      hodId: id,
+      userId,
+      hodName: `${hodUser?.firstName || ''} ${hodUser?.lastName || ''}`.trim(),
+      email: hodUser?.email,
+      department: hodDept?.name,
+    });
+
+    return res.json({
+      success: true,
+      message: 'HOD record deleted successfully from database.',
+    });
   } catch (error) {
     await t.rollback();
     return next(error);
@@ -1239,7 +1306,51 @@ export const getFacultyAuthorizationById = async (req: AuthenticatedRequest, res
       return res.status(404).json({ error: 'Faculty authorization request not found.' });
     }
 
-    return res.json({ success: true, data: request });
+    // Fetch all assignments associated with this faculty user
+    const assignments = await FacultyAssignment.findAll({
+      where: { userId: request.facultyUserId },
+      include: [{ model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'credits', 'type'] }],
+      order: [['semester', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    const responseData = {
+      ...request.toJSON(),
+      assignments: assignments.map((a: any) => ({
+        id: a.id,
+        subjectId: a.subjectId,
+        subjectName: a.subject?.name || 'General Assignment',
+        subjectCode: a.subject?.code || 'N/A',
+        subjectType: a.subject?.type || 'Theory',
+        credits: a.subject?.credits || 4,
+        semester: a.semester,
+        section: a.section,
+        academicYear: a.academicYear,
+        attendanceAccess: a.attendanceAccess,
+        marksAccess: a.marksAccess,
+        googleSheetsAccess: a.googleSheetsAccess,
+        status: a.status,
+      })),
+    };
+
+    return res.json({ success: true, data: responseData });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getFacultyAuthorizationCount = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const count = await FacultyAuthorizationRequest.count({
+      where: {
+        status: 'PENDING',
+        authority: 'DEAN',
+      },
+    });
+
+    return res.json({
+      success: true,
+      count,
+    });
   } catch (error) {
     return next(error);
   }
@@ -1296,37 +1407,11 @@ export const approveFacultyAuthorization = async (req: AuthenticatedRequest, res
       );
     }
 
-    // 4. Activate existing FacultyAssignment or create a new one if subject is assigned
-    if (authReq.subjectId) {
-      const existingAssignment = await FacultyAssignment.findOne({
-        where: {
-          userId: authReq.facultyUserId,
-          subjectId: authReq.subjectId,
-          semester: authReq.semester,
-          section: authReq.section,
-        },
-        transaction: t,
-      });
-
-      if (existingAssignment) {
-        await existingAssignment.update({ status: 'ACTIVE' }, { transaction: t });
-      } else {
-        await FacultyAssignment.create(
-          {
-            teacherId: teacher.id,
-            userId: authReq.facultyUserId,
-            departmentId: authReq.departmentId,
-            subjectId: authReq.subjectId,
-            semester: authReq.semester,
-            section: authReq.section,
-            academicYear: authReq.academicYear,
-            status: 'ACTIVE',
-            createdByHODId: authReq.createdByHODId,
-          },
-          { transaction: t }
-        );
-      }
-    }
+    // 4. Activate all FacultyAssignment records for this faculty user
+    await FacultyAssignment.update(
+      { status: 'ACTIVE' },
+      { where: { userId: authReq.facultyUserId }, transaction: t }
+    );
 
     await t.commit();
     await logAudit(req, 'APPROVE_FACULTY_AUTHORIZATION', {
@@ -1441,6 +1526,9 @@ export const getFacultyAssignments = async (req: AuthenticatedRequest, res: Resp
       semester: a.semester,
       section: a.section,
       academicYear: a.academicYear,
+      attendanceAccess: a.attendanceAccess,
+      marksAccess: a.marksAccess,
+      googleSheetsAccess: a.googleSheetsAccess,
       status: a.status,
     }));
 

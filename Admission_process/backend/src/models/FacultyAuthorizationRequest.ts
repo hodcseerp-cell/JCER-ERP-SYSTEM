@@ -19,6 +19,7 @@ class FacultyAuthorizationRequest extends Model {
   public rejectionReason!: string | null;
   public decidedByUserId!: string | null;
   public decidedAt!: Date | null;
+  public assignmentsData!: any[] | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -105,6 +106,10 @@ FacultyAuthorizationRequest.init(
     },
     decidedAt: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    assignmentsData: {
+      type: DataTypes.JSON,
       allowNull: true,
     },
   },

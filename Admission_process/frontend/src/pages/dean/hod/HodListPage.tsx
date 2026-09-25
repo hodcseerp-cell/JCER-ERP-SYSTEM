@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Users, UserCheck, Eye, History, UserPlus } from 'lucide-react';
+import { Plus, Search, Users, UserCheck, Eye, History, UserPlus, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import deanService, { HodRecord, DepartmentRecord } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
@@ -15,6 +15,11 @@ export const HodListPage: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false);
+  const [selectedHodToDelete, setSelectedHodToDelete] = useState<HodRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   const fetchDependencies = async () => {
     try {
@@ -38,6 +43,28 @@ export const HodListPage: React.FC = () => {
       toast.error('Failed to load HODs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (hod: HodRecord) => {
+    setSelectedHodToDelete(hod);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedHodToDelete) return;
+    try {
+      setIsDeleting(true);
+      await deanService.deleteHod(selectedHodToDelete.id);
+      toast.success(`HOD ${selectedHodToDelete.name} deleted successfully`);
+      setDeleteModalOpen(false);
+      setSelectedHodToDelete(null);
+      fetchHods();
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to delete HOD';
+      toast.error(errorMsg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -204,6 +231,7 @@ export const HodListPage: React.FC = () => {
                         <button
                           onClick={() => navigate(`/dean/hods/${h.id}`)}
                           className="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1"
+                          title="View HOD Details"
                         >
                           <Eye className="w-3 h-3" />
                           <span>View</span>
@@ -211,9 +239,18 @@ export const HodListPage: React.FC = () => {
                         <button
                           onClick={() => navigate(`/dean/hods/assignments?hodUserId=${h.userId}`)}
                           className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold text-[11px] transition-all flex items-center space-x-1"
+                          title="Assign Department"
                         >
                           <UserCheck className="w-3 h-3" />
                           <span>Assign</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(h)}
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold text-[11px] transition-all flex items-center space-x-1"
+                          title="Delete HOD"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     </td>
@@ -230,6 +267,76 @@ export const HodListPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {deleteModalOpen && selectedHodToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                  Delete HOD Record
+                </h3>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Are you sure you want to permanently delete this Head of Department? This action will remove this record and associated data from the database.
+                </p>
+
+                <div className="mt-4 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-neutral-400 font-medium">Name:</span>
+                    <span className="font-bold text-neutral-900 dark:text-white">{selectedHodToDelete.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-neutral-400 font-medium">Department:</span>
+                    <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                      {selectedHodToDelete.departmentCode ? `${selectedHodToDelete.departmentCode} - ${selectedHodToDelete.departmentName || ''}` : selectedHodToDelete.departmentName || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-neutral-400 font-medium">Email:</span>
+                    <span className="font-medium text-neutral-600 dark:text-neutral-400 truncate max-w-[200px]">{selectedHodToDelete.email}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setSelectedHodToDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-md shadow-rose-600/20 transition-all disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

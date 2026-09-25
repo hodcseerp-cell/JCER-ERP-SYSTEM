@@ -54,6 +54,7 @@ export const FacultyReviewPage: React.FC = () => {
       await deanService.approveFacultyAuthorization(id);
       toast.success('Faculty approved successfully. Faculty account is now active.');
       setShowApproveModal(false);
+      window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequest();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to approve request');
@@ -74,6 +75,7 @@ export const FacultyReviewPage: React.FC = () => {
       await deanService.rejectFacultyAuthorization(id, rejectionReason.trim());
       toast.success('Faculty authorization request rejected.');
       setShowRejectModal(false);
+      window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequest();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to reject request');
@@ -106,6 +108,25 @@ export const FacultyReviewPage: React.FC = () => {
   }
 
   const { faculty, department, subject, createdByHOD, decidedBy } = request;
+
+  const assignmentsList: any[] =
+    request.assignments && request.assignments.length > 0
+      ? request.assignments
+      : Array.isArray(request.assignmentsData) && request.assignmentsData.length > 0
+      ? request.assignmentsData
+      : [
+          {
+            id: 'legacy-assignment',
+            subjectName: subject?.name || 'General Assignment',
+            subjectCode: subject?.code || 'N/A',
+            semester: request.semester,
+            section: request.section,
+            academicYear: request.academicYear,
+            attendanceAccess: true,
+            marksAccess: true,
+            googleSheetsAccess: true,
+          },
+        ];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -233,11 +254,11 @@ export const FacultyReviewPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Column 2: Proposed Academic Assignment */}
+        {/* Column 2: Department & Academic Workflow Scope */}
         <div className="p-6 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
           <h3 className="text-base font-bold text-neutral-900 dark:text-white flex items-center space-x-2">
-            <BookOpen className="w-4 h-4 text-blue-600" />
-            <span>Academic Assignment Scope</span>
+            <Building2 className="w-4 h-4 text-blue-600" />
+            <span>Academic Department Scope</span>
           </h3>
 
           <div className="space-y-3 text-xs divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -246,24 +267,100 @@ export const FacultyReviewPage: React.FC = () => {
               <span className="font-bold text-neutral-900 dark:text-white">{department?.name} ({department?.code})</span>
             </div>
             <div className="flex justify-between items-center pt-2">
-              <span className="text-neutral-400">Teaching Subject</span>
-              <span className="font-bold text-neutral-900 dark:text-white">{subject?.name || 'General Assignment'}</span>
+              <span className="text-neutral-400">Teaching Assignments</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">{assignmentsList.length} Subject(s) Assigned</span>
             </div>
             <div className="flex justify-between items-center pt-2">
-              <span className="text-neutral-400">Subject Code</span>
-              <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">{subject?.code || 'N/A'}</span>
-            </div>
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-neutral-400">Class & Section</span>
-              <span className="font-bold text-neutral-900 dark:text-white">Semester {request.semester} • {request.section}</span>
-            </div>
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-neutral-400">Academic Year</span>
+              <span className="text-neutral-400">Target Academic Year</span>
               <span className="font-bold text-neutral-900 dark:text-white">{request.academicYear}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-neutral-400">Requested By</span>
+              <span className="font-bold text-neutral-800 dark:text-neutral-200">{createdByHOD ? `${createdByHOD.firstName} ${createdByHOD.lastName}` : 'Department HOD'}</span>
             </div>
           </div>
         </div>
 
+      </div>
+
+      {/* ── TEACHING ASSIGNMENTS & PER-SUBJECT PERMISSIONS ── */}
+      <div className="p-6 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
+          <div className="flex items-center space-x-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+              Teaching Assignments & Per-Subject Permissions
+            </h3>
+          </div>
+          <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+            {assignmentsList.length} {assignmentsList.length === 1 ? 'Assignment' : 'Assignments'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {assignmentsList.map((a: any, idx: number) => {
+            const attEnabled = a.attendanceAccess !== false && a.permissions?.attendance !== false;
+            const marksEnabled = a.marksAccess !== false && a.permissions?.marks !== false;
+            const gsEnabled = a.googleSheetsAccess !== false && a.permissions?.googleSheets !== false;
+
+            return (
+              <div
+                key={a.id || idx}
+                className="p-4 sm:p-5 rounded-2xl border border-neutral-200/70 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-extrabold">
+                      Semester {a.semester}
+                    </span>
+                    <span className="text-sm font-extrabold text-neutral-900 dark:text-white">
+                      {a.subjectName}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-neutral-500 bg-neutral-200/60 dark:bg-neutral-700/60 px-2 py-0.5 rounded">
+                      {a.subjectCode}
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-500 font-semibold flex items-center gap-3">
+                    <span>AY: {a.academicYear || request.academicYear}</span>
+                  </div>
+                </div>
+
+                {/* Permissions Badges */}
+                <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60 flex flex-wrap gap-2.5 text-xs">
+                  {/* Attendance */}
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold text-[11px] ${
+                    attEnabled
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 border border-neutral-200 dark:border-neutral-700'
+                  }`}>
+                    {attEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
+                    <span>Attendance Sheet Access: {attEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+
+                  {/* Marks */}
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold text-[11px] ${
+                    marksEnabled
+                      ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 border border-neutral-200 dark:border-neutral-700'
+                  }`}>
+                    {marksEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
+                    <span>Marks & Bit-Wise Access: {marksEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+
+                  {/* Google Sheets */}
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold text-[11px] ${
+                    gsEnabled
+                      ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 border border-neutral-200 dark:border-neutral-700'
+                  }`}>
+                    {gsEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
+                    <span>Google Sheets Access: {gsEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── TIMELINE ── */}
@@ -281,9 +378,9 @@ export const FacultyReviewPage: React.FC = () => {
           </div>
 
           <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase">2. Subject Assigned</span>
-            <p className="font-bold text-neutral-900 dark:text-white">{subject?.code || 'Assigned'}</p>
-            <p className="text-[10px] text-neutral-400">Sem {request.semester} - {request.section}</p>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase">2. Teaching Scope</span>
+            <p className="font-bold text-neutral-900 dark:text-white">{assignmentsList.length} Subject(s)</p>
+            <p className="text-[10px] text-neutral-400">Across Assigned Semesters</p>
           </div>
 
           <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
@@ -334,7 +431,7 @@ export const FacultyReviewPage: React.FC = () => {
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-700/60 space-y-1.5 text-xs">
               <p><span className="text-neutral-400">Faculty:</span> <strong className="text-neutral-900 dark:text-white">{faculty?.firstName} {faculty?.lastName}</strong></p>
               <p><span className="text-neutral-400">Department:</span> <strong className="text-neutral-900 dark:text-white">{department?.name}</strong></p>
-              <p><span className="text-neutral-400">Subject:</span> <strong className="text-neutral-900 dark:text-white">{subject?.name} (Sem {request.semester} - {request.section})</strong></p>
+              <p><span className="text-neutral-400">Teaching Scope:</span> <strong className="text-neutral-900 dark:text-white">{assignmentsList.length} Teaching Assignment(s) will be activated</strong></p>
             </div>
 
             <p className="text-[11px] text-neutral-500 dark:text-neutral-400">

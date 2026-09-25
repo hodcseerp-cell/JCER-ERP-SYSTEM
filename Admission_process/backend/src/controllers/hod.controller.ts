@@ -18,6 +18,7 @@ import AssessmentComponent from '../models/AssessmentComponent';
 import StudentMarks from '../models/StudentMarks';
 import User from '../models/User';
 import AuditLog from '../models/AuditLog';
+import Notification from '../models/Notification';
 import logger from '../utils/logger.util';
 
 /**
@@ -122,7 +123,7 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
     ]);
 
     const overallAttendance =
-      totalSessions > 0 ? Number(((presentSessions / totalSessions) * 100).toFixed(1)) : 84.6;
+      totalSessions > 0 ? Number(((presentSessions / totalSessions) * 100).toFixed(1)) : 0;
 
     // Defaulters (< 75% attendance) count
     const studentAttendanceStats = await AttendanceRecord.findAll({
@@ -149,31 +150,36 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
     });
 
     // 3. Marks Analytics
-    const marksWhere: any = {
+    const assessmentWhere: any = {
       departmentId,
       academicYear: activeAcademicYear,
     };
-    if (querySem && querySem !== 'ALL') marksWhere.semester = Number(querySem);
-    if (querySec && querySec !== 'ALL') marksWhere.section = querySec;
+    if (querySem && querySem !== 'ALL') assessmentWhere.semester = Number(querySem);
+    if (querySec && querySec !== 'ALL') assessmentWhere.section = querySec;
 
     const marksRecords = await StudentMarks.findAll({
       attributes: ['marks'],
       include: [
+        {
+          model: Assessment,
+          as: 'assessment',
+          where: assessmentWhere,
+          attributes: ['id', 'departmentId', 'academicYear', 'semester', 'section'],
+        },
         {
           model: AssessmentComponent,
           as: 'component',
           attributes: ['name', 'maxMarks', 'sequence'],
         },
       ],
-      where: marksWhere,
       limit: 500,
     });
 
-    let averageMarks = 72.4;
-    let highestMarks = 94.0;
-    let lowestMarks = 41.0;
-    let passPercentage = 91.2;
-    let failPercentage = 8.8;
+    let averageMarks = 0;
+    let highestMarks = 0;
+    let lowestMarks = 0;
+    let passPercentage = 0;
+    let failPercentage = 0;
 
     if (marksRecords.length > 0) {
       let totalPercentageSum = 0;
@@ -238,21 +244,43 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
     });
 
     // 6. Semester-wise attendance breakdown
-    const semesterBreakdown = [
-      { semester: 1, attendance: 88 },
-      { semester: 3, attendance: 86 },
-      { semester: 5, attendance: 81 },
-      { semester: 7, attendance: 84 },
-    ];
+    const semesterBreakdown: { semester: number; attendance: number }[] = [];
+    if (totalSessions > 0) {
+      const activeSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
+      for (const sem of activeSemesters) {
+        const sTot = await AttendanceRecord.count({ where: { ...attendanceWhere, semester: sem } });
+        if (sTot > 0) {
+          const sPres = await AttendanceRecord.count({ where: { ...attendanceWhere, semester: sem, status: 'PRESENT' } });
+          semesterBreakdown.push({
+            semester: sem,
+            attendance: Number(((sPres / sTot) * 100).toFixed(1)),
+          });
+        }
+      }
+    }
 
     // 7. Bit-wise assessment score components
-    const bitwiseSummary = [
-      { name: 'Bit 1', average: 8.4, maxMarks: 10 },
-      { name: 'Bit 2', average: 7.9, maxMarks: 10 },
-      { name: 'Bit 3', average: 8.1, maxMarks: 10 },
-      { name: 'Bit 4', average: 7.2, maxMarks: 10 },
-      { name: 'Bit 5', average: 8.6, maxMarks: 10 },
-    ];
+    const bitwiseSummary: { name: string; average: number; maxMarks: number }[] = [];
+    if (marksRecords.length > 0) {
+      const compMap: Record<string, { total: number; count: number; maxMarks: number }> = {};
+      marksRecords.forEach((m: any) => {
+        const cName = m.component?.name || 'Assessment';
+        const mVal = Number(m.marks) || 0;
+        const maxM = Number(m.component?.maxMarks) || 10;
+        if (!compMap[cName]) {
+          compMap[cName] = { total: 0, count: 0, maxMarks: maxM };
+        }
+        compMap[cName].total += mVal;
+        compMap[cName].count += 1;
+      });
+      Object.entries(compMap).forEach(([name, c]) => {
+        bitwiseSummary.push({
+          name,
+          average: Number((c.total / c.count).toFixed(1)),
+          maxMarks: c.maxMarks,
+        });
+      });
+    }
 
     return res.json({
       success: true,
@@ -307,14 +335,9 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
         attendanceAnalytics: {
           overallPercentage: overallAttendance,
           semesterBreakdown,
-          monthlyTrend: [
-            { month: 'Oct', percentage: 86.2 },
-            { month: 'Nov', percentage: 84.8 },
-            { month: 'Dec', percentage: 85.5 },
-            { month: 'Jan', percentage: 83.9 },
-            { month: 'Feb', percentage: 85.1 },
-            { month: 'Mar', percentage: overallAttendance },
-          ],
+          monthlyTrend: totalSessions > 0 ? [
+            { month: 'Current', percentage: overallAttendance },
+          ] : [],
         },
         marksAnalytics: {
           averageMarks,
@@ -752,33 +775,127 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       phone,
       designation,
       joiningDate,
-      subjectId,
+      subjectName,
+      subjectCode,
+      subjectId: legacySubjectId,
       semester,
       section,
       academicYear,
       attendanceAccess,
       marksAccess,
+      googleSheetsAccess,
       authority, // 'DEAN' or 'PRINCIPAL'
+      teachingAssignments,
     } = req.body;
 
-    // 1. Validation
-    if (!firstName || !lastName || !email || !subjectId || !semester || !section) {
+    if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
       await t.rollback();
       return res.status(400).json({
-        error: 'First name, last name, email, subject, semester, and section are required.',
+        error: 'First name, last name, and email are required.',
       });
     }
 
-    const chosenAuthority = authority === 'PRINCIPAL' ? 'PRINCIPAL' : 'DEAN';
+    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true }, transaction: t });
+    const defaultAcademicYear = academicYear || currentYearRecord?.year || '2026-27';
 
-    // Verify subject belongs to this department
-    const subject = await Subject.findOne({
-      where: { id: subjectId, departmentId },
-      transaction: t,
-    });
-    if (!subject) {
+    // Parse and normalize assignments
+    interface NormalizedAssignment {
+      subjectName: string;
+      subjectCode: string;
+      subjectId?: string;
+      semester: number;
+      section: string;
+      academicYear: string;
+      attendanceAccess: boolean;
+      marksAccess: boolean;
+      googleSheetsAccess: boolean;
+    }
+
+    const assignmentsToProcess: NormalizedAssignment[] = [];
+
+    if (Array.isArray(teachingAssignments) && teachingAssignments.length > 0) {
+      for (let i = 0; i < teachingAssignments.length; i++) {
+        const item = teachingAssignments[i];
+        const sName = String(item.subjectName || '').trim();
+        const sCode = String(item.subjectCode || '').trim().toUpperCase();
+        const sem = Number(item.semester);
+        const aYear = (item.academicYear && String(item.academicYear).trim()) || defaultAcademicYear;
+        const sec = (item.section && String(item.section).trim()) || 'A';
+
+        if (!sName || !sCode) {
+          await t.rollback();
+          return res.status(400).json({
+            error: `Teaching Assignment ${i + 1}: Subject name and subject code are required.`,
+          });
+        }
+
+        if (!sem || isNaN(sem) || sem < 1 || sem > 8) {
+          await t.rollback();
+          return res.status(400).json({
+            error: `Teaching Assignment ${i + 1}: Valid teaching semester (1-8) is required.`,
+          });
+        }
+
+        const att = item.permissions?.attendance !== undefined
+          ? Boolean(item.permissions.attendance)
+          : (item.attendanceAccess !== undefined ? Boolean(item.attendanceAccess) : true);
+
+        const mrk = item.permissions?.marks !== undefined
+          ? Boolean(item.permissions.marks)
+          : (item.marksAccess !== undefined ? Boolean(item.marksAccess) : true);
+
+        const gs = item.permissions?.googleSheets !== undefined
+          ? Boolean(item.permissions.googleSheets)
+          : (item.googleSheetsAccess !== undefined ? Boolean(item.googleSheetsAccess) : true);
+
+        assignmentsToProcess.push({
+          subjectName: sName,
+          subjectCode: sCode,
+          subjectId: item.subjectId,
+          semester: sem,
+          section: sec,
+          academicYear: aYear,
+          attendanceAccess: att,
+          marksAccess: mrk,
+          googleSheetsAccess: gs,
+        });
+      }
+    } else {
+      // Legacy single assignment
+      const sName = subjectName ? String(subjectName).trim() : '';
+      const sCode = subjectCode ? String(subjectCode).trim().toUpperCase() : '';
+      const sem = Number(semester);
+
+      if (!legacySubjectId && (!sName || !sCode)) {
+        await t.rollback();
+        return res.status(400).json({
+          error: 'Subject name and subject code are required for the teaching assignment.',
+        });
+      }
+
+      if (!sem || isNaN(sem) || sem < 1 || sem > 8) {
+        await t.rollback();
+        return res.status(400).json({
+          error: 'Valid teaching semester (1-8) is required.',
+        });
+      }
+
+      assignmentsToProcess.push({
+        subjectName: sName,
+        subjectCode: sCode,
+        subjectId: legacySubjectId,
+        semester: sem,
+        section: (section && typeof section === 'string' && section.trim()) ? section.trim() : 'A',
+        academicYear: defaultAcademicYear,
+        attendanceAccess: attendanceAccess !== undefined ? Boolean(attendanceAccess) : true,
+        marksAccess: marksAccess !== undefined ? Boolean(marksAccess) : true,
+        googleSheetsAccess: googleSheetsAccess !== undefined ? Boolean(googleSheetsAccess) : true,
+      });
+    }
+
+    if (assignmentsToProcess.length === 0) {
       await t.rollback();
-      return res.status(400).json({ error: 'Assigned subject does not belong to your department.' });
+      return res.status(400).json({ error: 'At least one teaching assignment is required.' });
     }
 
     // Check if email already taken
@@ -787,6 +904,8 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       await t.rollback();
       return res.status(400).json({ error: 'A user with this email address already exists.' });
     }
+
+    const chosenAuthority = authority === 'PRINCIPAL' ? 'PRINCIPAL' : 'DEAN';
 
     // 2. Generate secure temporary password & hash
     const rawTempPassword = `Fac@${Math.floor(100000 + Math.random() * 900000)}`;
@@ -818,43 +937,137 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       { transaction: t }
     );
 
-    // 5. Create FacultyAssignment record with INACTIVE status
-    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true }, transaction: t });
-    const activeAcademicYear = academicYear || currentYearRecord?.year || '2026-27';
+    // 5. Create Subjects and FacultyAssignment records for all teaching assignments
+    const createdAssignmentsList: any[] = [];
 
-    const assignment = await FacultyAssignment.create(
-      {
-        teacherId: teacher.id,
-        userId: newUser.id,
-        departmentId,
-        subjectId,
-        semester: Number(semester),
-        section: section.trim(),
-        academicYear: activeAcademicYear,
-        attendanceAccess: attendanceAccess !== undefined ? Boolean(attendanceAccess) : true,
-        marksAccess: marksAccess !== undefined ? Boolean(marksAccess) : true,
-        createdByHODId: req.user?.id || null,
-        status: 'INACTIVE',
-      },
-      { transaction: t }
-    );
+    for (const item of assignmentsToProcess) {
+      let subject: Subject | null = null;
 
-    // 6. Create FacultyAuthorizationRequest record
+      if (item.subjectCode && item.subjectName) {
+        subject = await Subject.findOne({
+          where: { code: item.subjectCode },
+          transaction: t,
+        });
+
+        if (subject) {
+          const updates: Partial<{ name: string; semester: number; departmentId: string }> = {};
+          if (subject.name !== item.subjectName) updates.name = item.subjectName;
+          if (item.semester && subject.semester !== Number(item.semester)) updates.semester = Number(item.semester);
+          if (!subject.departmentId) updates.departmentId = departmentId;
+          if (Object.keys(updates).length > 0) {
+            await subject.update(updates, { transaction: t });
+          }
+        } else {
+          subject = await Subject.create(
+            {
+              name: item.subjectName,
+              code: item.subjectCode,
+              semester: Number(item.semester) || 1,
+              departmentId,
+              credits: 4,
+              type: 'Theory',
+              status: 'ACTIVE',
+            },
+            { transaction: t }
+          );
+        }
+      } else if (item.subjectId) {
+        subject = await Subject.findOne({
+          where: { id: item.subjectId, departmentId },
+          transaction: t,
+        });
+      }
+
+      if (!subject) {
+        await t.rollback();
+        return res.status(400).json({ error: `Valid subject required for assignment ${item.subjectCode}.` });
+      }
+
+      const assignment = await FacultyAssignment.create(
+        {
+          teacherId: teacher.id,
+          userId: newUser.id,
+          departmentId,
+          subjectId: subject.id,
+          semester: Number(item.semester),
+          section: item.section,
+          academicYear: item.academicYear,
+          attendanceAccess: item.attendanceAccess,
+          marksAccess: item.marksAccess,
+          googleSheetsAccess: item.googleSheetsAccess,
+          createdByHODId: req.user?.id || null,
+          status: 'INACTIVE',
+        },
+        { transaction: t }
+      );
+
+      createdAssignmentsList.push({
+        id: assignment.id,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectCode: subject.code,
+        semester: assignment.semester,
+        section: assignment.section,
+        academicYear: assignment.academicYear,
+        attendanceAccess: assignment.attendanceAccess,
+        marksAccess: assignment.marksAccess,
+        googleSheetsAccess: assignment.googleSheetsAccess,
+        permissions: {
+          attendance: assignment.attendanceAccess,
+          marks: assignment.marksAccess,
+          googleSheets: assignment.googleSheetsAccess,
+        },
+      });
+    }
+
+    // 6. Create FacultyAuthorizationRequest record with all assignments preserved
+    const firstAssignment = createdAssignmentsList[0];
     const authRequest = await FacultyAuthorizationRequest.create(
       {
         facultyUserId: newUser.id,
         departmentId,
-        subjectId,
-        semester: Number(semester),
-        section: section.trim(),
-        academicYear: activeAcademicYear,
+        subjectId: firstAssignment?.subjectId || null,
+        semester: firstAssignment?.semester || 1,
+        section: firstAssignment?.section || 'A',
+        academicYear: firstAssignment?.academicYear || defaultAcademicYear,
         designation: designation || 'Assistant Professor',
         createdByHODId: req.user?.id || null,
         authority: chosenAuthority,
         status: 'PENDING',
+        assignmentsData: createdAssignmentsList,
       },
       { transaction: t }
     );
+
+    // 7. Dispatch in-app notification to the executive authority (Principal or Dean)
+    try {
+      const targetRole = chosenAuthority === 'PRINCIPAL' ? 'PRINCIPAL' : 'DEAN';
+      const authorityUsers = await User.findAll({
+        where: { role: targetRole, status: 'ACTIVE' },
+        transaction: t,
+      });
+
+      const candidateFullName = `${newUser.firstName} ${newUser.lastName}`.trim();
+      const notifTitle = 'New Faculty Authorization Request';
+      const notifContent = `A new faculty authorization request for ${candidateFullName} (${designation || 'Assistant Professor'}) was submitted. Awaiting ${chosenAuthority === 'PRINCIPAL' ? 'Principal' : 'Dean Academics'} review.`;
+
+      for (const authUser of authorityUsers) {
+        await Notification.create(
+          {
+            title: notifTitle,
+            content: notifContent,
+            type: 'INFO',
+            audience: 'SPECIFIC_USER',
+            targetUserId: authUser.id,
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+          },
+          { transaction: t }
+        );
+      }
+    } catch (notifErr: any) {
+      logger.warn('Failed to dispatch notification to authority user:', notifErr.message);
+    }
 
     await t.commit();
 
@@ -865,6 +1078,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       departmentId,
       authority: chosenAuthority,
       requestId: authRequest.id,
+      assignmentsCount: createdAssignmentsList.length,
     });
 
     return res.status(201).json({
@@ -882,15 +1096,8 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
           authorizationStatus: authRequest.status,
           authority: authRequest.authority,
         },
-        assignment: {
-          id: assignment.id,
-          subjectName: subject.name,
-          subjectCode: subject.code,
-          semester: assignment.semester,
-          section: assignment.section,
-          attendanceAccess: assignment.attendanceAccess,
-          marksAccess: assignment.marksAccess,
-        },
+        assignment: createdAssignmentsList[0],
+        assignments: createdAssignmentsList,
         temporaryCredentials: {
           email: newUser.email,
           temporaryPassword: rawTempPassword,
@@ -992,7 +1199,7 @@ export const updateFacultyAssignment = async (req: AuthenticatedRequest, res: Re
   try {
     const departmentId = req.departmentId;
     const { id } = req.params;
-    const { subjectId, semester, section, attendanceAccess, marksAccess, status } = req.body;
+    const { subjectId, semester, section, attendanceAccess, marksAccess, googleSheetsAccess, status } = req.body;
 
     const assignment = await FacultyAssignment.findOne({
       where: { id, departmentId },
@@ -1008,6 +1215,7 @@ export const updateFacultyAssignment = async (req: AuthenticatedRequest, res: Re
       section: assignment.section,
       attendanceAccess: assignment.attendanceAccess,
       marksAccess: assignment.marksAccess,
+      googleSheetsAccess: assignment.googleSheetsAccess,
       status: assignment.status,
     };
 
@@ -1017,6 +1225,7 @@ export const updateFacultyAssignment = async (req: AuthenticatedRequest, res: Re
       ...(section ? { section: section.trim() } : {}),
       ...(attendanceAccess !== undefined ? { attendanceAccess: Boolean(attendanceAccess) } : {}),
       ...(marksAccess !== undefined ? { marksAccess: Boolean(marksAccess) } : {}),
+      ...(googleSheetsAccess !== undefined ? { googleSheetsAccess: Boolean(googleSheetsAccess) } : {}),
       ...(status ? { status } : {}),
     });
 
@@ -1044,7 +1253,7 @@ export const toggleFacultyAccess = async (req: AuthenticatedRequest, res: Respon
   try {
     const departmentId = req.departmentId;
     const { id } = req.params;
-    const { attendanceAccess, marksAccess } = req.body;
+    const { attendanceAccess, marksAccess, googleSheetsAccess } = req.body;
 
     const assignment = await FacultyAssignment.findOne({
       where: { id, departmentId },
@@ -1057,12 +1266,14 @@ export const toggleFacultyAccess = async (req: AuthenticatedRequest, res: Respon
     await assignment.update({
       ...(attendanceAccess !== undefined ? { attendanceAccess: Boolean(attendanceAccess) } : {}),
       ...(marksAccess !== undefined ? { marksAccess: Boolean(marksAccess) } : {}),
+      ...(googleSheetsAccess !== undefined ? { googleSheetsAccess: Boolean(googleSheetsAccess) } : {}),
     });
 
     await logAudit(req, 'HOD_TOGGLE_FACULTY_ACCESS', {
       assignmentId: id,
       attendanceAccess,
       marksAccess,
+      googleSheetsAccess,
     });
 
     return res.json({
@@ -1196,6 +1407,7 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
         academicYear: a.academicYear,
         attendanceAccess: a.attendanceAccess,
         marksAccess: a.marksAccess,
+        googleSheetsAccess: a.googleSheetsAccess,
         status: a.status,
       })),
     });
@@ -1384,18 +1596,18 @@ export const getHodAttendanceOverview = async (req: AuthenticatedRequest, res: R
       AttendanceRecord.count({ where: { ...where, status: 'PRESENT' } }),
     ]);
 
-    const overallPercentage = totalSessions > 0 ? Number(((presentSessions / totalSessions) * 100).toFixed(1)) : 84.6;
+    const overallPercentage = totalSessions > 0 ? Number(((presentSessions / totalSessions) * 100).toFixed(1)) : 0;
 
     // Semester-wise distribution
     const semesters = [1, 2, 3, 4, 5, 6, 7, 8];
-    const semesterData = await Promise.all(
+    const semesterDataResults = await Promise.all(
       semesters.map(async (sem) => {
         const tot = await AttendanceRecord.count({ where: { departmentId, semester: sem } });
         const pres = await AttendanceRecord.count({ where: { departmentId, semester: sem, status: 'PRESENT' } });
         return {
           semester: sem,
-          percentage: tot > 0 ? Number(((pres / tot) * 100).toFixed(1)) : 82 + (sem % 5),
-          totalSessions: tot || 45,
+          percentage: tot > 0 ? Number(((pres / tot) * 100).toFixed(1)) : 0,
+          totalSessions: tot,
         };
       })
     );
@@ -1406,15 +1618,10 @@ export const getHodAttendanceOverview = async (req: AuthenticatedRequest, res: R
         overallPercentage,
         totalSessions,
         presentSessions,
-        semesterData,
-        monthlyTrend: [
-          { month: 'Oct', percentage: 86.2 },
-          { month: 'Nov', percentage: 84.8 },
-          { month: 'Dec', percentage: 85.5 },
-          { month: 'Jan', percentage: 83.9 },
-          { month: 'Feb', percentage: 85.1 },
-          { month: 'Mar', percentage: overallPercentage },
-        ],
+        semesterData: semesterDataResults.filter((s) => s.totalSessions > 0),
+        monthlyTrend: totalSessions > 0 ? [
+          { month: 'Current', percentage: overallPercentage },
+        ] : [],
       },
     });
   } catch (error) {
@@ -1731,6 +1938,7 @@ export const getHodSheetAccessMatrix = async (req: AuthenticatedRequest, res: Re
       section: a.section,
       attendanceAccess: a.attendanceAccess,
       marksAccess: a.marksAccess,
+      googleSheetsAccess: a.googleSheetsAccess,
       status: a.status,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/mock-${a.id.substring(0, 8)}`,
       lastSyncedAt: new Date(),
@@ -1750,7 +1958,7 @@ export const updateHodSheetAccess = async (req: AuthenticatedRequest, res: Respo
   try {
     const departmentId = req.departmentId;
     const { assignmentId } = req.params;
-    const { attendanceAccess, marksAccess } = req.body;
+    const { attendanceAccess, marksAccess, googleSheetsAccess } = req.body;
 
     const assignment = await FacultyAssignment.findOne({
       where: { id: assignmentId, departmentId },
@@ -1763,12 +1971,14 @@ export const updateHodSheetAccess = async (req: AuthenticatedRequest, res: Respo
     await assignment.update({
       ...(attendanceAccess !== undefined ? { attendanceAccess: Boolean(attendanceAccess) } : {}),
       ...(marksAccess !== undefined ? { marksAccess: Boolean(marksAccess) } : {}),
+      ...(googleSheetsAccess !== undefined ? { googleSheetsAccess: Boolean(googleSheetsAccess) } : {}),
     });
 
     await logAudit(req, 'HOD_UPDATE_SHEET_ACCESS', {
       assignmentId,
       attendanceAccess,
       marksAccess,
+      googleSheetsAccess,
     });
 
     return res.json({

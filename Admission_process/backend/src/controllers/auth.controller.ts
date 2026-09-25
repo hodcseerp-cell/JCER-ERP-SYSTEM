@@ -59,7 +59,7 @@ const getUserPayload = async (user: User) => {
     lastName: user.lastName,
     phone: user.phone,
     profileImage: user.profileImage,
-    mustChangePassword: user.mustChangePassword,
+    mustChangePassword: user.role === 'HOD' ? false : user.mustChangePassword,
     department,
     system,
   };

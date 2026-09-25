@@ -77,7 +77,7 @@ export const DeanDashboardPage: React.FC = () => {
               <span>Academic Year {dashboardData?.academicYear || '2026-27'}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {getGreeting()}, {user?.firstName ? `Dr. ${user.firstName}` : 'Dean Academics'}
+              {getGreeting()}, {user?.firstName ? `${user.firstName}` : 'Dean Academics'}
             </h1>
             <p className="text-amber-100 text-xs sm:text-sm max-w-xl font-medium">
               Oversee departmental curriculums, faculty appointments, semester structures, and review faculty creation authorization requests.
@@ -414,7 +414,7 @@ export const DeanDashboardPage: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                        {reqItem.subject} (Sem {reqItem.semester} - {reqItem.section})
+                        {reqItem.subject} (Sem {reqItem.semester})
                       </p>
                       <p className="text-[10px] text-neutral-400">
                         {reqItem.createdBy} • {new Date(reqItem.requestedDate).toLocaleDateString()}

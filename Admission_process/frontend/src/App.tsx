@@ -30,12 +30,8 @@ import TermsOfUsePage from './pages/common/TermsOfUsePage';
 
 // ─── Dean Pages ───────────────────────────────────────────────────────────────
 import DeanDashboardPage from './pages/dean/DeanDashboardPage';
-import AcademicYearsPage from './pages/dean/academic/AcademicYearsPage';
 import DepartmentsPage from './pages/dean/academic/DepartmentsPage';
 import DepartmentAcademicInfoPage from './pages/dean/academic/DepartmentAcademicInfoPage';
-import SemestersPage from './pages/dean/academic/SemestersPage';
-import SectionsPage from './pages/dean/academic/SectionsPage';
-import SubjectsPage from './pages/dean/academic/SubjectsPage';
 import HodListPage from './pages/dean/hod/HodListPage';
 import CreateHodPage from './pages/dean/hod/CreateHodPage';
 import HodDetailPage from './pages/dean/hod/HodDetailPage';
@@ -105,13 +101,14 @@ import CredentialManagementPage from './pages/admin/settings/CredentialManagemen
 import AdminSystemSettingsPage from './pages/admin/settings/AdminSystemSettingsPage';
 import AdminAuditLogsPage from './pages/admin/settings/AdminAuditLogsPage';
 
-// ─── Principal Pages ──────────────────────────────────────────────────────────
 import PrincipalDashboardPage from './pages/principal/PrincipalDashboardPage';
 import CollegeAnalyticsPage from './pages/principal/CollegeAnalyticsPage';
 import ReportGenerationPage from './pages/principal/ReportGenerationPage';
 import PrincipalProfilePage from './pages/principal/PrincipalProfilePage';
 import { PrincipalAdmissionQueuePage } from './pages/principal/PrincipalAdmissionQueuePage';
 import { PrincipalAdmissionReviewPage } from './pages/principal/PrincipalAdmissionReviewPage';
+import { PrincipalFacultyAuthorizationPage } from './pages/principal/PrincipalFacultyAuthorizationPage';
+import { PrincipalFacultyReviewPage } from './pages/principal/PrincipalFacultyReviewPage';
 import GlobalFooter from './components/common/GlobalFooter';
 
 // ─── Fallback Pages ───────────────────────────────────────────────────────────
@@ -321,6 +318,8 @@ export const App: React.FC = () => (
               <Route path="students"               element={<StudentsDashboardPage readOnly={true} />} />
               <Route path="student-export"         element={<StudentExportPage readOnly={true} />} />
               <Route path="students/view/:id"      element={<StudentViewPage />} />
+              <Route path="faculty/authorizations" element={<PrincipalFacultyAuthorizationPage />} />
+              <Route path="faculty/authorizations/:id" element={<PrincipalFacultyReviewPage />} />
               <Route path="analytics"              element={<CollegeAnalyticsPage />} />
               <Route path="reports"                element={<ReportGenerationPage />} />
               <Route path="profile"                element={<PrincipalProfilePage />} />
@@ -332,12 +331,8 @@ export const App: React.FC = () => (
               <Route path="dashboard" element={<DeanDashboardPage />} />
 
               {/* Academic Structure */}
-              <Route path="academic/years" element={<AcademicYearsPage />} />
               <Route path="academic/departments" element={<DepartmentsPage />} />
               <Route path="academic/departments/:id" element={<DepartmentAcademicInfoPage />} />
-              <Route path="academic/semesters" element={<SemestersPage />} />
-              <Route path="academic/sections" element={<SectionsPage />} />
-              <Route path="academic/subjects" element={<SubjectsPage />} />
 
               {/* HOD Management */}
               <Route path="hods" element={<HodListPage />} />

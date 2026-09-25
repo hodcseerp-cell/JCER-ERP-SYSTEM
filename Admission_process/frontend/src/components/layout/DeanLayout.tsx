@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import deanService from '../../services/dean.service';
 import usePwa from '../../hooks/usePwa';
+import useDeanNotificationCount from '../../hooks/useDeanNotificationCount';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 
 interface MenuItem {
@@ -49,7 +50,7 @@ export const DeanLayout: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [academicYear, setAcademicYear] = useState<string>('2026-27');
-  const [pendingAuthCount, setPendingAuthCount] = useState<number>(0);
+  const { count: pendingAuthCount, refreshCount } = useDeanNotificationCount({ pollingIntervalMs: 10000 });
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [isDark, setIsDark] = useState(false);
@@ -58,9 +59,9 @@ export const DeanLayout: React.FC = () => {
     deanService.getDashboardData()
       .then((data) => {
         if (data.academicYear) setAcademicYear(data.academicYear);
-        if (data.stats?.pendingRequests !== undefined) setPendingAuthCount(data.stats.pendingRequests);
       })
       .catch((err) => console.warn('Could not load Dean dashboard metadata:', err));
+    refreshCount();
   };
 
   useEffect(() => {
@@ -110,11 +111,7 @@ export const DeanLayout: React.FC = () => {
     {
       title: 'ACADEMIC STRUCTURE',
       items: [
-        { name: 'Academic Years', path: '/dean/academic/years', icon: Calendar },
         { name: 'Departments', path: '/dean/academic/departments', icon: Building2 },
-        { name: 'Semesters', path: '/dean/academic/semesters', icon: Layers },
-        { name: 'Sections', path: '/dean/academic/sections', icon: Grid },
-        { name: 'Subjects', path: '/dean/academic/subjects', icon: BookOpen },
       ],
     },
     {
@@ -150,11 +147,7 @@ export const DeanLayout: React.FC = () => {
   const pageTitles: Record<string, string> = {
     '/dean/dashboard': 'Dean Academics Overview',
     '/dean/profile': 'Dean Profile & Security Settings',
-    '/dean/academic/years': 'Academic Years Management',
     '/dean/academic/departments': 'Departments Directory',
-    '/dean/academic/semesters': 'Academic Semesters',
-    '/dean/academic/sections': 'Department Sections',
-    '/dean/academic/subjects': 'College Subjects Curriculum',
     '/dean/hods': 'HOD Directory & Management',
     '/dean/hods/create': 'Register New HOD',
     '/dean/hods/assignments': 'Assign HOD to Department',
@@ -227,9 +220,13 @@ export const DeanLayout: React.FC = () => {
                           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
                           <span className="text-[11px] font-semibold truncate">{item.name}</span>
                         </div>
-                        {item.badge && !isActive && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-600 text-white leading-none scale-90">
-                            {item.badge}
+                        {item.badge !== undefined && item.badge > 0 && (
+                          <span
+                            aria-label={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
+                            title={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
+                            className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs shadow-rose-600/30 ring-2 ring-white dark:ring-neutral-900 leading-none flex-shrink-0 ml-auto"
+                          >
+                            {item.badge > 99 ? '99+' : item.badge}
                           </span>
                         )}
                       </Link>

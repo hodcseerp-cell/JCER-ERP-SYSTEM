@@ -6,46 +6,48 @@ import { RootState } from '../../store';
 import { GlobalFooter } from '../common/GlobalFooter';
 import {
   LayoutDashboard,
-  Building2,
   Users,
   UserPlus,
+  FileCheck2,
+  KeyRound,
   BookOpen,
+  ClipboardList,
+  Layers,
   CalendarCheck,
+  AlertTriangle,
   Award,
+  TrendingUp,
+  BarChart3,
   FileSpreadsheet,
   FileText,
   Settings,
-  LogOut,
-  ChevronDown,
-  ChevronRight,
-  Shield,
-  GraduationCap,
-  Sparkles,
-  Lock,
-  UserCheck,
-  AlertTriangle,
-  Layers,
-  Database,
-  RefreshCw,
-  Bell,
   User,
+  LogOut,
+  Building2,
+  Search,
+  Bell,
+  ChevronDown,
+  Clock,
+  Menu,
+  X,
+  GraduationCap,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import hodService, { HodDashboardData } from '../../services/hod.service';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 
-interface SubMenuItem {
+interface MenuItem {
   name: string;
   path: string;
+  icon: React.ElementType;
   badge?: number;
 }
 
-interface NavGroup {
-  id: string;
+interface MenuGroup {
   title: string;
-  icon: React.ElementType;
-  path?: string;
-  items?: SubMenuItem[];
+  items: MenuItem[];
 }
 
 export const HodLayout: React.FC = () => {
@@ -56,45 +58,61 @@ export const HodLayout: React.FC = () => {
 
   const [dashboardMeta, setDashboardMeta] = useState<HodDashboardData | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    students: false,
-    faculty: true,
-    subjects: false,
-    attendance: false,
-    academics: false,
-    sheets: false,
-  });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const [isDark] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchMetadata = () => {
     hodService.getDashboardData()
       .then((data) => setDashboardMeta(data))
       .catch((err) => console.warn('Could not load HOD metadata:', err));
+  };
+
+  useEffect(() => {
+    fetchMetadata();
   }, [location.pathname]);
 
+  // Click outside listener for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setProfileMenuOpen(false);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const { showRefreshModal, setShowRefreshModal, confirmRefresh } = usePwa();
 
   const handleLogout = () => {
+    setProfileMenuOpen(false);
     dispatch(logout());
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
   };
 
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  const formatTimeAgo = (dateStr?: string) => {
+    if (!dateStr) return 'Recent';
+    const seconds = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   const deptName = dashboardMeta?.department?.name || user?.department?.name || 'Computer Science & Engineering';
@@ -103,362 +121,482 @@ export const HodLayout: React.FC = () => {
   const hodName = dashboardMeta?.hod?.name || user?.name || 'Head of Department';
 
   const pendingActions = dashboardMeta?.stats?.pendingFacultyActions || 0;
+  const defaultersCount = dashboardMeta?.stats?.attendanceDefaulters || 0;
+  const pendingAuthorizations = dashboardMeta?.pendingAuthorizationsList || [];
+  const unreadCount = pendingActions > 0 ? pendingActions : pendingAuthorizations.length;
 
-  // Exact Section 7 & Item 13 specification menu
-  const navGroups: NavGroup[] = [
+  // HOD Sidebar Menu Structure matching Admin Dashboard visual hierarchy
+  const menuGroups: MenuGroup[] = [
     {
-      id: 'dashboard',
-      title: 'Dashboard',
-      icon: LayoutDashboard,
-      path: '/hod/dashboard',
-    },
-    {
-      id: 'students',
-      title: 'Students',
-      icon: GraduationCap,
+      title: 'DASHBOARD',
       items: [
-        { name: 'All Students', path: '/hod/students' },
-        { name: 'Semester Wise', path: '/hod/students/semesters' },
-        { name: 'Section Wise', path: '/hod/students/sections' },
+        { name: 'Dashboard', path: '/hod/dashboard', icon: LayoutDashboard },
       ],
     },
     {
-      id: 'faculty',
-      title: 'Faculty',
-      icon: Users,
+      title: 'STUDENT MANAGEMENT',
       items: [
-        { name: 'Faculty List', path: '/hod/faculty' },
-        { name: 'Create Faculty', path: '/hod/faculty/create' },
-        { name: 'Faculty Assignments', path: '/hod/faculty/assignments' },
-        { name: 'Faculty Access', path: '/hod/faculty/access' },
+        { name: 'Students', path: '/hod/students', icon: Users },
+        { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
+        { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
       ],
     },
     {
-      id: 'subjects',
-      title: 'Subjects',
-      icon: BookOpen,
+      title: 'FACULTY MANAGEMENT',
       items: [
-        { name: 'Subject List', path: '/hod/subjects' },
-        { name: 'Subject Assignment', path: '/hod/subjects/assign' },
-        { name: 'Semester Subjects', path: '/hod/subjects/semesters' },
+        { name: 'Faculty List', path: '/hod/faculty', icon: Users },
+        { name: 'Create Faculty', path: '/hod/faculty/create', icon: UserPlus },
+        { name: 'Faculty Assignments', path: '/hod/faculty/assignments', icon: FileCheck2 },
+        { name: 'Faculty Access', path: '/hod/faculty/access', icon: KeyRound, badge: pendingActions > 0 ? pendingActions : undefined },
       ],
     },
     {
-      id: 'attendance',
-      title: 'Attendance',
-      icon: CalendarCheck,
+      title: 'ACADEMIC MANAGEMENT',
       items: [
-        { name: 'Overview', path: '/hod/attendance' },
-        { name: 'Semester Analysis', path: '/hod/attendance/semesters' },
-        { name: 'Subject Analysis', path: '/hod/attendance/subjects' },
-        { name: 'Section Analysis', path: '/hod/attendance/sections' },
-        { name: 'Defaulters', path: '/hod/attendance/defaulters', badge: dashboardMeta?.stats?.attendanceDefaulters },
+        { name: 'Subjects', path: '/hod/subjects', icon: BookOpen },
+        { name: 'Subject Assignments', path: '/hod/subjects/assign', icon: ClipboardList },
+        { name: 'Academic Structure', path: '/hod/academics', icon: Award },
       ],
     },
     {
-      id: 'academics',
-      title: 'Academics',
-      icon: Award,
+      title: 'ATTENDANCE & MARKS',
       items: [
-        { name: 'Marks Overview', path: '/hod/academics' },
-        { name: 'Subject Analysis', path: '/hod/academics/subjects' },
-        { name: 'Bit-wise Analysis', path: '/hod/academics/bitwise' },
-        { name: 'Student Performance', path: '/hod/academics/performance' },
+        { name: 'Attendance', path: '/hod/attendance', icon: CalendarCheck },
+        { name: 'Attendance Defaulters', path: '/hod/attendance/defaulters', icon: AlertTriangle, badge: defaultersCount > 0 ? defaultersCount : undefined },
+        { name: 'Marks / IA', path: '/hod/academics/performance', icon: TrendingUp },
+        { name: 'Bit-Wise Marks', path: '/hod/academics/bitwise', icon: BarChart3 },
       ],
     },
     {
-      id: 'sheets',
-      title: 'Excel / Sheets',
-      icon: FileSpreadsheet,
+      title: 'EXCEL & SHEETS',
       items: [
-        { name: 'Attendance Sheets', path: '/hod/sheets/attendance' },
-        { name: 'Marks Sheets', path: '/hod/sheets/marks' },
-        { name: 'Faculty Sheet Access', path: '/hod/sheets/access' },
-        { name: 'Sync History', path: '/hod/sheets/sync-history' },
+        { name: 'Sheet Access & Sync', path: '/hod/sheets', icon: FileSpreadsheet },
       ],
     },
     {
-      id: 'reports',
-      title: 'Reports',
-      icon: FileText,
-      path: '/hod/reports',
+      title: 'REPORTS',
+      items: [
+        { name: 'Academic Reports', path: '/hod/reports', icon: FileText },
+      ],
     },
     {
-      id: 'settings',
-      title: 'Settings',
-      icon: Settings,
-      path: '/hod/settings',
+      title: 'SETTINGS',
+      items: [
+        { name: 'Settings', path: '/hod/settings', icon: Settings },
+        { name: 'My Profile', path: '/hod/profile', icon: User },
+      ],
     },
   ];
 
-  const currentPath = location.pathname;
+  const subNavTabs = [
+    { name: 'Dashboard', path: '/hod/dashboard' },
+    { name: 'Students', path: '/hod/students' },
+    { name: 'Faculty', path: '/hod/faculty' },
+  ];
+
+  const pageTitles: Record<string, string> = {
+    '/hod/dashboard': 'HOD Dashboard',
+    '/hod/students': 'Student Management',
+    '/hod/students/semesters': 'Semester Student Breakdown',
+    '/hod/students/sections': 'Section Student Allocations',
+    '/hod/faculty': 'Faculty Management',
+    '/hod/faculty/create': 'Create New Faculty',
+    '/hod/faculty/assignments': 'Faculty Subject Assignments',
+    '/hod/faculty/access': 'Faculty Sheet Access Control',
+    '/hod/subjects': 'Department Subjects Directory',
+    '/hod/subjects/assign': 'Subject Faculty Assignment',
+    '/hod/attendance': 'Department Attendance Overview',
+    '/hod/attendance/defaulters': 'Attendance Defaulters List',
+    '/hod/academics': 'Academic Performance Overview',
+    '/hod/academics/bitwise': 'Bit-Wise Component Analysis',
+    '/hod/academics/performance': 'Student Academic Performance',
+    '/hod/sheets': 'Department Excel & Sheets Workspace',
+    '/hod/reports': 'Department Reports Generator',
+    '/hod/settings': 'Department Settings',
+    '/hod/profile': 'HOD Profile',
+  };
+
+  const getPageTitle = () => {
+    if (location.pathname.startsWith('/hod/students/') && !['/hod/students/semesters', '/hod/students/sections'].includes(location.pathname)) {
+      return 'Student Academic Details';
+    }
+    if (location.pathname.startsWith('/hod/faculty/') && !['/hod/faculty/create', '/hod/faculty/assignments', '/hod/faculty/access'].includes(location.pathname)) {
+      return 'Faculty Member Profile & Permissions';
+    }
+    return pageTitles[location.pathname] || 'HOD Portal';
+  };
+
+  const getPageSubtitle = () => {
+    return `Academic Control • ${deptCode}`;
+  };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'dark bg-slate-950 text-slate-100' : 'bg-[#f4f7fb] text-slate-800'} flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white relative`}>
-      
-      {/* Background Decorative Ambient Blobs */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[45vw] h-[45vw] rounded-full bg-gradient-to-br from-indigo-400/10 via-sky-300/10 to-transparent blur-3xl" />
-        <div className="absolute top-[30%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-gradient-to-bl from-blue-400/10 via-indigo-300/10 to-transparent blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[20%] w-[35vw] h-[35vw] rounded-full bg-gradient-to-tr from-cyan-400/10 via-blue-300/10 to-transparent blur-3xl" />
-      </div>
+    <div className="min-h-screen max-w-full overflow-x-hidden flex text-neutral-900 dark:text-neutral-100 transition-colors duration-300 font-sans pb-6 pr-6">
 
-      <div className="flex flex-1 relative z-10 p-3 sm:p-4 md:p-6 gap-6 max-w-[1700px] w-full mx-auto">
-        
-        {/* ── Left Sidebar Navigation ────────────────────────────────────────── */}
-        <aside className="hidden lg:flex flex-col w-[290px] shrink-0 glass-bar rounded-[32px] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-white/60 dark:border-slate-800/60 transition-all duration-300 backdrop-blur-xl">
-          
-          {/* Logo & ERP Portal Branding */}
-          <div className="flex items-center gap-3.5 px-2 py-3 mb-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 ring-2 ring-white/80">
-              <GraduationCap className="w-6 h-6 stroke-[2.2]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-slate-900 dark:text-white text-base tracking-tight leading-none">JCER ERP</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">HOD</span>
+      {/* ── MOBILE BACKDROP ── */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-neutral-950/50 backdrop-blur-sm z-40 lg:hidden"
+        />
+      )}
+
+      {/* ── FLOATING SIDEBAR (ADMIN STYLE) ── */}
+      <aside
+        className={`fixed left-6 top-6 bottom-6 w-[280px] min-w-[280px] max-w-[280px] flex-shrink-0 flex flex-col justify-between py-6 px-4 rounded-[32px] glass-bar z-50 transition-transform duration-300 lg:translate-x-0 ${
+          mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-[320px] lg:translate-x-0'
+        }`}
+      >
+        {/* Top: Logo + Nav */}
+        <div className="flex flex-col w-full min-h-0">
+          <div className="flex items-center justify-between px-1.5 mb-5">
+            <Link to="/hod/dashboard" className="flex items-center space-x-2.5 hover:opacity-95 transition-all">
+              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-neutral-100 dark:border-neutral-800 shadow-sm">
+                <img
+                  src="/logo.png"
+                  alt="JCER Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <p className="text-[11px] font-semibold text-slate-400 mt-1 truncate max-w-[170px]" title={deptName}>
-                {deptCode} • Academic Control
+              <div className="flex flex-col min-w-0">
+                <span className="font-extrabold text-[15px] tracking-wider uppercase text-neutral-900 dark:text-white leading-none">
+                  JCER ERP
+                </span>
+                <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  Head of Department
+                </span>
+              </div>
+            </Link>
+
+            {/* Mobile close button */}
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Grouped Navigation matching Admin Dashboard style */}
+          {(() => {
+            const allNavPaths = menuGroups.flatMap((g) => g.items.map((i) => i.path));
+            const getActiveNavPath = (currentPath: string): string => {
+              if (allNavPaths.includes(currentPath)) {
+                return currentPath;
+              }
+              const matchingPaths = allNavPaths.filter(
+                (p) => p !== '/hod/dashboard' && currentPath.startsWith(p + '/')
+              );
+              if (matchingPaths.length > 0) {
+                matchingPaths.sort((a, b) => b.length - a.length);
+                return matchingPaths[0];
+              }
+              if (currentPath === '/hod' || currentPath.startsWith('/hod/dashboard')) {
+                return '/hod/dashboard';
+              }
+              return currentPath;
+            };
+            const activeNavPath = getActiveNavPath(location.pathname);
+
+            return (
+              <nav className="flex flex-col space-y-3 overflow-y-auto max-h-[calc(100vh-270px)] pr-1 select-none custom-scrollbar">
+                {menuGroups.map((group) => (
+                  <div key={group.title} className="flex flex-col space-y-0.5">
+                    <span className="px-3.5 text-[9px] font-black tracking-widest text-neutral-400 dark:text-neutral-500 uppercase mb-1">
+                      {group.title}
+                    </span>
+                    <div className="flex flex-col space-y-0.5">
+                      {group.items.map((item) => {
+                        const isActive = item.path === activeNavPath;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.path}
+                        className={`w-full h-[38px] px-3.5 rounded-xl flex items-center justify-between transition-all duration-150 relative group border ${
+                          isActive
+                            ? 'bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white font-bold shadow-md shadow-[#070e22]/25 border-[#1e3a8a]/50'
+                            : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-gradient-to-r hover:from-[#070e22] hover:via-[#0c1a40] hover:to-[#0f245c] hover:!text-white hover:border-[#1e3a8a]/40 hover:shadow-sm'
+                        }`}
+                      >
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-4.5 bg-cyan-400 rounded-r shadow-xs shadow-cyan-400/50" />
+                        )}
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <Icon
+                            className={`w-4 h-4 flex-shrink-0 transition-colors duration-150 ${
+                              isActive
+                                ? 'text-cyan-300'
+                                : 'text-neutral-400 group-hover:!text-cyan-300'
+                            }`}
+                            strokeWidth={isActive ? 2.5 : 2}
+                          />
+                          <span
+                            className={`text-[11px] font-semibold transition-colors duration-150 truncate ${
+                              isActive
+                                ? 'text-white font-bold'
+                                : 'text-neutral-700 dark:text-neutral-300 group-hover:!text-white'
+                            }`}
+                          >
+                            {item.name}
+                          </span>
+                        </div>
+                        {item.badge !== undefined && item.badge > 0 && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-500 text-white leading-none scale-90 ml-1.5 shrink-0">
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        );
+      })()}
+        </div>
+
+        {/* Bottom Footer matching Admin style */}
+        <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800/40 flex flex-col gap-2.5 w-full">
+          <div className="rounded-xl p-2.5 border text-[10px] space-y-1 bg-neutral-50/50 dark:bg-neutral-800/25 border-neutral-200/50 dark:border-neutral-800/55">
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-400 font-medium">Role</span>
+              <span className="font-extrabold text-neutral-800 dark:text-neutral-200">HEAD OF DEPARTMENT</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-400 font-medium">Department</span>
+              <span className="font-extrabold text-neutral-800 dark:text-neutral-200">
+                {deptCode}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-neutral-400 font-medium">Academic Year</span>
+              <span className="font-extrabold text-neutral-800 dark:text-neutral-200">{academicYear}</span>
+            </div>
+          </div>
+
+          <Link
+            to="/hod/faculty"
+            className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0 text-[#0c1a40] dark:text-blue-400"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">
+              {pendingActions > 0 ? `${pendingActions} Pending Faculty Action${pendingActions > 1 ? 's' : ''}` : 'No Pending Actions'}
+            </span>
+          </Link>
+        </div>
+      </aside>
+
+      {/* ── MAIN CONTENT AREA ── */}
+      <div className="flex-1 pt-6 flex flex-col min-h-screen min-w-0 pl-6 lg:pl-[320px]">
+
+        {/* ── TOP HEADER (ADMIN STYLE) ── */}
+        <header className="flex flex-row items-center justify-between py-2 sm:py-4 mb-6 z-30 gap-6">
+
+          {/* Page Title & Mobile Trigger */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden w-9 h-9 rounded-xl flex items-center justify-center border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="flex-shrink-0">
+              <h1 className="text-xl md:text-2xl lg:text-[26px] font-bold tracking-tight text-neutral-900 dark:text-white whitespace-nowrap leading-tight">
+                {getPageTitle()}
+              </h1>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 font-medium whitespace-nowrap">
+                {getPageSubtitle()}
               </p>
             </div>
           </div>
 
-          {/* Department Scope Ribbon: STRICTLY LOCKED (Prompt Item 12) */}
-          <div className="mb-4 mx-1 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/90 to-blue-50/90 dark:from-slate-800/90 dark:to-indigo-950/40 border border-indigo-100/90 dark:border-indigo-900/50 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5" /> Department
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs">
-                <Lock className="w-2.5 h-2.5" /> {deptCode} [LOCKED]
-              </span>
-            </div>
-            <p className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-snug line-clamp-1" title={deptName}>
-              {deptName}
-            </p>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              Academic Year: <span className="font-bold text-indigo-600 dark:text-indigo-400">{academicYear}</span>
-            </p>
-          </div>
-
-          {/* Nav Links Accordion / List */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs">
-            {navGroups.map((group) => {
-              const Icon = group.icon;
-              const hasSubItems = group.items && group.items.length > 0;
-              const isGroupActive = hasSubItems
-                ? group.items!.some((item) => currentPath === item.path || currentPath.startsWith(item.path + '/'))
-                : currentPath === group.path;
-              const isExpanded = expandedGroups[group.id] || isGroupActive;
-
-              if (!hasSubItems && group.path) {
-                return (
-                  <Link
-                    key={group.id}
-                    to={group.path}
-                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-semibold transition-all duration-200 group ${
-                      isGroupActive
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-500/20 font-bold'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 transition-transform group-hover:scale-110 ${isGroupActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600'}`} />
-                      <span>{group.title}</span>
-                    </div>
-                  </Link>
-                );
-              }
-
+          {/* Sub-Nav Pill Bar (matching Admin screenshot 2: 3 core quick tabs) */}
+          <div className="hidden lg:flex items-center glass-bar p-1 rounded-full flex-shrink-0">
+            {subNavTabs.map((tab) => {
+              const isActive = location.pathname === tab.path;
               return (
-                <div key={group.id} className="space-y-1">
-                  <button
-                    onClick={() => toggleGroup(group.id)}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-semibold transition-all duration-200 group ${
-                      isGroupActive && !isExpanded
-                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 transition-transform group-hover:scale-110 ${isGroupActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-indigo-600'}`} />
-                      <span className={isGroupActive ? 'font-bold text-slate-900 dark:text-white' : ''}>{group.title}</span>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                    )}
-                  </button>
-
-                  {isExpanded && (
-                    <div className="pl-6 pr-1 space-y-1 border-l-2 border-indigo-100 dark:border-slate-800 ml-4 my-1">
-                      {group.items!.map((subItem) => {
-                        const isSubActive = currentPath === subItem.path || currentPath.startsWith(subItem.path + '/');
-                        return (
-                          <Link
-                            key={subItem.path}
-                            to={subItem.path}
-                            className={`flex items-center justify-between px-3 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
-                              isSubActive
-                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-sm'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900'
-                            }`}
-                          >
-                            <span>{subItem.name}</span>
-                            {subItem.badge !== undefined && subItem.badge > 0 && (
-                              <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                                isSubActive ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'
-                              }`}>
-                                {subItem.badge}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <Link
+                  key={tab.name}
+                  to={tab.path}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 ${
+                    isActive
+                      ? 'admin-nav-pill-active shadow-sm text-white'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  {tab.name}
+                </Link>
               );
             })}
           </div>
 
-          {/* User Card & Logout in Sidebar Bottom */}
-          <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-2">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <img
-                src={user?.profileImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&fit=crop'}
-                alt="HOD Profile"
-                className="w-8 h-8 rounded-full object-cover ring-2 ring-indigo-500/30"
-              />
-              <div className="overflow-hidden">
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                  {hodName}
-                </p>
-                <p className="text-[10px] text-slate-400 font-medium truncate">
-                  HOD - {deptCode}
-                </p>
-              </div>
+          {/* Right Controls */}
+          <div className="flex items-center space-x-2.5 flex-shrink-0">
+            {/* Department Context Badge */}
+            <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
+              <Building2 className="w-3.5 h-3.5 text-neutral-500" />
+              <span>Dept: <strong>{deptCode}</strong></span>
+              <span className="text-neutral-300 dark:text-neutral-600">•</span>
+              <span>AY: <strong>{academicYear}</strong></span>
             </div>
+
+            {/* Quick Search Button */}
             <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+              onClick={() => navigate('/hod/students')}
+              title="Search students"
+              className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              <Search className="w-4 h-4" />
             </button>
-          </div>
-        </aside>
 
-        {/* ── Main Workspace ─────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0">
-          
-          {/* Header Bar: Item 12 Locked Department Header */}
-          <header className="glass-bar rounded-[28px] px-6 py-4 mb-6 shadow-[0_15px_35px_rgba(0,0,0,0.04)] border border-white/60 dark:border-slate-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-xl">
-            
-            {/* Left: Permanent Department Lock Banner */}
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-100 dark:border-indigo-900/40 shadow-xs">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Head of Department</span>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs">
-                    <Lock className="w-2.5 h-2.5" /> Department: {deptCode} [LOCKED]
+            {/* Notifications Bell Dropdown */}
+            <div className="relative" ref={notificationsRef}>
+              <button
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+                title="Notifications"
+                className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] relative cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 px-1 py-0.5 rounded-full bg-rose-500 text-white font-extrabold text-[8px] leading-none shrink-0 min-w-3.5 flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div className="notifications-dropdown absolute right-0 mt-2 w-80 sm:w-96 border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900 rounded-2xl py-2 shadow-xl z-50 animate-fade-in">
+                  <div className="px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800/40 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-800 dark:text-neutral-200">
+                      Notifications
+                    </span>
+                    {unreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold">
+                        {unreadCount} pending
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-[360px] overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800/40 scrollbar-thin">
+                    {pendingAuthorizations.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-neutral-400 flex flex-col items-center justify-center gap-2">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                        <span className="font-semibold text-neutral-700 dark:text-neutral-300">All caught up!</span>
+                        <span className="text-[11px] text-neutral-400">No pending faculty authorizations or alerts.</span>
+                      </div>
+                    ) : (
+                      pendingAuthorizations.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            navigate('/hod/faculty');
+                          }}
+                          className="p-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer flex gap-3 transition-colors select-none text-left"
+                        >
+                          <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-0.5">
+                            <p className="text-xs font-extrabold text-neutral-850 dark:text-neutral-100 truncate">
+                              {item.facultyName} (Sem {item.semester} • {item.section})
+                            </p>
+                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed font-medium">
+                              {item.subjectName} — Dispatched to <strong className="text-neutral-700 dark:text-neutral-200">{item.authority}</strong> for authorization.
+                            </p>
+                          </div>
+                          <span className="text-[9px] text-neutral-400 dark:text-neutral-500 font-bold shrink-0 self-start mt-0.5 font-mono">
+                            {formatTimeAgo(item.createdAt)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="px-4 py-2 border-t border-neutral-100 dark:border-neutral-800/40 text-center shrink-0">
+                    <button
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        navigate('/hod/faculty');
+                      }}
+                      className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-700 transition-colors uppercase tracking-wider"
+                    >
+                      View All Faculty Authorizations
+                    </button>
+                  </div>
                 </div>
-                <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight mt-0.5">
-                  {deptName}
-                </h1>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Academic Year: <span className="font-bold text-indigo-600 dark:text-indigo-400">{academicYear}</span>
-                </p>
-              </div>
+              )}
             </div>
 
-            {/* Right: Quick Controls, Pending Actions & Profile */}
-            <div className="flex items-center gap-3 self-end md:self-auto">
-              {pendingActions > 0 && (
-                <Link
-                  to="/hod/faculty"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/80 text-xs font-bold hover:bg-amber-100 transition-colors shadow-xs"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{pendingActions} Pending Authorization{pendingActions > 1 ? 's' : ''}</span>
-                </Link>
-              )}
+            {/* Profile Pill Dropdown (matching Admin style) */}
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                onClick={() => setProfileMenuOpen((prev) => !prev)}
+                className="flex items-center space-x-2 header-dark-btn h-9 pl-1.5 pr-3 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
+              >
+                <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-violet-600 text-white font-bold text-[10px]">
+                  {user?.profileImage ? (
+                    <img src={user.profileImage} alt={hodName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{hodName.charAt(0)}</span>
+                  )}
+                </div>
+                <span className="text-xs font-semibold pr-0.5 hidden md:block">
+                  {hodName.split(' ')[0]}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 opacity-80 hidden md:block transition-transform duration-200 ${profileMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-              {/* Profile Dropdown */}
-              <div className="relative" ref={profileMenuRef}>
-                <button
-                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 shadow-sm hover:shadow transition-all text-left"
-                >
-                  <img
-                    src={user?.profileImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&fit=crop'}
-                    alt="HOD Avatar"
-                    className="w-8 h-8 rounded-xl object-cover ring-2 ring-indigo-500/20"
-                  />
-                  <div className="hidden md:block">
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                      {hodName}
-                    </p>
-                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold leading-tight">
-                      HOD ({deptCode})
-                    </p>
-                  </div>
-                  <ChevronDown className="w-4 h-4 text-slate-400 ml-0.5" />
-                </button>
-
-                {profileMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">{hodName}</p>
-                      <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-                          {deptCode} Department
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-400">
-                          {academicYear}
-                        </span>
-                      </div>
+              {profileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-neutral-900 shadow-xl border border-neutral-200/80 dark:border-neutral-800 p-2 z-50 animate-in fade-in duration-150">
+                  <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
+                    <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">{hodName}</p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">{user?.email || 'hod@jcer.edu'}</p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300">
+                        {deptCode} Dept
+                      </span>
+                      <span className="text-[9px] font-bold text-neutral-400">
+                        AY {academicYear}
+                      </span>
                     </div>
+                  </div>
 
+                  <div className="py-1">
                     <Link
                       to="/hod/settings"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                     >
-                      <User className="w-4 h-4 text-slate-400" />
-                      <span>HOD Profile & Settings</span>
+                      <User className="w-3.5 h-3.5 text-neutral-500" />
+                      <span>My Profile & Settings</span>
                     </Link>
+                  </div>
 
-                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-
+                  <div className="pt-1 border-t border-neutral-100 dark:border-neutral-800">
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-left"
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors text-left"
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut className="w-3.5 h-3.5" />
                       <span>Sign Out</span>
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-          </header>
+          </div>
+        </header>
 
-          {/* Page Body */}
-          <main className="flex-1">
-            <Outlet />
-          </main>
+        {/* ── DYNAMIC PAGE CONTENT ── */}
+        <main className="flex-1 pb-10 min-w-0">
+          <Outlet />
+        </main>
 
-          {/* Footer */}
-          <GlobalFooter isDark={isDark} className="mt-8 mb-2" />
-        </div>
+        <GlobalFooter />
       </div>
 
       <PwaConfirmationModal

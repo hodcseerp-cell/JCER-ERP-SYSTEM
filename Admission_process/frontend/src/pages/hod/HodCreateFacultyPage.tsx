@@ -1,30 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   UserPlus,
   ArrowLeft,
-  Building2,
-  BookOpen,
   ShieldCheck,
   Lock,
   Copy,
   Check,
   AlertTriangle,
-  Sparkles,
-  Layers,
-  Calendar,
   CheckCircle2,
+  Trash2,
+  Plus,
 } from 'lucide-react';
-import hodService, { HodSubjectItem } from '../../services/hod.service';
+import hodService from '../../services/hod.service';
+
+interface TeachingAssignmentItem {
+  id: string;
+  semester: string;
+  subjectName: string;
+  subjectCode: string;
+  academicYear: string;
+  attendanceAccess: boolean;
+  marksAccess: boolean;
+  googleSheetsAccess: boolean;
+}
+
+const cardThemes = [
+  {
+    border: 'border-blue-200/90 dark:border-blue-900/60',
+    bg: 'bg-blue-50/25 dark:bg-blue-950/10',
+    headerBg: 'bg-blue-100/60 dark:bg-blue-900/30',
+    headerText: 'text-blue-900 dark:text-blue-200',
+    permBg: 'bg-blue-50/50 dark:bg-slate-800/50',
+    permBorder: 'border-blue-100 dark:border-slate-700/60',
+    badgeText: 'text-blue-700 dark:text-blue-300',
+  },
+  {
+    border: 'border-emerald-200/90 dark:border-emerald-900/60',
+    bg: 'bg-emerald-50/25 dark:bg-emerald-950/10',
+    headerBg: 'bg-emerald-100/60 dark:bg-emerald-900/30',
+    headerText: 'text-emerald-900 dark:text-emerald-200',
+    permBg: 'bg-emerald-50/50 dark:bg-slate-800/50',
+    permBorder: 'border-emerald-100 dark:border-slate-700/60',
+    badgeText: 'text-emerald-700 dark:text-emerald-300',
+  },
+  {
+    border: 'border-amber-200/90 dark:border-amber-900/60',
+    bg: 'bg-amber-50/25 dark:bg-amber-950/10',
+    headerBg: 'bg-amber-100/60 dark:bg-amber-900/30',
+    headerText: 'text-amber-900 dark:text-amber-200',
+    permBg: 'bg-amber-50/50 dark:bg-slate-800/50',
+    permBorder: 'border-amber-100 dark:border-slate-700/60',
+    badgeText: 'text-amber-700 dark:text-amber-300',
+  },
+  {
+    border: 'border-purple-200/90 dark:border-purple-900/60',
+    bg: 'bg-purple-50/25 dark:bg-purple-950/10',
+    headerBg: 'bg-purple-100/60 dark:bg-purple-900/30',
+    headerText: 'text-purple-900 dark:text-purple-200',
+    permBg: 'bg-purple-50/50 dark:bg-slate-800/50',
+    permBorder: 'border-purple-100 dark:border-slate-700/60',
+    badgeText: 'text-purple-700 dark:text-purple-300',
+  },
+];
 
 export const HodCreateFacultyPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Subjects in this department
-  const [subjects, setSubjects] = useState<HodSubjectItem[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState<boolean>(true);
-
-  // Form State
+  // Form State - Section A
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,15 +75,21 @@ export const HodCreateFacultyPage: React.FC = () => {
   const [designation, setDesignation] = useState('Assistant Professor');
   const [joiningDate, setJoiningDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const [subjectId, setSubjectId] = useState('');
-  const [semester, setSemester] = useState('5');
-  const [section, setSection] = useState('A');
-  const [academicYear, setAcademicYear] = useState('2026-27');
+  // Section B: Dynamic Teaching Assignments
+  const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignmentItem[]>([
+    {
+      id: 'assign-1',
+      semester: '1',
+      subjectName: '',
+      subjectCode: '',
+      academicYear: '2026-27',
+      attendanceAccess: true,
+      marksAccess: true,
+      googleSheetsAccess: true,
+    },
+  ]);
 
-  const [attendanceAccess, setAttendanceAccess] = useState(true);
-  const [marksAccess, setMarksAccess] = useState(true);
-
-  // Authority Selection (Critical User Requirement 1)
+  // Section C: Authority Selection
   const [authority, setAuthority] = useState<'DEAN' | 'PRINCIPAL'>('DEAN');
 
   // Submission State
@@ -53,46 +102,103 @@ export const HodCreateFacultyPage: React.FC = () => {
     temporaryPassword: string;
     authority: string;
     facultyName: string;
+    assignmentsCount: number;
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    hodService.getSubjects()
-      .then((data) => {
-        setSubjects(data);
-        if (data.length > 0) {
-          setSubjectId(data[0].id);
-        }
-      })
-      .catch((err) => console.error('Failed to load department subjects:', err))
-      .finally(() => setLoadingSubjects(false));
-  }, []);
+  const handleAddAssignment = () => {
+    const newAssignment: TeachingAssignmentItem = {
+      id: `assign_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      semester: '1',
+      subjectName: '',
+      subjectCode: '',
+      academicYear: '2026-27',
+      attendanceAccess: true,
+      marksAccess: true,
+      googleSheetsAccess: true,
+    };
+    setTeachingAssignments((prev) => [...prev, newAssignment]);
+  };
+
+  const handleRemoveAssignment = (id: string) => {
+    if (teachingAssignments.length <= 1) return;
+    setTeachingAssignments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleUpdateAssignment = (id: string, field: keyof TeachingAssignmentItem, value: any) => {
+    setTeachingAssignments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!firstName || !lastName || !email || !subjectId) {
-      setErrorMessage('Please fill in all mandatory fields (Name, Email, and Subject).');
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      setErrorMessage('Please fill in all mandatory personal details (First Name, Last Name, and Email Address).');
       return;
+    }
+
+    if (teachingAssignments.length === 0) {
+      setErrorMessage('Please provide at least one teaching assignment.');
+      return;
+    }
+
+    // Validate each assignment card
+    for (let i = 0; i < teachingAssignments.length; i++) {
+      const a = teachingAssignments[i];
+      if (!a.subjectName.trim()) {
+        setErrorMessage(`Teaching Assignment ${i + 1}: Subject Name is required.`);
+        return;
+      }
+      if (!a.subjectCode.trim()) {
+        setErrorMessage(`Teaching Assignment ${i + 1}: Subject Code is required.`);
+        return;
+      }
+      if (!a.semester) {
+        setErrorMessage(`Teaching Assignment ${i + 1}: Teaching Semester is required.`);
+        return;
+      }
+      if (!a.academicYear.trim()) {
+        setErrorMessage(`Teaching Assignment ${i + 1}: Academic Year is required.`);
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
+      const formattedAssignments = teachingAssignments.map((a) => ({
+        semester: Number(a.semester),
+        subjectName: a.subjectName.trim(),
+        subjectCode: a.subjectCode.trim().toUpperCase(),
+        academicYear: a.academicYear.trim(),
+        permissions: {
+          attendance: Boolean(a.attendanceAccess),
+          marks: Boolean(a.marksAccess),
+          googleSheets: Boolean(a.googleSheetsAccess),
+        },
+      }));
+
+      const primaryAssignment = formattedAssignments[0];
+
       const response = await hodService.createFaculty({
-        firstName,
-        lastName,
-        email,
-        phone,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
         designation,
         joiningDate,
-        subjectId,
-        semester: Number(semester),
-        section,
-        academicYear,
-        attendanceAccess,
-        marksAccess,
         authority,
+        teachingAssignments: formattedAssignments,
+        // Legacy fallback fields
+        semester: primaryAssignment.semester,
+        subjectName: primaryAssignment.subjectName,
+        subjectCode: primaryAssignment.subjectCode,
+        academicYear: primaryAssignment.academicYear,
+        attendanceAccess: primaryAssignment.permissions.attendance,
+        marksAccess: primaryAssignment.permissions.marks,
+        googleSheetsAccess: primaryAssignment.permissions.googleSheets,
       });
 
       setSuccessModalData({
@@ -100,6 +206,7 @@ export const HodCreateFacultyPage: React.FC = () => {
         temporaryPassword: response.data?.temporaryCredentials?.temporaryPassword,
         authority,
         facultyName: `${firstName} ${lastName}`,
+        assignmentsCount: formattedAssignments.length,
       });
     } catch (err: any) {
       console.error('Failed to create faculty:', err);
@@ -140,12 +247,12 @@ export const HodCreateFacultyPage: React.FC = () => {
               Create Faculty & Submit for Authorization
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Add a department teacher and route for mandatory approval by Dean Academics or Principal.
+              Add a department teacher with multi-semester teaching assignments and route for approval.
             </p>
           </div>
         </div>
 
-        {/* Workflow Alert (Prompt Item 1 & 2) */}
+        {/* Workflow Alert */}
         <div className="mt-6 p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="space-y-1">
@@ -166,13 +273,13 @@ export const HodCreateFacultyPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── The 6-Section Form ───────────────────────────────────────────────── */}
+      {/* ── Form ─────────────────────────────────────────────────────────────── */}
       <form onSubmit={handleSubmit} className="space-y-6">
         
         {/* Section A: Personal Information */}
         <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-4">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <span>Section A: Personal & Contact Information</span>
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <span>SECTION A: PERSONAL & CONTACT INFORMATION</span>
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -183,7 +290,7 @@ export const HodCreateFacultyPage: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Rahul"
+                placeholder="e.g. Arihant"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -197,7 +304,7 @@ export const HodCreateFacultyPage: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Sharma"
+                placeholder="e.g. Desai"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -211,7 +318,7 @@ export const HodCreateFacultyPage: React.FC = () => {
               <input
                 type="email"
                 required
-                placeholder="e.g. rahul.sharma@college.com"
+                placeholder="e.g. arihantdesai@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -224,7 +331,7 @@ export const HodCreateFacultyPage: React.FC = () => {
               </label>
               <input
                 type="tel"
-                placeholder="+91 98765 43210"
+                placeholder="e.g. 6363221706"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -261,120 +368,202 @@ export const HodCreateFacultyPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section B: Academic Assignment */}
-        <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-4">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <span>Section B: Department Subject & Section Assignment</span>
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Section B: Teaching Assignments */}
+        <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Assigned Subject <span className="text-rose-500">*</span>
-              </label>
-              <select
-                required
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              >
-                {subjects.length > 0 ? (
-                  subjects.map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      {sub.name} ({sub.code}) — Sem {sub.semester}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Loading subjects...</option>
-                )}
-              </select>
+              <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                SECTION B: TEACHING ASSIGNMENTS
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Add one or more subject assignments for this faculty. Each assignment can have separate permissions.
+              </p>
             </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Teaching Semester
-              </label>
-              <select
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                  <option key={s} value={s}>Semester {s}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Section Division
-              </label>
-              <select
-                value={section}
-                onChange={(e) => setSection(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              >
-                <option value="A">Section A</option>
-                <option value="B">Section B</option>
-                <option value="C">Section C</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Academic Year
-              </label>
-              <input
-                type="text"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
+            <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 self-start sm:self-auto">
+              {teachingAssignments.length} {teachingAssignments.length === 1 ? 'Assignment' : 'Assignments'}
+            </span>
           </div>
+
+          {/* Assignment Cards List */}
+          <div className="space-y-4">
+            {teachingAssignments.map((assignment, index) => {
+              const theme = cardThemes[index % cardThemes.length];
+              return (
+                <div
+                  key={assignment.id}
+                  className={`rounded-2xl border ${theme.border} ${theme.bg} p-4 sm:p-5 space-y-4 transition-all shadow-2xs`}
+                >
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-extrabold ${theme.headerText}`}>
+                        Teaching Assignment {index + 1}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAssignment(assignment.id)}
+                      disabled={teachingAssignments.length <= 1}
+                      title={teachingAssignments.length <= 1 ? 'At least one assignment is required' : 'Remove this assignment'}
+                      className="px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+
+                  {/* 4 Fields Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Teaching Semester */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Teaching Semester <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={assignment.semester}
+                        onChange={(e) => handleUpdateAssignment(assignment.id, 'semester', e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                          <option key={s} value={s}>Semester {s}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Subject Name */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Subject Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Engineering Mathematics"
+                        value={assignment.subjectName}
+                        onChange={(e) => handleUpdateAssignment(assignment.id, 'subjectName', e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Subject Code */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Subject Code <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. MAT101"
+                        value={assignment.subjectCode}
+                        onChange={(e) => handleUpdateAssignment(assignment.id, 'subjectCode', e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none uppercase font-mono"
+                      />
+                    </div>
+
+                    {/* Academic Year */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Academic Year <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={assignment.academicYear}
+                        onChange={(e) => handleUpdateAssignment(assignment.id, 'academicYear', e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="2026-27">2026-27</option>
+                        <option value="2025-26">2025-26</option>
+                        <option value="2024-25">2024-25</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Per-Assignment Permissions Box */}
+                  <div className={`p-4 rounded-xl ${theme.permBg} border ${theme.permBorder} space-y-2.5`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Assignment Permissions
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Attendance Permission */}
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={assignment.attendanceAccess}
+                          onChange={(e) => handleUpdateAssignment(assignment.id, 'attendanceAccess', e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                            Attendance Sheet Access
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                            Allow faculty to record & sync student attendance
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Marks Permission */}
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={assignment.marksAccess}
+                          onChange={(e) => handleUpdateAssignment(assignment.id, 'marksAccess', e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                            Marks & Bit-Wise Access
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                            Allow faculty to input IA & Bit 1-5 marks
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Google Sheets Permission */}
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={assignment.googleSheetsAccess}
+                          onChange={(e) => handleUpdateAssignment(assignment.id, 'googleSheetsAccess', e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                            Google Sheets Access
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                            Allow faculty to access subject-related sheets
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add Another Teaching Assignment Action */}
+          <button
+            type="button"
+            onClick={handleAddAssignment}
+            className="w-full py-3 px-4 rounded-2xl border-2 border-dashed border-blue-400/80 dark:border-blue-500/60 hover:border-blue-600 dark:hover:border-blue-400 bg-blue-50/40 hover:bg-blue-50/80 dark:bg-blue-950/20 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add Another Teaching Assignment</span>
+          </button>
         </div>
 
-        {/* Section C: Access Permissions (Prompt Item 11) */}
-        <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-4">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-400">
-            Section C: Faculty Assignment Permissions
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Attendance Sheet Access</p>
-                <p className="text-[11px] text-slate-500">Allow faculty to record & sync student attendance</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={attendanceAccess}
-                onChange={(e) => setAttendanceAccess(e.target.checked)}
-                className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Marks & Bit-Wise Access</p>
-                <p className="text-[11px] text-slate-500">Allow faculty to input IA & Bit 1-5 marks</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={marksAccess}
-                onChange={(e) => setMarksAccess(e.target.checked)}
-                className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section D: Select Authorization Authority (Prompt Item 1) */}
+        {/* Section C: Select Authorization Authority */}
         <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-indigo-600" />
-              <span>Section D: Select Authorization Authority</span>
+              <span>SECTION C: SELECT AUTHORIZATION AUTHORITY</span>
             </h2>
             <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full">
               Mandatory Step
@@ -448,7 +637,7 @@ export const HodCreateFacultyPage: React.FC = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/25 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/25 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer"
           >
             {submitting ? (
               <>
@@ -478,7 +667,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                 Faculty Account Created!
               </h3>
               <p className="text-xs text-slate-500">
-                Dispatched to <strong className="text-indigo-600">{successModalData.authority}</strong> for approval.
+                {successModalData.assignmentsCount} teaching {successModalData.assignmentsCount === 1 ? 'assignment' : 'assignments'} submitted and dispatched to <strong className="text-indigo-600">{successModalData.authority}</strong> for approval.
               </p>
             </div>
 
@@ -521,7 +710,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                   setSuccessModalData(null);
                   navigate('/hod/faculty');
                 }}
-                className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-colors"
+                className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-colors cursor-pointer"
               >
                 Go to Faculty List
               </button>

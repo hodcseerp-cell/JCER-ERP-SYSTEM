@@ -202,9 +202,26 @@ export interface HodSheetMatrixItem {
   section: string;
   attendanceAccess: boolean;
   marksAccess: boolean;
+  googleSheetsAccess?: boolean;
   status: string;
   spreadsheetUrl: string;
   lastSyncedAt: string;
+}
+
+export interface TeachingAssignmentInput {
+  semester: number | string;
+  subjectName: string;
+  subjectCode: string;
+  academicYear?: string;
+  section?: string;
+  permissions?: {
+    attendance: boolean;
+    marks: boolean;
+    googleSheets: boolean;
+  };
+  attendanceAccess?: boolean;
+  marksAccess?: boolean;
+  googleSheetsAccess?: boolean;
 }
 
 export const hodService = {
@@ -264,12 +281,16 @@ export const hodService = {
     phone?: string;
     designation: string;
     joiningDate?: string;
-    subjectId: string;
-    semester: number;
-    section: string;
+    teachingAssignments?: TeachingAssignmentInput[];
+    subjectName?: string;
+    subjectCode?: string;
+    subjectId?: string;
+    semester?: number;
+    section?: string;
     academicYear?: string;
     attendanceAccess?: boolean;
     marksAccess?: boolean;
+    googleSheetsAccess?: boolean;
     authority: 'DEAN' | 'PRINCIPAL';
   }): Promise<any> => {
     const res = await API.post('/hod/faculty', data);
@@ -286,7 +307,7 @@ export const hodService = {
     return res.data;
   },
 
-  toggleFacultyAccess: async (id: string, data: { attendanceAccess?: boolean; marksAccess?: boolean }): Promise<any> => {
+  toggleFacultyAccess: async (id: string, data: { attendanceAccess?: boolean; marksAccess?: boolean; googleSheetsAccess?: boolean }): Promise<any> => {
     const res = await API.patch(`/hod/faculty/${id}/access`, data);
     return res.data;
   },
@@ -365,7 +386,7 @@ export const hodService = {
     return res.data.data;
   },
 
-  updateSheetAccess: async (assignmentId: string, data: { attendanceAccess?: boolean; marksAccess?: boolean }): Promise<any> => {
+  updateSheetAccess: async (assignmentId: string, data: { attendanceAccess?: boolean; marksAccess?: boolean; googleSheetsAccess?: boolean }): Promise<any> => {
     const res = await API.patch(`/hod/sheets/access/${assignmentId}`, data);
     return res.data;
   },

@@ -145,7 +145,7 @@ export const FacultyAssignmentsPage: React.FC = () => {
             <span>Academic Faculty Teaching Assignments</span>
           </h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Mapping of teaching faculty to specific department subjects, semester terms, class sections, and academic sessions.
+            Mapping of teaching faculty to specific department subjects, semester terms, and academic sessions.
           </p>
         </div>
 
@@ -158,7 +158,6 @@ export const FacultyAssignmentsPage: React.FC = () => {
                 <th className="py-3 px-6 font-semibold">Subject Code</th>
                 <th className="py-3 px-6 font-semibold">Teaching Subject</th>
                 <th className="py-3 px-6 font-semibold text-center">Semester</th>
-                <th className="py-3 px-6 font-semibold">Section</th>
                 <th className="py-3 px-6 font-semibold">Academic Year</th>
                 <th className="py-3 px-6 font-semibold text-center">Status</th>
               </tr>
@@ -172,7 +171,6 @@ export const FacultyAssignmentsPage: React.FC = () => {
                     <td className="py-4 px-6"><Skeleton className="w-16 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-36 h-4" /></td>
                     <td className="py-4 px-6 text-center"><Skeleton className="w-8 h-4 mx-auto" /></td>
-                    <td className="py-4 px-6"><Skeleton className="w-20 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-16 h-4" /></td>
                     <td className="py-4 px-6 text-center"><Skeleton className="w-14 h-4 mx-auto" /></td>
                   </tr>
@@ -209,9 +207,6 @@ export const FacultyAssignmentsPage: React.FC = () => {
                     <td className="py-4 px-6 text-center font-bold text-neutral-700 dark:text-neutral-300">
                       Sem {item.semester}
                     </td>
-                    <td className="py-4 px-6 font-semibold text-neutral-800 dark:text-neutral-200">
-                      {item.section}
-                    </td>
                     <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400 font-medium">
                       {item.academicYear}
                     </td>
@@ -230,7 +225,7 @@ export const FacultyAssignmentsPage: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-neutral-400">
+                  <td colSpan={7} className="py-10 text-center text-neutral-400">
                     No faculty assignments found for selected filters.
                   </td>
                 </tr>

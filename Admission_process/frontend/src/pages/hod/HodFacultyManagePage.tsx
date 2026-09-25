@@ -267,7 +267,7 @@ export const HodFacultyManagePage: React.FC = () => {
                   Assigned Teaching Workload
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Update subject, semester, or section assignments directly.
+                  Update subject or semester assignments directly.
                 </p>
               </div>
             </div>
@@ -278,7 +278,7 @@ export const HodFacultyManagePage: React.FC = () => {
                   <div key={assign.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
                     {editingAssignmentId === assign.id ? (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                           <div>
                             <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Subject</label>
                             <select
@@ -301,18 +301,6 @@ export const HodFacultyManagePage: React.FC = () => {
                               {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                                 <option key={s} value={s}>Semester {s}</option>
                               ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section</label>
-                            <select
-                              value={selectedSection}
-                              onChange={(e) => setSelectedSection(e.target.value)}
-                              className="w-full p-2 rounded-xl bg-white dark:bg-slate-800 border text-xs font-semibold"
-                            >
-                              <option value="A">Section A</option>
-                              <option value="B">Section B</option>
-                              <option value="C">Section C</option>
                             </select>
                           </div>
                         </div>
@@ -340,7 +328,7 @@ export const HodFacultyManagePage: React.FC = () => {
                             {assign.subject?.name || 'Assigned Subject'}
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            Code: {assign.subject?.code} • Sem {assign.semester} • Section {assign.section}
+                            Code: {assign.subject?.code} • Sem {assign.semester}
                           </p>
                         </div>
                         <button
@@ -348,7 +336,7 @@ export const HodFacultyManagePage: React.FC = () => {
                             setEditingAssignmentId(assign.id);
                             setSelectedSubjectId(assign.subjectId);
                             setSelectedSemester(String(assign.semester));
-                            setSelectedSection(assign.section);
+                            setSelectedSection(assign.section || 'A');
                           }}
                           className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs"
                         >
@@ -380,7 +368,7 @@ export const HodFacultyManagePage: React.FC = () => {
                 <div key={assign.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                      {assign.subject?.name} (Sem {assign.semester} • {assign.section})
+                      {assign.subject?.name} (Sem {assign.semester})
                     </h4>
                     <p className="text-[11px] text-slate-400">Assignment ID: {assign.id.substring(0, 8)}</p>
                   </div>

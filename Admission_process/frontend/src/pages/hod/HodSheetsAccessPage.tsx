@@ -33,12 +33,19 @@ export const HodSheetsAccessPage: React.FC = () => {
     }
   };
 
-  const handleToggle = async (assignmentId: string, currentAtt: boolean, currentMarks: boolean, field: 'attn' | 'marks') => {
+  const handleToggle = async (
+    assignmentId: string,
+    currentAtt: boolean,
+    currentMarks: boolean,
+    currentSheets: boolean,
+    field: 'attn' | 'marks' | 'sheets'
+  ) => {
     setUpdatingId(assignmentId);
     try {
       await hodService.updateSheetAccess(assignmentId, {
         attendanceAccess: field === 'attn' ? !currentAtt : currentAtt,
         marksAccess: field === 'marks' ? !currentMarks : currentMarks,
+        googleSheetsAccess: field === 'sheets' ? !currentSheets : currentSheets,
       });
       fetchMatrix();
     } catch (err) {
@@ -96,9 +103,10 @@ export const HodSheetsAccessPage: React.FC = () => {
               <tr>
                 <th className="py-3.5 px-4">Faculty Member</th>
                 <th className="py-3.5 px-4">Subject</th>
-                <th className="py-3.5 px-4">Cohort</th>
+                <th className="py-3.5 px-4">Semester</th>
                 <th className="py-3.5 px-4">Attendance Sheet Access</th>
                 <th className="py-3.5 px-4">Marks Sheet Access</th>
+                <th className="py-3.5 px-4">Google Sheets Access</th>
                 <th className="py-3.5 px-4">Google Sheet Link</th>
                 <th className="py-3.5 px-4">Last Sync</th>
               </tr>
@@ -106,7 +114,7 @@ export const HodSheetsAccessPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
                     <p className="mt-2 text-xs font-bold">Loading sheet access matrix...</p>
                   </td>
@@ -125,13 +133,13 @@ export const HodSheetsAccessPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">
-                      Sem {row.semester} • {row.section}
+                      Sem {row.semester}
                     </td>
 
                     {/* Attendance Access Live Toggle */}
                     <td className="py-3.5 px-4">
                       <button
-                        onClick={() => handleToggle(row.assignmentId, row.attendanceAccess, row.marksAccess, 'attn')}
+                        onClick={() => handleToggle(row.assignmentId, row.attendanceAccess, row.marksAccess, row.googleSheetsAccess !== false, 'attn')}
                         disabled={updatingId === row.assignmentId}
                         className={`px-3 py-1 rounded-full text-[10px] font-black tracking-wide transition-all ${
                           row.attendanceAccess
@@ -146,7 +154,7 @@ export const HodSheetsAccessPage: React.FC = () => {
                     {/* Marks Access Live Toggle */}
                     <td className="py-3.5 px-4">
                       <button
-                        onClick={() => handleToggle(row.assignmentId, row.attendanceAccess, row.marksAccess, 'marks')}
+                        onClick={() => handleToggle(row.assignmentId, row.attendanceAccess, row.marksAccess, row.googleSheetsAccess !== false, 'marks')}
                         disabled={updatingId === row.assignmentId}
                         className={`px-3 py-1 rounded-full text-[10px] font-black tracking-wide transition-all ${
                           row.marksAccess
@@ -158,16 +166,35 @@ export const HodSheetsAccessPage: React.FC = () => {
                       </button>
                     </td>
 
+                    {/* Google Sheets Access Live Toggle */}
                     <td className="py-3.5 px-4">
-                      <a
-                        href={row.spreadsheetUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:underline"
+                      <button
+                        onClick={() => handleToggle(row.assignmentId, row.attendanceAccess, row.marksAccess, row.googleSheetsAccess !== false, 'sheets')}
+                        disabled={updatingId === row.assignmentId}
+                        className={`px-3 py-1 rounded-full text-[10px] font-black tracking-wide transition-all ${
+                          row.googleSheetsAccess !== false
+                            ? 'bg-purple-100 text-purple-800 hover:bg-purple-200'
+                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                        }`}
                       >
-                        <span>Open Sheet</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                        {row.googleSheetsAccess !== false ? 'ENABLED' : 'DISABLED'}
+                      </button>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {row.googleSheetsAccess !== false ? (
+                        <a
+                          href={row.spreadsheetUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:underline"
+                        >
+                          <span>Open Sheet</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-rose-500 italic">Access Revoked</span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-500 font-medium">
@@ -177,7 +204,7 @@ export const HodSheetsAccessPage: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     No sheet assignments recorded.
                   </td>
                 </tr>
