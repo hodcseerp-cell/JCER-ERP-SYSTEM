@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Search,
   ShieldCheck,
@@ -49,10 +49,6 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [actionProcessing, setActionProcessing] = useState<boolean>(false);
 
-  // Quick View Details Modal
-  const [viewDetailModal, setViewDetailModal] = useState<FacultyAuthDetailResponse | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
-
   const fetchDependencies = async () => {
     try {
       const [depts, yrs] = await Promise.all([
@@ -101,18 +97,6 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
     fetchRequests();
   };
 
-  const handleOpenDetailModal = async (id: string) => {
-    try {
-      setLoadingDetail(true);
-      const detail = await principalService.getFacultyAuthorizationById(id);
-      setViewDetailModal(detail);
-    } catch (err) {
-      toast.error('Unable to fetch faculty request details');
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
   const handleApproveConfirm = async () => {
     if (!approveModal) return;
     try {
@@ -120,9 +104,6 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
       const res = await principalService.approveFacultyAuthorization(approveModal.id);
       toast.success(res?.message || 'Faculty approved successfully. Faculty account is now active.');
       setApproveModal(null);
-      if (viewDetailModal?.id === approveModal.id) {
-        setViewDetailModal(null);
-      }
       window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequests();
     } catch (err: any) {
@@ -145,9 +126,6 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
       toast.success(res?.message || 'Faculty authorization request rejected.');
       setRejectModal(null);
       setRejectionReason('');
-      if (viewDetailModal?.id === rejectModal.id) {
-        setViewDetailModal(null);
-      }
       window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
       fetchRequests();
     } catch (err: any) {
@@ -393,8 +371,11 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                     >
                       {/* Candidate Name & Info */}
                       <td className="py-4 px-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-9 h-9 rounded-full bg-orange-500/10 text-orange-700 dark:text-orange-300 font-bold flex items-center justify-center text-xs overflow-hidden border border-orange-200/50 dark:border-orange-800/40">
+                        <Link
+                          to={`/principal/faculty/authorizations/${reqItem.id}`}
+                          className="flex items-center space-x-3 group cursor-pointer"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-orange-500/10 text-orange-700 dark:text-orange-300 font-bold flex items-center justify-center text-xs overflow-hidden border border-orange-200/50 dark:border-orange-800/40 group-hover:scale-105 transition-transform shrink-0">
                             {reqItem.profileImage ? (
                               <img
                                 src={reqItem.profileImage}
@@ -406,7 +387,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                             )}
                           </div>
                           <div>
-                            <span className="font-extrabold text-neutral-900 dark:text-white block">
+                            <span className="font-extrabold text-neutral-900 dark:text-white block group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
                               {reqItem.facultyName}
                             </span>
                             <span className="text-[10px] text-neutral-400 font-medium">
@@ -418,7 +399,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                               </span>
                             )}
                           </div>
-                        </div>
+                        </Link>
                       </td>
 
                       {/* Department */}
@@ -492,7 +473,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                       <td className="py-4 px-6 text-right">
                         <div className="inline-flex items-center space-x-1.5">
                           <button
-                            onClick={() => handleOpenDetailModal(reqItem.id)}
+                            onClick={() => navigate(`/principal/faculty/authorizations/${reqItem.id}`)}
                             className="px-2.5 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -546,263 +527,6 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           </table>
         </div>
       </div>
-
-      {/* ── DETAILS MODAL ── */}
-      {viewDetailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-2xl bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center font-bold">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-neutral-900 dark:text-white">
-                    Faculty Candidate Details
-                  </h3>
-                  <p className="text-xs text-neutral-400">
-                    Comprehensive credentials & teaching assignment breakdown
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setViewDetailModal(null)}
-                className="w-8 h-8 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-              {/* Profile Card */}
-              <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-700/60 flex items-center justify-between">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300 font-extrabold flex items-center justify-center text-base overflow-hidden border border-orange-300/40">
-                    {viewDetailModal.faculty?.profileImage ? (
-                      <img
-                        src={viewDetailModal.faculty.profileImage}
-                        alt={viewDetailModal.facultyName}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      viewDetailModal.facultyName?.charAt(0) || 'F'
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-neutral-900 dark:text-white text-sm">
-                      {viewDetailModal.facultyName}
-                    </h4>
-                    <span className="text-xs text-neutral-400 font-medium">{viewDetailModal.email}</span>
-                    {viewDetailModal.phone && (
-                      <span className="text-xs text-neutral-400 font-medium block">
-                        Phone: {viewDetailModal.phone}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-right space-y-1">
-                  <span
-                    className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                      viewDetailModal.status === 'PENDING'
-                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                        : viewDetailModal.status === 'APPROVED'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                    }`}
-                  >
-                    {viewDetailModal.status}
-                  </span>
-                  <span className="text-[10px] text-neutral-400 font-semibold block">
-                    Authority: {viewDetailModal.authority}
-                  </span>
-                </div>
-              </div>
-
-              {/* Department & Academic Info */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800">
-                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Department</span>
-                  <span className="text-xs font-extrabold text-neutral-900 dark:text-white mt-0.5 block">
-                    {viewDetailModal.department?.name || viewDetailModal.departmentName} ({viewDetailModal.departmentCode || viewDetailModal.department?.code})
-                  </span>
-                </div>
-                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800">
-                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Designation</span>
-                  <span className="text-xs font-extrabold text-neutral-900 dark:text-white mt-0.5 block">
-                    {viewDetailModal.designation || 'Assistant Professor'}
-                  </span>
-                </div>
-                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800">
-                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Academic Year</span>
-                  <span className="text-xs font-extrabold text-neutral-900 dark:text-white mt-0.5 block">
-                    {viewDetailModal.academicYear}
-                  </span>
-                </div>
-              </div>
-
-              {/* Submitting HOD & Timeline */}
-              <div className="p-3.5 rounded-xl bg-neutral-50/80 dark:bg-neutral-800/30 border border-neutral-100 dark:border-neutral-800 text-xs space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-500 font-medium">Submitted by:</span>
-                  <span className="font-bold text-neutral-900 dark:text-white">
-                    {viewDetailModal.createdByHOD
-                      ? `${viewDetailModal.createdByHOD.firstName} ${viewDetailModal.createdByHOD.lastName}`
-                      : viewDetailModal.createdBy || 'HOD'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-500 font-medium">Submission Date:</span>
-                  <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-                    {new Date(viewDetailModal.createdDate).toLocaleString()}
-                  </span>
-                </div>
-                {viewDetailModal.decidedBy && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-500 font-medium">Decided by:</span>
-                    <span className="font-bold text-neutral-900 dark:text-white">
-                      {typeof viewDetailModal.decidedBy === 'string'
-                        ? viewDetailModal.decidedBy
-                        : `${viewDetailModal.decidedBy?.firstName || ''} ${viewDetailModal.decidedBy?.lastName || ''}`}
-                    </span>
-                  </div>
-                )}
-                {viewDetailModal.decidedAt && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-500 font-medium">Decision Date:</span>
-                    <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-                      {new Date(viewDetailModal.decidedAt).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {viewDetailModal.rejectionReason && (
-                  <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-rose-300">
-                    <span className="font-bold block">Rejection Reason:</span>
-                    <span>{viewDetailModal.rejectionReason}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Teaching Assignments Table */}
-              <div className="space-y-2">
-                <h5 className="text-xs font-black uppercase tracking-wider text-neutral-400">
-                  Assigned Curriculum Offerings ({viewDetailModal.assignments?.length || 1})
-                </h5>
-                <div className="border border-neutral-100 dark:border-neutral-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-[10px] uppercase font-bold text-neutral-400 border-b border-neutral-100 dark:border-neutral-800">
-                        <th className="py-2.5 px-4 font-semibold">Subject</th>
-                        <th className="py-2.5 px-4 font-semibold text-center">Semester</th>
-                        <th className="py-2.5 px-4 font-semibold text-center">Type</th>
-                        <th className="py-2.5 px-4 font-semibold text-center">Permissions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                      {viewDetailModal.assignments && viewDetailModal.assignments.length > 0 ? (
-                        viewDetailModal.assignments.map((item, idx) => (
-                          <tr key={item.id || idx}>
-                            <td className="py-3 px-4">
-                              <span className="font-bold text-neutral-900 dark:text-white block">
-                                {item.subjectName}
-                              </span>
-                              <span className="text-[10px] text-neutral-400 font-semibold">{item.subjectCode}</span>
-                            </td>
-                            <td className="py-3 px-4 text-center font-semibold text-neutral-700 dark:text-neutral-300">
-                              Sem {item.semester}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className="px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-[10px] font-bold">
-                                {item.subjectType || 'Theory'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <div className="flex items-center justify-center space-x-1 text-[10px]">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded font-bold ${
-                                    item.attendanceAccess
-                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                                      : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'
-                                  }`}
-                                >
-                                  Att
-                                </span>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded font-bold ${
-                                    item.marksAccess
-                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                                      : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'
-                                  }`}
-                                >
-                                  Marks
-                                </span>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded font-bold ${
-                                    item.googleSheetsAccess
-                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                                      : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'
-                                  }`}
-                                >
-                                  Sheets
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="py-3 px-4 font-bold text-neutral-900 dark:text-white">
-                            {viewDetailModal.subjectName} ({viewDetailModal.subjectCode})
-                          </td>
-                          <td className="py-3 px-4 text-center font-semibold">
-                            Sem {viewDetailModal.semester}
-                          </td>
-                          <td className="py-3 px-4 text-center">Theory</td>
-                          <td className="py-3 px-4 text-center text-neutral-400">Full Standard Access</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-5 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/50 dark:bg-neutral-800/30">
-              <button
-                onClick={() => setViewDetailModal(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"
-              >
-                Close
-              </button>
-
-              {viewDetailModal.status === 'PENDING' && viewDetailModal.authority === 'PRINCIPAL' && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => {
-                      setRejectModal(viewDetailModal);
-                      setRejectionReason('');
-                    }}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 transition-all flex items-center space-x-1"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>Reject</span>
-                  </button>
-                  <button
-                    onClick={() => setApproveModal(viewDetailModal)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-xs flex items-center space-x-1"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Approve & Activate</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── APPROVE CONFIRMATION MODAL ── */}
       {approveModal && (

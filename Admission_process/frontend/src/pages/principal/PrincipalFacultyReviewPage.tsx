@@ -356,6 +356,11 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
                       </td>
                       <td className="py-4 px-6 text-center font-bold text-neutral-800 dark:text-neutral-200">
                         <span>Sem {assignment.semester}</span>
+                        {assignment.section && (
+                          <span className="text-[10px] text-neutral-400 font-normal block">
+                            Section {assignment.section}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-center">
                         <span className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-[10px] font-bold text-neutral-700 dark:text-neutral-300">

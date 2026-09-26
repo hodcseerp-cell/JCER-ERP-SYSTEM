@@ -9,7 +9,7 @@ class Subject extends Model {
   public semester!: number;
   public departmentId!: string | null;
   public credits!: number;
-  public type!: 'Theory' | 'Practical' | 'Project' | 'Elective' | 'Seminar';
+  public type!: 'IPCC' | 'CC' | string;
   public status!: 'ACTIVE' | 'INACTIVE';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -50,9 +50,9 @@ Subject.init(
       defaultValue: 4,
     },
     type: {
-      type: DataTypes.ENUM('Theory', 'Practical', 'Project', 'Elective', 'Seminar'),
+      type: DataTypes.STRING(50),
       allowNull: false,
-      defaultValue: 'Theory',
+      defaultValue: 'IPCC',
     },
     status: {
       type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),

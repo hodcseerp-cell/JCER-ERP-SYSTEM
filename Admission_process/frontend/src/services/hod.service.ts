@@ -328,8 +328,8 @@ export const hodService = {
   },
 
   // 4. Subjects
-  getSubjects: async (): Promise<HodSubjectItem[]> => {
-    const res = await API.get('/hod/subjects');
+  getSubjects: async (params?: { semester?: string | number; academicYear?: string; status?: string }): Promise<HodSubjectItem[]> => {
+    const res = await API.get('/hod/subjects', { params });
     return res.data.data;
   },
 
@@ -340,6 +340,11 @@ export const hodService = {
 
   updateSubject: async (id: string, data: any): Promise<any> => {
     const res = await API.put(`/hod/subjects/${id}`, data);
+    return res.data;
+  },
+
+  deleteSubject: async (id: string): Promise<any> => {
+    const res = await API.delete(`/hod/subjects/${id}`);
     return res.data;
   },
 
@@ -380,7 +385,7 @@ export const hodService = {
     return res.data.data;
   },
 
-  // 7. Sheets
+  // 7. Sheets & Google Integration
   getSheetAccessMatrix: async (): Promise<HodSheetMatrixItem[]> => {
     const res = await API.get('/hod/sheets/access');
     return res.data.data;
@@ -392,7 +397,168 @@ export const hodService = {
   },
 
   getSheetSyncHistory: async (): Promise<any[]> => {
-    const res = await API.get('/hod/sheets/sync-history');
+    const res = await API.get('/google-sheets/sync-history');
+    return res.data.data;
+  },
+
+  // Semester-Scoped Google Sheet APIs
+  getSemesterGoogleSheets: async (
+    semester: number | string,
+    academicYear?: string,
+    section?: string
+  ): Promise<{
+    semester: number;
+    academicYear: string;
+    divisions?: Array<{ section: string; divisionName: string; isConnected: boolean; connection: any }>;
+    attendance: any;
+    marks: any;
+    allConnections?: any[];
+  }> => {
+    const res = await API.get(`/hod/semesters/${semester}/google-sheets`, { params: { academicYear, section } });
+    return res.data.data;
+  },
+
+  connectSemesterGoogleSheet: async (
+    semester: number | string,
+    data: {
+      spreadsheetUrl: string;
+      sheetType: 'ATTENDANCE' | 'ACADEMIC_MARKS';
+      academicYear?: string;
+      section?: string;
+    }
+  ): Promise<any> => {
+    const res = await API.post(`/hod/semesters/${semester}/google-sheets/connect`, data);
+    return res.data;
+  },
+
+  getSemesterGoogleSheetTabs: async (
+    semester: number | string,
+    params?: { sheetType?: string; academicYear?: string; section?: string }
+  ): Promise<any> => {
+    const res = await API.get(`/hod/semesters/${semester}/google-sheets/tabs`, { params });
+    return res.data.data;
+  },
+
+  mapGoogleSheetTab: async (connectionId: string, data: { tabId: string; subjectId: string | null }): Promise<any> => {
+    const res = await API.post(`/hod/google-sheets/${connectionId}/map-tab`, data);
+    return res.data;
+  },
+
+  refreshGoogleSheet: async (connectionId: string): Promise<any> => {
+    const res = await API.post(`/hod/google-sheets/${connectionId}/refresh`);
+    return res.data;
+  },
+
+  disconnectGoogleSheet: async (connectionId: string): Promise<any> => {
+    const res = await API.post(`/hod/google-sheets/${connectionId}/disconnect`);
+    return res.data;
+  },
+
+  // Faculty Google Access Matrix & Permissions
+  getFacultyGoogleSheetAccessMatrix: async (params?: {
+    academicYear?: string;
+    semester?: string | number;
+    section?: string;
+    facultyId?: string;
+    subjectId?: string;
+  }): Promise<any[]> => {
+    const res = await API.get('/hod/faculty/google-sheet-access', { params });
+    return res.data.data;
+  },
+
+  grantFacultyGoogleSheetAccess: async (
+    facultyId: string,
+    data: {
+      assignmentId: string;
+      googleEmail?: string;
+      attendanceAccess?: boolean;
+      marksAccess?: boolean;
+      role?: 'writer' | 'reader';
+    }
+  ): Promise<any> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access`, data);
+    return res.data;
+  },
+
+  verifyFacultyGoogleSheetAccess: async (
+    facultyId: string,
+    data?: { accessId?: string; assignmentId?: string }
+  ): Promise<any> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access/verify`, data || {});
+    return res.data;
+  },
+
+  revokeFacultyGoogleSheetAccess: async (
+    facultyId: string,
+    data: { assignmentId: string }
+  ): Promise<any> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access/revoke`, data);
+    return res.data;
+  },
+
+  // Google OAuth Management
+  getGoogleAccountStatus: async (): Promise<{
+    connected: boolean;
+    isConnected: boolean;
+    email: string | null;
+    displayName?: string | null;
+    googleAccountId?: string | null;
+    profilePicture?: string | null;
+    status?: string;
+    connectedAt?: string | null;
+    lastConnectedAt?: string | null;
+    lastUsedAt?: string | null;
+  }> => {
+    const res = await API.get('/google/account');
+    return res.data.data;
+  },
+
+  getGoogleOAuthStatus: async (): Promise<{
+    connected: boolean;
+    isConnected: boolean;
+    email: string | null;
+    displayName?: string | null;
+    googleAccountId?: string | null;
+    profilePicture?: string | null;
+    status?: string;
+    connectedAt?: string | null;
+    lastConnectedAt?: string | null;
+    lastUsedAt?: string | null;
+  }> => {
+    const res = await API.get('/google/account');
+    return res.data.data;
+  },
+
+  getGoogleOAuthAuthUrl: async (forceSelect: boolean = true): Promise<{ authUrl: string }> => {
+    const res = await API.get('/google/oauth/auth-url', {
+      params: { forceSelect },
+    });
+    return res.data.data;
+  },
+
+  submitGoogleOAuthCallback: async (data: { code: string; state?: string }): Promise<any> => {
+    const res = await API.post('/google/oauth/callback', data);
+    return res.data;
+  },
+
+  disconnectGoogleOAuth: async (): Promise<any> => {
+    const res = await API.post('/google/oauth/disconnect');
+    return res.data;
+  },
+
+  // Synchronization Endpoints
+  syncAttendanceSheet: async (data: { connectionId: string; tabId?: string; tabGid?: string; tabTitle?: string }): Promise<any> => {
+    const res = await API.post('/google-sheets/sync/attendance', data);
+    return res.data;
+  },
+
+  syncMarksSheet: async (data: { connectionId: string; tabId?: string; tabGid?: string; tabTitle?: string; assessmentName?: string }): Promise<any> => {
+    const res = await API.post('/google-sheets/sync/marks', data);
+    return res.data;
+  },
+
+  getFacultyMySheets: async (): Promise<any[]> => {
+    const res = await API.get('/faculty/my-sheets');
     return res.data.data;
   },
 

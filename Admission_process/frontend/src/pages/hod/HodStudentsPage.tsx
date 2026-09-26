@@ -16,12 +16,17 @@ import {
   BookOpen,
   RefreshCw,
   Download,
+  FileSpreadsheet,
+  ChevronDown,
+  Circle,
+  ExternalLink,
 } from 'lucide-react';
 import hodService, { HodStudentItem } from '../../services/hod.service';
+import HodGoogleSheetModal from '../../components/hod/HodGoogleSheetModal';
 
 export const HodStudentsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialSem = searchParams.get('semester') || 'ALL';
+  const initialSem = searchParams.get('semester') || '1';
   const initialSec = searchParams.get('section') || 'ALL';
 
   const [students, setStudents] = useState<HodStudentItem[]>([]);
@@ -34,6 +39,15 @@ export const HodStudentsPage: React.FC = () => {
   const [selectedSection, setSelectedSection] = useState<string>(initialSec);
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
 
+  // Google Sheets Modal & Status State
+  const [googleDropdownOpen, setGoogleDropdownOpen] = useState<boolean>(false);
+  const [googleModalOpen, setGoogleModalOpen] = useState<boolean>(false);
+  const [activeSheetType, setActiveSheetType] = useState<'ATTENDANCE' | 'ACADEMIC_MARKS'>('ATTENDANCE');
+  const [semesterConnections, setSemesterConnections] = useState<{
+    attendanceConnected: boolean;
+    marksConnected: boolean;
+  }>({ attendanceConnected: false, marksConnected: false });
+
   // Pagination
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(12);
@@ -41,8 +55,46 @@ export const HodStudentsPage: React.FC = () => {
   const [totalStudents, setTotalStudents] = useState<number>(0);
 
   useEffect(() => {
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    const oauthCallback = searchParams.get('oauth_callback');
+    if (code && oauthCallback) {
+      hodService
+        .submitGoogleOAuthCallback({ code, state: state || undefined })
+        .then(() => {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('code');
+          newParams.delete('state');
+          newParams.delete('oauth_callback');
+          setSearchParams(newParams, { replace: true });
+          fetchSemesterSheetStatus();
+        })
+        .catch((e) => {
+          console.warn('OAuth callback handling notice:', e);
+        });
+    }
+  }, []);
+
+  useEffect(() => {
     fetchStudents();
+    fetchSemesterSheetStatus();
   }, [page, selectedSemester, selectedSection, selectedStatus]);
+
+  const fetchSemesterSheetStatus = async () => {
+    if (selectedSemester === 'ALL') {
+      setSemesterConnections({ attendanceConnected: false, marksConnected: false });
+      return;
+    }
+    try {
+      const data = await hodService.getSemesterGoogleSheets(selectedSemester);
+      setSemesterConnections({
+        attendanceConnected: Boolean(data?.attendance),
+        marksConnected: Boolean(data?.marks),
+      });
+    } catch (err) {
+      // ignore
+    }
+  };
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -73,13 +125,19 @@ export const HodStudentsPage: React.FC = () => {
     fetchStudents();
   };
 
+  const openGoogleModal = (type: 'ATTENDANCE' | 'ACADEMIC_MARKS') => {
+    setActiveSheetType(type);
+    setGoogleDropdownOpen(false);
+    setGoogleModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       
-      {/* ── Page Header (Admin Style) ────────────────────────────────────────── */}
+      {/* ── Page Header (Admin / HOD Style) ──────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          {/* Total Students Counter Card (matching Admin screenshot 2) */}
+          {/* Total Students Counter Card */}
           <div className="bg-neutral-900 text-white rounded-2xl px-5 py-3 shadow-sm border border-neutral-800">
             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
               Total Department Students
@@ -91,6 +149,59 @@ export const HodStudentsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          
+          {/* Google Sheets Action Dropdown (Matching Screenshot Pill) */}
+          <div className="relative">
+            <button
+              onClick={() => setGoogleDropdownOpen(!googleDropdownOpen)}
+              className="px-4 py-2 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+            >
+              <span className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
+                G
+              </span>
+              <span>Google Sheets</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+
+            {googleDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-neutral-200 dark:border-neutral-800 py-2 z-30 animate-fadeIn">
+                <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-neutral-400 border-b border-neutral-100 dark:border-neutral-800">
+                  Semester {selectedSemester !== 'ALL' ? selectedSemester : '1'} Sheets
+                </div>
+
+                <button
+                  onClick={() => openGoogleModal('ATTENDANCE')}
+                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Import Attendance</span>
+                  </div>
+                  {semesterConnections.attendanceConnected ? (
+                    <span className="text-[10px] font-black text-emerald-600">✓ Connected</span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-400">○ Not Connected</span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => openGoogleModal('ACADEMIC_MARKS')}
+                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                    <span>Import Academic Marks</span>
+                  </div>
+                  {semesterConnections.marksConnected ? (
+                    <span className="text-[10px] font-black text-emerald-600">✓ Connected</span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-400">○ Not Connected</span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
           <Link
             to="/hod/students/semesters"
             className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
@@ -106,7 +217,10 @@ export const HodStudentsPage: React.FC = () => {
             <span>Section Allocations</span>
           </Link>
           <button
-            onClick={() => fetchStudents()}
+            onClick={() => {
+              fetchStudents();
+              fetchSemesterSheetStatus();
+            }}
             className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-neutral-500 ${loading ? 'animate-spin' : ''}`} />
@@ -117,42 +231,70 @@ export const HodStudentsPage: React.FC = () => {
 
       {/* ── Quick Filter Pills (Matching Admin Screenshot 2) ────────────────── */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
-        {/* Semester quick pills */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500 min-w-36">
-            Quick Filter By Semester:
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              onClick={() => {
-                setSelectedSemester('ALL');
-                setPage(1);
-              }}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                selectedSemester === 'ALL'
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
-                  : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
-              }`}
-            >
-              ALL SEM
-            </button>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+        {/* Semester quick pills with live sheet connection indicators */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500 min-w-36">
+              Quick Filter By Semester:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
-                key={sem}
                 onClick={() => {
-                  setSelectedSemester(String(sem));
+                  setSelectedSemester('ALL');
                   setPage(1);
                 }}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
-                  selectedSemester === String(sem)
-                    ? 'bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white font-bold shadow-sm border border-[#1e3a8a]/40'
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  selectedSemester === 'ALL'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
                 }`}
               >
-                Sem {sem}
+                ALL SEM
               </button>
-            ))}
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                <button
+                  key={sem}
+                  onClick={() => {
+                    setSelectedSemester(String(sem));
+                    setPage(1);
+                  }}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+                    selectedSemester === String(sem)
+                      ? 'bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white font-bold shadow-sm border border-[#1e3a8a]/40'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
+                  }`}
+                >
+                  Sem {sem}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Connection Status Indicator for selected semester */}
+          {selectedSemester !== 'ALL' && (
+            <div className="flex items-center gap-3 text-[11px] font-bold self-start sm:self-auto bg-slate-50 dark:bg-neutral-800 px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700">
+              <span className="text-neutral-400 uppercase text-[9px]">Sem {selectedSemester} Connections:</span>
+              <button
+                onClick={() => openGoogleModal('ATTENDANCE')}
+                className={`flex items-center gap-1 hover:underline ${
+                  semesterConnections.attendanceConnected ? 'text-emerald-600' : 'text-neutral-400'
+                }`}
+              >
+                <span>Attendance:</span>
+                <span>{semesterConnections.attendanceConnected ? '✓ Connected' : '○ Not Connected'}</span>
+              </button>
+              <span className="text-neutral-300">|</span>
+              <button
+                onClick={() => openGoogleModal('ACADEMIC_MARKS')}
+                className={`flex items-center gap-1 hover:underline ${
+                  semesterConnections.marksConnected ? 'text-emerald-600' : 'text-neutral-400'
+                }`}
+              >
+                <span>Marks:</span>
+                <span>{semesterConnections.marksConnected ? '✓ Connected' : '○ Not Connected'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Section quick pills */}
@@ -349,6 +491,18 @@ export const HodStudentsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Google Sheets Modal ──────────────────────────────────────────────── */}
+      <HodGoogleSheetModal
+        isOpen={googleModalOpen}
+        onClose={() => setGoogleModalOpen(false)}
+        semester={selectedSemester !== 'ALL' ? selectedSemester : 1}
+        sheetType={activeSheetType}
+        academicYear="2026-27"
+        onSuccess={() => {
+          fetchSemesterSheetStatus();
+        }}
+      />
     </div>
   );
 };

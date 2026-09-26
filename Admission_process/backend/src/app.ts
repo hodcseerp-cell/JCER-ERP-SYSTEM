@@ -26,6 +26,13 @@ import provisionalRoutes from './routes/provisional.routes';
 import promotionRoutes from './routes/promotion.routes';
 import deanRoutes from './routes/dean.routes';
 import hodRoutes from './routes/hod.routes';
+import googleRoutes from './routes/google.routes';
+import {
+  syncGoogleAttendance,
+  syncGoogleMarks,
+  getGoogleSheetSyncHistory,
+  getFacultyMySheets,
+} from './controllers/googleSheets.controller';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -290,6 +297,17 @@ v1Router.use('/dean', deanRoutes);
 
 // HOD Dashboard routes
 v1Router.use('/hod', hodRoutes);
+
+// Google OAuth & Integration routes
+v1Router.use('/google', googleRoutes);
+
+// Google Sheets synchronization & history endpoints
+v1Router.post('/google-sheets/sync/attendance', (authMiddleware as any), (syncGoogleAttendance as any));
+v1Router.post('/google-sheets/sync/marks', (authMiddleware as any), (syncGoogleMarks as any));
+v1Router.get('/google-sheets/sync-history', (authMiddleware as any), (getGoogleSheetSyncHistory as any));
+
+// Faculty Google Sheets access endpoint
+v1Router.get('/faculty/my-sheets', (authMiddleware as any), (getFacultyMySheets as any));
 
 // Mount the v1 router to both versioned and legacy base paths
 app.use('/api', v1Router);

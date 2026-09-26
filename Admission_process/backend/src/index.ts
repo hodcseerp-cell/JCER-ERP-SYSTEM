@@ -1,7 +1,13 @@
-// Trigger watch reload 
 import app from './app';
 import sequelize, { logDatabaseConfiguration } from './config/database';
 import { initRedis } from './config/redis';
+
+// Import Google Sheets Integration Models to ensure Sequelize registers them
+import './models/GoogleSheetConnection';
+import './models/GoogleSheetTab';
+import './models/FacultyGoogleSheetAccess';
+import './models/GoogleSheetSyncLog';
+import './models/GoogleOAuthToken';
 
 const PORT = process.env.PORT || 5000;
 
@@ -321,6 +327,25 @@ async function startServer() {
       console.warn('Pre-cast migration for admissions correction & rejection workflow columns skipped:', e.message);
     }
 
+    // Pre-cast: ensure subjects type column supports IPCC and CC
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'subjects' AND column_name = 'type'
+          ) THEN
+            ALTER TABLE "subjects" ALTER COLUMN "type" TYPE VARCHAR(50) USING "type"::VARCHAR(50);
+            ALTER TABLE "subjects" ALTER COLUMN "type" SET DEFAULT 'IPCC';
+          END IF;
+        END
+        $$;
+      `);
+    } catch (e: any) {
+      console.warn('Pre-cast migration for subjects type column skipped:', e.message);
+    }
+
     // Pre-cast: ensure users.lastActivityAt column and index exist
     try {
       await sequelize.query(`
@@ -585,17 +610,49 @@ async function startServer() {
       console.warn('Pre-cast migration for schema extensions notice:', hodMigrationErr.message);
     }
 
+    // Pre-cast: Google Sheets & OAuth schema migrations (ensure userId, googleAccountEmail, profile cols and section exist before indexing)
+    try {
+      await sequelize.query(`
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "userId" UUID;
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "googleAccountEmail" VARCHAR(255);
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "googleAccountId" VARCHAR(255);
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "displayName" VARCHAR(255);
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "profilePicture" TEXT;
+        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "lastUsedAt" TIMESTAMP WITH TIME ZONE;
+        ALTER TABLE IF EXISTS "google_sheet_connections" ADD COLUMN IF NOT EXISTS "section" VARCHAR(20) DEFAULT 'A';
+        ALTER TABLE IF EXISTS "faculty_google_sheet_access" ADD COLUMN IF NOT EXISTS "section" VARCHAR(20) DEFAULT 'A';
+        ALTER TABLE IF EXISTS "google_sheet_tabs" ADD COLUMN IF NOT EXISTS "googleSpreadsheetId" VARCHAR(255);
+        DROP INDEX IF EXISTS "google_sheet_connections_department_id_academic_year_semester_s";
+        DROP INDEX IF EXISTS "google_sheet_connections_department_id_academic_year_semester_section_sheet_type";
+        UPDATE "google_oauth_tokens" SET "googleAccountEmail" = "userEmail" WHERE "googleAccountEmail" IS NULL AND "userEmail" IS NOT NULL;
+        UPDATE "google_oauth_tokens" SET "userId" = "connectedBy" WHERE "userId" IS NULL AND "connectedBy" IS NOT NULL;
+        UPDATE "google_sheet_tabs" t SET "googleSpreadsheetId" = c."googleSpreadsheetId" FROM "google_sheet_connections" c WHERE t."googleSheetConnectionId" = c."id" AND t."googleSpreadsheetId" IS NULL;
+        DELETE FROM "google_sheet_tabs" WHERE "sheetTitle" IN ('401', '402', '403', '405', '407', '408', 'FINAL MARKS', 'Form responses 1');
+      `);
+      console.log('✓ Google Sheets & OAuth schema tables verified.');
+    } catch (oauthMigrationErr: any) {
+      console.warn('Pre-cast migration for google tables skipped:', oauthMigrationErr.message);
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log('Syncing database schema (development alter)...');
       try {
         await sequelize.sync({ alter: true });
       } catch (alterErr: any) {
         console.warn('Sync alter notice (falling back to standard sync):', alterErr.message);
-        await sequelize.sync();
+        try {
+          await sequelize.sync();
+        } catch (stdSyncErr: any) {
+          console.warn('Standard sync notice:', stdSyncErr.message);
+        }
       }
     } else {
       console.log('✓ Production mode: Ensuring database schema & tables exist...');
-      await sequelize.sync();
+      try {
+        await sequelize.sync();
+      } catch (prodSyncErr: any) {
+        console.warn('Production sequelize.sync notice (continuing):', prodSyncErr.message);
+      }
 
       // Auto-seed initial Admin, Principal, Departments, and Rejection Reasons if database is fresh
       try {

@@ -16,8 +16,15 @@ import AdminLayout from './components/layout/AdminLayout';
 import PrincipalLayout from './components/layout/PrincipalLayout';
 import DeanLayout from './components/layout/DeanLayout';
 import HodLayout from './components/layout/HodLayout';
+import FacultyLayout from './components/layout/FacultyLayout';
 import TopLoadingBar from './components/common/TopLoadingBar';
 import PwaManager from './components/PwaManager';
+
+// ─── Faculty Pages ────────────────────────────────────────────────────────────
+import FacultyOverviewPage from './pages/faculty/FacultyOverviewPage';
+import FacultyAttendancePage from './pages/faculty/FacultyAttendancePage';
+import FacultyBitwiseMarksPage from './pages/faculty/FacultyBitwiseMarksPage';
+import FacultyAnalyticsPage from './pages/faculty/FacultyAnalyticsPage';
 
 // ─── Common Pages ─────────────────────────────────────────────────────────────
 import LoginPage from './pages/common/LoginPage';
@@ -146,6 +153,7 @@ const RoleBasedRedirect: React.FC = () => {
   if (role === 'PRINCIPAL') return <Navigate to="/principal/dashboard" replace />;
   if (role === 'DEAN') return <Navigate to="/dean/dashboard" replace />;
   if (role === 'HOD') return <Navigate to="/hod/dashboard" replace />;
+  if (role === 'FACULTY' || role === 'TEACHER') return <Navigate to="/faculty/dashboard" replace />;
 
   return <Navigate to="/module-unavailable" replace />;
 };
@@ -399,6 +407,16 @@ export const App: React.FC = () => (
               <Route path="reports" element={<HodReportsPage />} />
               <Route path="settings" element={<HodSettingsPage />} />
               <Route path="profile" element={<HodSettingsPage />} />
+            </Route>
+
+            {/* ── Faculty Portal ── */}
+            <Route path="faculty" element={<FacultyLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<FacultyOverviewPage />} />
+              <Route path="overview" element={<FacultyOverviewPage />} />
+              <Route path="attendance" element={<FacultyAttendancePage />} />
+              <Route path="bitwise-marks" element={<FacultyBitwiseMarksPage />} />
+              <Route path="analytics" element={<FacultyAnalyticsPage />} />
             </Route>
           </Route>
 

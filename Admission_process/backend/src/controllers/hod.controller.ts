@@ -19,6 +19,11 @@ import StudentMarks from '../models/StudentMarks';
 import User from '../models/User';
 import AuditLog from '../models/AuditLog';
 import Notification from '../models/Notification';
+import GoogleSheetConnection from '../models/GoogleSheetConnection';
+import GoogleSheetTab from '../models/GoogleSheetTab';
+import FacultyGoogleSheetAccess from '../models/FacultyGoogleSheetAccess';
+import googleOAuthService from '../services/googleOAuth.service';
+import googleSheetsService from '../services/googleSheets.service';
 import logger from '../utils/logger.util';
 
 /**
@@ -825,14 +830,14 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         if (!sName || !sCode) {
           await t.rollback();
           return res.status(400).json({
-            error: `Teaching Assignment ${i + 1}: Subject name and subject code are required.`,
+            error: `Teaching Allocation ${i + 1}: Subject name and subject code are required.`,
           });
         }
 
         if (!sem || isNaN(sem) || sem < 1 || sem > 8) {
           await t.rollback();
           return res.status(400).json({
-            error: `Teaching Assignment ${i + 1}: Valid teaching semester (1-8) is required.`,
+            error: `Teaching Allocation ${i + 1}: Valid teaching semester (1-8) is required.`,
           });
         }
 
@@ -1071,14 +1076,112 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
 
     await t.commit();
 
-    // 7. Audit log
+    // 8. Safely process Google Sheet Drive permissions if enabled
+    const targetGoogleEmail = (req.body.googleEmail || newUser.email || '').trim();
+    const googleAccessResults: any[] = [];
+
+    // Cache granted permissions within this creation request to prevent duplicate Drive API calls
+    const grantedPermissionsMap: Record<string, { permissionId: string | null; status: 'GRANTED' | 'PENDING' | 'FAILED' }> = {};
+
+    try {
+      const tokenInfo = await googleOAuthService.getValidAccessToken(departmentId);
+      for (const asgn of createdAssignmentsList) {
+        if (asgn.googleSheetsAccess || asgn.attendanceAccess || asgn.marksAccess) {
+          const rawSec = (asgn.section || 'A').toString().trim().toUpperCase();
+          const targetSection = rawSec.replace(/^DIVISION\s+/i, '').replace(/^SECTION\s+/i, '').trim();
+
+          const connections = await GoogleSheetConnection.findAll({
+            where: {
+              departmentId,
+              semester: asgn.semester,
+              academicYear: asgn.academicYear || defaultAcademicYear,
+              status: 'ACTIVE',
+              [Op.or]: [
+                { sheetType: 'ACADEMIC_MARKS' },
+                { sheetType: 'ATTENDANCE', section: targetSection },
+                { sheetType: 'ATTENDANCE', section: null },
+              ],
+            },
+          });
+
+          for (const conn of connections) {
+            let permissionId: string | null = null;
+            let driveStatus: 'GRANTED' | 'PENDING' | 'FAILED' = 'PENDING';
+            let failureReason: string | null = null;
+
+            // Check if permission was already granted for this spreadsheet in this batch
+            if (grantedPermissionsMap[conn.id]) {
+              permissionId = grantedPermissionsMap[conn.id].permissionId;
+              driveStatus = grantedPermissionsMap[conn.id].status;
+            } else {
+              // Check if already in DB for this faculty
+              const existingDbAccess = await FacultyGoogleSheetAccess.findOne({
+                where: {
+                  facultyId: newUser.id,
+                  googleSheetConnectionId: conn.id,
+                  permissionId: { [Op.ne]: null },
+                  status: 'GRANTED',
+                },
+              });
+
+              if (existingDbAccess) {
+                permissionId = existingDbAccess.permissionId;
+                driveStatus = 'GRANTED';
+              } else {
+                const driveRes = await googleSheetsService.grantDrivePermission(
+                  conn.googleSpreadsheetId,
+                  targetGoogleEmail,
+                  'writer',
+                  tokenInfo?.token
+                );
+                permissionId = driveRes.permissionId || null;
+                driveStatus = driveRes.status as any;
+                failureReason = driveRes.error || null;
+              }
+
+              grantedPermissionsMap[conn.id] = { permissionId, status: driveStatus };
+            }
+
+            await FacultyGoogleSheetAccess.create({
+              facultyId: newUser.id,
+              facultyAssignmentId: asgn.id,
+              googleSheetConnectionId: conn.id,
+              section: targetSection,
+              googleEmail: targetGoogleEmail,
+              permissionId,
+              accessRole: 'writer',
+              status: driveStatus,
+              invitationSentAt: new Date(),
+              grantedAt: driveStatus === 'GRANTED' ? new Date() : null,
+              lastVerifiedAt: new Date(),
+              grantedBy: req.user?.id || null,
+              failureReason,
+            });
+
+            googleAccessResults.push({
+              assignmentId: asgn.id,
+              section: targetSection,
+              sheetType: conn.sheetType,
+              status: driveStatus,
+              spreadsheetUrl: conn.googleSpreadsheetUrl,
+            });
+          }
+        }
+      }
+    } catch (gErr: any) {
+      logger.warn('Non-fatal error creating Google Sheet access for faculty:', gErr.message);
+    }
+
+    // 9. Audit log
     await logAudit(req, 'HOD_CREATE_FACULTY_REQUEST', {
       facultyUserId: newUser.id,
       email: newUser.email,
+      googleEmail: targetGoogleEmail,
       departmentId,
       authority: chosenAuthority,
       requestId: authRequest.id,
       assignmentsCount: createdAssignmentsList.length,
+      googleAccessCount: googleAccessResults.length,
     });
 
     return res.status(201).json({
@@ -1090,6 +1193,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
           userId: newUser.id,
           name: `${newUser.firstName} ${newUser.lastName}`,
           email: newUser.email,
+          googleEmail: targetGoogleEmail,
           phone: newUser.phone,
           designation: teacher.designation,
           accountStatus: newUser.status,
@@ -1098,6 +1202,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         },
         assignment: createdAssignmentsList[0],
         assignments: createdAssignmentsList,
+        googleAccess: googleAccessResults,
         temporaryCredentials: {
           email: newUser.email,
           temporaryPassword: rawTempPassword,
@@ -1421,13 +1526,23 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
 
 /**
  * GET /api/hod/subjects
+ * Retrieves subjects filtered by HOD department and optional semester / status query parameters
  */
 export const getHodSubjects = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
+    const { semester, status = 'ACTIVE' } = req.query;
+
+    const whereClause: any = { departmentId };
+    if (status && status !== 'ALL') {
+      whereClause.status = status;
+    }
+    if (semester && semester !== 'ALL') {
+      whereClause.semester = Number(semester);
+    }
 
     const subjects = await Subject.findAll({
-      where: { departmentId },
+      where: whereClause,
       order: [['semester', 'ASC'], ['code', 'ASC']],
     });
 
@@ -1472,28 +1587,47 @@ export const getHodSubjects = async (req: AuthenticatedRequest, res: Response, n
 export const createHodSubject = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
-    const { code, name, credits, semester, type } = req.body;
+    const code = req.body.code || req.body.subjectCode;
+    const name = req.body.name || req.body.subjectName;
+    const semester = req.body.semester;
+    const credits = req.body.credits;
+    const type = (req.body.type || req.body.courseType || 'IPCC').toString().trim().toUpperCase();
 
-    if (!code || !name || !semester) {
-      return res.status(400).json({ error: 'Code, name, and semester are required.' });
+    if (!code || !name) {
+      return res.status(400).json({ success: false, error: 'Subject code and subject name are required.' });
     }
 
-    const existing = await Subject.findOne({ where: { code: code.toUpperCase().trim(), departmentId } });
+    const semNum = Number(semester);
+    if (!semester || isNaN(semNum) || semNum < 1 || semNum > 8) {
+      return res.status(400).json({ success: false, error: 'Semester is required and must be between 1 and 8.' });
+    }
+
+    const credNum = credits !== undefined ? Number(credits) : 4;
+    if (isNaN(credNum) || credNum <= 0) {
+      return res.status(400).json({ success: false, error: 'Credits must be a valid positive number.' });
+    }
+
+    if (type !== 'IPCC' && type !== 'CC') {
+      return res.status(400).json({ success: false, error: 'Course type must be IPCC or CC.' });
+    }
+
+    const cleanCode = code.toUpperCase().trim();
+    const existing = await Subject.findOne({ where: { code: cleanCode, departmentId } });
     if (existing) {
-      return res.status(400).json({ error: 'A subject with this code already exists in your department.' });
+      return res.status(400).json({ success: false, error: `Subject code ${cleanCode} already exists for this department.` });
     }
 
     const subject = await Subject.create({
-      code: code.toUpperCase().trim(),
+      code: cleanCode,
       name: name.trim(),
       departmentId,
-      semester: Number(semester),
-      credits: credits ? Number(credits) : 4,
-      type: type || 'THEORY',
+      semester: semNum,
+      credits: credNum,
+      type,
       status: 'ACTIVE',
     });
 
-    await logAudit(req, 'HOD_CREATE_SUBJECT', { subjectId: subject.id, code: subject.code, name: subject.name });
+    await logAudit(req, 'HOD_CREATE_SUBJECT', { subjectId: subject.id, code: subject.code, name: subject.name, semester: subject.semester, type: subject.type });
 
     return res.status(201).json({ success: true, message: 'Subject created successfully.', data: subject });
   } catch (error) {
@@ -1509,18 +1643,32 @@ export const updateHodSubject = async (req: AuthenticatedRequest, res: Response,
   try {
     const departmentId = req.departmentId;
     const { id } = req.params;
-    const { code, name, credits, semester, type, status } = req.body;
+    const code = req.body.code || req.body.subjectCode;
+    const name = req.body.name || req.body.subjectName;
+    const semester = req.body.semester;
+    const credits = req.body.credits;
+    const rawType = req.body.type || req.body.courseType;
+    const status = req.body.status;
 
     const subject = await Subject.findOne({ where: { id, departmentId } });
     if (!subject) {
-      return res.status(404).json({ error: 'Subject not found in your department scope.' });
+      return res.status(404).json({ success: false, error: 'Subject not found in your department scope.' });
+    }
+
+    let type: string | undefined = undefined;
+    if (rawType) {
+      const upperType = rawType.toString().trim().toUpperCase();
+      if (upperType !== 'IPCC' && upperType !== 'CC') {
+        return res.status(400).json({ success: false, error: 'Course type must be IPCC or CC.' });
+      }
+      type = upperType;
     }
 
     await subject.update({
       ...(code ? { code: code.toUpperCase().trim() } : {}),
       ...(name ? { name: name.trim() } : {}),
-      ...(credits ? { credits: Number(credits) } : {}),
-      ...(semester ? { semester: Number(semester) } : {}),
+      ...(credits !== undefined ? { credits: Number(credits) } : {}),
+      ...(semester !== undefined ? { semester: Number(semester) } : {}),
       ...(type ? { type } : {}),
       ...(status ? { status } : {}),
     });
@@ -1530,6 +1678,34 @@ export const updateHodSubject = async (req: AuthenticatedRequest, res: Response,
     return res.json({ success: true, message: 'Subject updated successfully.', data: subject });
   } catch (error) {
     logger.error('HOD_UPDATE_SUBJECT_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * DELETE /api/hod/subjects/:id
+ */
+export const deleteHodSubject = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const departmentId = req.departmentId;
+    const { id } = req.params;
+
+    const subject = await Subject.findOne({ where: { id, departmentId } });
+    if (!subject) {
+      return res.status(404).json({ error: 'Subject not found in your department scope.' });
+    }
+
+    // Clean up faculty assignments and tab mappings
+    await FacultyAssignment.destroy({ where: { subjectId: id } });
+    await GoogleSheetTab.update({ subjectId: null, status: 'UNMAPPED' }, { where: { subjectId: id } });
+
+    await subject.destroy();
+
+    await logAudit(req, 'HOD_DELETE_SUBJECT', { subjectId: id, code: subject.code, name: subject.name });
+
+    return res.json({ success: true, message: 'Subject deleted successfully.' });
+  } catch (error) {
+    logger.error('HOD_DELETE_SUBJECT_ERROR:', error);
     return next(error);
   }
 };
@@ -2181,3 +2357,4 @@ export const updateHodPassword = async (req: AuthenticatedRequest, res: Response
     return next(error);
   }
 };
+

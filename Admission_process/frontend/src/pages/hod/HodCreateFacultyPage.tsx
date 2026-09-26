@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   UserPlus,
@@ -19,6 +19,7 @@ interface TeachingAssignmentItem {
   semester: string;
   subjectName: string;
   subjectCode: string;
+  section: string;
   academicYear: string;
   attendanceAccess: boolean;
   marksAccess: boolean;
@@ -71,17 +72,49 @@ export const HodCreateFacultyPage: React.FC = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [googleEmail, setGoogleEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [designation, setDesignation] = useState('Assistant Professor');
   const [joiningDate, setJoiningDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Section B: Dynamic Teaching Assignments
+  // Semester Sheets Connection Status
+  const [semesterSheetsMap, setSemesterSheetsMap] = useState<
+    Record<number, { attendance: boolean; marks: boolean; divisions: Record<string, { isConnected: boolean; connection: any }> }>
+  >({});
+
+  useEffect(() => {
+    // Check connected sheets for Sem 1-8
+    const loadSemesterSheets = async () => {
+      const map: Record<number, { attendance: boolean; marks: boolean; divisions: Record<string, { isConnected: boolean; connection: any }> }> = {};
+      for (const sem of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        try {
+          const res = await hodService.getSemesterGoogleSheets(sem);
+          const divMap: Record<string, { isConnected: boolean; connection: any }> = {};
+          (res?.divisions || []).forEach((d: any) => {
+            divMap[d.section] = { isConnected: d.isConnected, connection: d.connection };
+          });
+          map[sem] = {
+            attendance: Boolean(res?.attendance),
+            marks: Boolean(res?.marks),
+            divisions: divMap,
+          };
+        } catch {
+          map[sem] = { attendance: false, marks: false, divisions: {} };
+        }
+      }
+      setSemesterSheetsMap(map);
+    };
+    loadSemesterSheets();
+  }, []);
+
+  // Section B: Dynamic Teaching Allocations
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignmentItem[]>([
     {
-      id: 'assign-1',
+      id: 'alloc-1',
       semester: '1',
       subjectName: '',
       subjectCode: '',
+      section: 'A',
       academicYear: '2026-27',
       attendanceAccess: true,
       marksAccess: true,
@@ -108,10 +141,11 @@ export const HodCreateFacultyPage: React.FC = () => {
 
   const handleAddAssignment = () => {
     const newAssignment: TeachingAssignmentItem = {
-      id: `assign_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      id: `alloc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       semester: '1',
       subjectName: '',
       subjectCode: '',
+      section: 'A',
       academicYear: '2026-27',
       attendanceAccess: true,
       marksAccess: true,
@@ -141,27 +175,31 @@ export const HodCreateFacultyPage: React.FC = () => {
     }
 
     if (teachingAssignments.length === 0) {
-      setErrorMessage('Please provide at least one teaching assignment.');
+      setErrorMessage('Please provide at least one teaching allocation.');
       return;
     }
 
-    // Validate each assignment card
+    // Validate each allocation card
     for (let i = 0; i < teachingAssignments.length; i++) {
       const a = teachingAssignments[i];
       if (!a.subjectName.trim()) {
-        setErrorMessage(`Teaching Assignment ${i + 1}: Subject Name is required.`);
+        setErrorMessage(`Teaching Allocation ${i + 1}: Subject Name is required.`);
         return;
       }
       if (!a.subjectCode.trim()) {
-        setErrorMessage(`Teaching Assignment ${i + 1}: Subject Code is required.`);
+        setErrorMessage(`Teaching Allocation ${i + 1}: Subject Code is required.`);
         return;
       }
       if (!a.semester) {
-        setErrorMessage(`Teaching Assignment ${i + 1}: Teaching Semester is required.`);
+        setErrorMessage(`Teaching Allocation ${i + 1}: Teaching Semester is required.`);
+        return;
+      }
+      if (!a.section?.trim()) {
+        setErrorMessage(`Teaching Allocation ${i + 1}: Section is required.`);
         return;
       }
       if (!a.academicYear.trim()) {
-        setErrorMessage(`Teaching Assignment ${i + 1}: Academic Year is required.`);
+        setErrorMessage(`Teaching Allocation ${i + 1}: Academic Year is required.`);
         return;
       }
     }
@@ -172,6 +210,7 @@ export const HodCreateFacultyPage: React.FC = () => {
         semester: Number(a.semester),
         subjectName: a.subjectName.trim(),
         subjectCode: a.subjectCode.trim().toUpperCase(),
+        section: (a.section || 'A').trim().toUpperCase(),
         academicYear: a.academicYear.trim(),
         permissions: {
           attendance: Boolean(a.attendanceAccess),
@@ -186,6 +225,7 @@ export const HodCreateFacultyPage: React.FC = () => {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
+        googleEmail: googleEmail.trim() || email.trim(),
         phone: phone.trim() || undefined,
         designation,
         joiningDate,
@@ -195,11 +235,12 @@ export const HodCreateFacultyPage: React.FC = () => {
         semester: primaryAssignment.semester,
         subjectName: primaryAssignment.subjectName,
         subjectCode: primaryAssignment.subjectCode,
+        section: primaryAssignment.section,
         academicYear: primaryAssignment.academicYear,
         attendanceAccess: primaryAssignment.permissions.attendance,
         marksAccess: primaryAssignment.permissions.marks,
         googleSheetsAccess: primaryAssignment.permissions.googleSheets,
-      });
+      } as any);
 
       setSuccessModalData({
         email: response.data?.temporaryCredentials?.email || email,
@@ -247,7 +288,7 @@ export const HodCreateFacultyPage: React.FC = () => {
               Create Faculty & Submit for Authorization
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Add a department teacher with multi-semester teaching assignments and route for approval.
+              Add a department teacher with multi-semester teaching allocations and route for approval.
             </p>
           </div>
         </div>
@@ -312,15 +353,30 @@ export const HodCreateFacultyPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Email Address <span className="text-rose-500">*</span>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 flex items-center justify-between">
+                <span>Faculty College Email</span>
+                <span className="text-rose-500">*</span>
               </label>
               <input
                 type="email"
                 required
-                placeholder="e.g. arihantdesai@gmail.com"
+                placeholder="e.g. rahul@college.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 flex items-center justify-between">
+                <span>Google Account / Email</span>
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">For Google Drive Access</span>
+              </label>
+              <input
+                type="email"
+                placeholder={email || 'e.g. rahul@gmail.com'}
+                value={googleEmail}
+                onChange={(e) => setGoogleEmail(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
@@ -368,26 +424,31 @@ export const HodCreateFacultyPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section B: Teaching Assignments */}
+        {/* Section B: Teaching Allocation */}
         <div className="glass-card rounded-3xl p-6 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
               <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                SECTION B: TEACHING ASSIGNMENTS
+                SECTION B: TEACHING ALLOCATION
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Add one or more subject assignments for this faculty. Each assignment can have separate permissions.
+                Allocate one or more subjects to this faculty member. Each allocation can have separate permissions.
               </p>
             </div>
             <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 self-start sm:self-auto">
-              {teachingAssignments.length} {teachingAssignments.length === 1 ? 'Assignment' : 'Assignments'}
+              {teachingAssignments.length} {teachingAssignments.length === 1 ? 'Allocation' : 'Allocations'}
             </span>
           </div>
 
-          {/* Assignment Cards List */}
+          {/* Allocation Cards List */}
           <div className="space-y-4">
             {teachingAssignments.map((assignment, index) => {
               const theme = cardThemes[index % cardThemes.length];
+              const semNum = Number(assignment.semester) || 1;
+              const semStatus = semesterSheetsMap[semNum] || { attendance: false, marks: false, divisions: {} };
+              const currentSec = (assignment.section || 'A').trim().toUpperCase().replace(/^DIVISION\s+/i, '').replace(/^SECTION\s+/i, '') || 'A';
+              const divisionInfo = semStatus.divisions?.[currentSec] || { isConnected: false, connection: null };
+
               return (
                 <div
                   key={assignment.id}
@@ -397,7 +458,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-extrabold ${theme.headerText}`}>
-                        Teaching Assignment {index + 1}
+                        Teaching Allocation {index + 1}
                       </span>
                     </div>
 
@@ -405,7 +466,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                       type="button"
                       onClick={() => handleRemoveAssignment(assignment.id)}
                       disabled={teachingAssignments.length <= 1}
-                      title={teachingAssignments.length <= 1 ? 'At least one assignment is required' : 'Remove this assignment'}
+                      title={teachingAssignments.length <= 1 ? 'At least one allocation is required' : 'Remove this allocation'}
                       className="px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -413,8 +474,8 @@ export const HodCreateFacultyPage: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* 4 Fields Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 5 Fields Grid (Semester, Subject Name, Subject Code, Section, Academic Year) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     {/* Teaching Semester */}
                     <div>
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
@@ -439,7 +500,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Engineering Mathematics"
+                        placeholder="e.g. Data Structures"
                         value={assignment.subjectName}
                         onChange={(e) => handleUpdateAssignment(assignment.id, 'subjectName', e.target.value)}
                         className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -454,11 +515,28 @@ export const HodCreateFacultyPage: React.FC = () => {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. MAT101"
+                        placeholder="e.g. CS401"
                         value={assignment.subjectCode}
                         onChange={(e) => handleUpdateAssignment(assignment.id, 'subjectCode', e.target.value)}
                         className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none uppercase font-mono"
                       />
+                    </div>
+
+                    {/* Section */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Section <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={assignment.section || 'A'}
+                        onChange={(e) => handleUpdateAssignment(assignment.id, 'section', e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="A">Section A</option>
+                        <option value="B">Section B</option>
+                        <option value="C">Section C</option>
+                        <option value="D">Section D</option>
+                      </select>
                     </div>
 
                     {/* Academic Year */}
@@ -478,15 +556,80 @@ export const HodCreateFacultyPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Per-Assignment Permissions Box */}
+                  {/* Google Sheet Access Section for Selected Division (Per Specification Section 7) */}
+                  <div className="p-4 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
+                          G
+                        </div>
+                        <span className="text-[11px] font-black uppercase text-slate-900 dark:text-white tracking-wider">
+                          GOOGLE SHEETS ACCESS
+                        </span>
+                      </div>
+                      <Link
+                        to={`/hod/students?semester=${semNum}`}
+                        target="_blank"
+                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Manage Spreadsheets ↗
+                      </Link>
+                    </div>
+
+                    {/* Attendance Master Sheet Status for this Division */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                            Attendance Master Sheet
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                            Division {assignment.section || 'A'}
+                          </span>
+                        </div>
+                        {divisionInfo.isConnected ? (
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 inline text-emerald-600 dark:text-emerald-400" />
+                              <span>Connected ✓</span>
+                            </span>
+                            {divisionInfo.connection?.spreadsheetUrl && (
+                              <span className="text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
+                                {divisionInfo.connection.spreadsheetUrl.split('/d/')[1]?.substring(0, 18)}...
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-slate-400">
+                            ○ Not Connected for Division {assignment.section || 'A'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Checkbox: Give faculty access to this division attendance sheet */}
+                      <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer select-none self-start sm:self-auto">
+                        <input
+                          type="checkbox"
+                          checked={assignment.googleSheetsAccess}
+                          onChange={(e) => handleUpdateAssignment(assignment.id, 'googleSheetsAccess', e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Give faculty access to this division attendance sheet
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Per-Allocation Permissions Box */}
                   <div className={`p-4 rounded-xl ${theme.permBg} border ${theme.permBorder} space-y-2.5`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                        Assignment Permissions
+                        ALLOCATION PERMISSIONS
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {/* Attendance Permission */}
                       <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer select-none">
                         <input
@@ -518,25 +661,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                             Marks & Bit-Wise Access
                           </p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                            Allow faculty to input IA & Bit 1-5 marks
-                          </p>
-                        </div>
-                      </label>
-
-                      {/* Google Sheets Permission */}
-                      <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={assignment.googleSheetsAccess}
-                          onChange={(e) => handleUpdateAssignment(assignment.id, 'googleSheetsAccess', e.target.checked)}
-                          className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        />
-                        <div>
-                          <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                            Google Sheets Access
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                            Allow faculty to access subject-related sheets
+                            Allow faculty to input IA & Bit-1–5 marks
                           </p>
                         </div>
                       </label>
@@ -547,14 +672,14 @@ export const HodCreateFacultyPage: React.FC = () => {
             })}
           </div>
 
-          {/* Add Another Teaching Assignment Action */}
+          {/* Add Another Teaching Allocation Action */}
           <button
             type="button"
             onClick={handleAddAssignment}
             className="w-full py-3 px-4 rounded-2xl border-2 border-dashed border-blue-400/80 dark:border-blue-500/60 hover:border-blue-600 dark:hover:border-blue-400 bg-blue-50/40 hover:bg-blue-50/80 dark:bg-blue-950/20 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add Another Teaching Assignment</span>
+            <span>+ Add Another Teaching Allocation</span>
           </button>
         </div>
 
@@ -642,12 +767,12 @@ export const HodCreateFacultyPage: React.FC = () => {
             {submitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Creating Faculty Account...</span>
+                <span>Creating Faculty & Granting Access...</span>
               </>
             ) : (
               <>
                 <ShieldCheck className="w-4 h-4" />
-                <span>Submit Authorization Request</span>
+                <span>Create Faculty & Grant Access</span>
               </>
             )}
           </button>
@@ -667,7 +792,7 @@ export const HodCreateFacultyPage: React.FC = () => {
                 Faculty Account Created!
               </h3>
               <p className="text-xs text-slate-500">
-                {successModalData.assignmentsCount} teaching {successModalData.assignmentsCount === 1 ? 'assignment' : 'assignments'} submitted and dispatched to <strong className="text-indigo-600">{successModalData.authority}</strong> for approval.
+                {successModalData.assignmentsCount} teaching {successModalData.assignmentsCount === 1 ? 'allocation' : 'allocations'} submitted and dispatched to <strong className="text-indigo-600">{successModalData.authority}</strong> for approval.
               </p>
             </div>
 

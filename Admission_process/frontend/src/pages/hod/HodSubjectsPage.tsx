@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   RefreshCw,
   X,
+  Trash2,
 } from 'lucide-react';
 import hodService, { HodSubjectItem } from '../../services/hod.service';
 
@@ -22,10 +23,12 @@ export const HodSubjectsPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [semester, setSemester] = useState('5');
+  const [semester, setSemester] = useState('3');
   const [credits, setCredits] = useState('4');
-  const [type, setType] = useState('THEORY');
+  const [type, setType] = useState('IPCC');
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubjects();
@@ -45,24 +48,51 @@ export const HodSubjectsPage: React.FC = () => {
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code || !name) return;
+    if (!code.trim() || !name.trim()) {
+      setFormError('Subject code and subject name are required.');
+      return;
+    }
     setSaving(true);
+    setFormError(null);
     try {
       await hodService.createSubject({
-        code,
-        name,
+        code: code.trim().toUpperCase(),
+        name: name.trim(),
         semester: Number(semester),
-        credits: Number(credits),
-        type,
+        credits: Number(credits) || 4,
+        type: type === 'CC' ? 'CC' : 'IPCC',
       });
       setShowAddModal(false);
       setCode('');
       setName('');
+      setSemester('3');
+      setCredits('4');
+      setType('IPCC');
+      setFormError(null);
       fetchSubjects();
-    } catch (err) {
-      alert('Failed to create subject.');
+    } catch (err: any) {
+      console.error('Failed to create subject:', err);
+      const backendError =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        'Failed to create subject. Please check the inputs and try again.';
+      setFormError(backendError);
+      alert(backendError);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteSubject = async (id: string, subCode: string) => {
+    if (!window.confirm(`Are you sure you want to delete subject ${subCode}?`)) return;
+    setDeletingId(id);
+    try {
+      await hodService.deleteSubject(id);
+      fetchSubjects();
+    } catch (err) {
+      alert('Failed to delete subject.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -195,12 +225,21 @@ export const HodSubjectsPage: React.FC = () => {
               </div>
 
               <div className="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs">
-                <span className="text-neutral-400 text-[11px]">Academic Course</span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSubject(sub.id, sub.code)}
+                  disabled={deletingId === sub.id}
+                  className="text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Delete subject"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{deletingId === sub.id ? 'Deleting...' : 'Delete'}</span>
+                </button>
                 <Link
                   to="/hod/faculty/assignments"
-                  className="font-bold text-neutral-900 dark:text-white hover:underline"
+                  className="font-bold text-neutral-900 dark:text-white hover:underline flex items-center gap-0.5"
                 >
-                  Manage Allotment →
+                  <span>Manage Allotment →</span>
                 </Link>
               </div>
             </div>
@@ -280,17 +319,22 @@ export const HodSubjectsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 text-neutral-700 dark:text-neutral-300 font-bold">Course Type</label>
+                <label className="block mb-1 text-neutral-700 dark:text-neutral-300 font-bold">Course Type *</label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold focus:ring-2 focus:ring-violet-500"
+                  className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold focus:ring-2 focus:ring-violet-500 cursor-pointer"
                 >
-                  <option value="THEORY">Theory</option>
-                  <option value="PRACTICAL">Practical / Lab</option>
-                  <option value="INTEGRATED">Integrated (Theory + Lab)</option>
+                  <option value="IPCC">IPCC</option>
+                  <option value="CC">CC</option>
                 </select>
               </div>
+
+              {formError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-[11px] font-bold">
+                  {formError}
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
                 <button
