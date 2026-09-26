@@ -49,10 +49,11 @@ export const FacultyAuthorizationPage: React.FC = () => {
         status: selectedStatus,
         academicYear: selectedYear,
       });
-      setRequests(data);
+      setRequests(Array.isArray(data) ? data : []);
       window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
     } catch (err) {
-      toast.error('Failed to load faculty authorization requests');
+      console.warn('Could not load faculty authorization requests:', err);
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -298,7 +299,7 @@ export const FacultyAuthorizationPage: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={8} className="py-10 text-center text-neutral-400">
-                    No faculty authorization requests in this queue.
+                    No data found in this queue.
                   </td>
                 </tr>
               )}

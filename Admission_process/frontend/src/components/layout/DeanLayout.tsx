@@ -181,7 +181,7 @@ export const DeanLayout: React.FC = () => {
           <Link to="/dean/dashboard" className="flex items-center space-x-2.5 px-1.5 mb-5 hover:opacity-95 transition-all">
             <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-neutral-100 dark:border-neutral-850 shadow-sm">
               <img
-                src="/logo.png"
+                src="/emaillogo.png"
                 alt="JCER Logo"
                 className="w-full h-full object-cover"
               />

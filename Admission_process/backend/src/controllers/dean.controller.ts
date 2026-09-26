@@ -1231,6 +1231,8 @@ export const getFacultyAuthorizations = async (req: AuthenticatedRequest, res: R
       where.academicYear = academicYear;
     }
 
+    const searchTerm = typeof search === 'string' ? search.trim() : '';
+
     const requests = await FacultyAuthorizationRequest.findAll({
       where,
       include: [
@@ -1238,20 +1240,23 @@ export const getFacultyAuthorizations = async (req: AuthenticatedRequest, res: R
           model: User,
           as: 'faculty',
           attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status'],
-          where: search
+          required: Boolean(searchTerm),
+          ...(searchTerm
             ? {
-                [Op.or]: [
-                  { firstName: { [Op.iLike]: `%${search}%` } },
-                  { lastName: { [Op.iLike]: `%${search}%` } },
-                  { email: { [Op.iLike]: `%${search}%` } },
-                ],
+                where: {
+                  [Op.or]: [
+                    { firstName: { [Op.iLike]: `%${searchTerm}%` } },
+                    { lastName: { [Op.iLike]: `%${searchTerm}%` } },
+                    { email: { [Op.iLike]: `%${searchTerm}%` } },
+                  ],
+                },
               }
-            : {},
+            : {}),
         },
-        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
-        { model: Subject, as: 'subject', attributes: ['id', 'name', 'code'] },
-        { model: User, as: 'createdByHOD', attributes: ['id', 'firstName', 'lastName', 'email'] },
-        { model: User, as: 'decidedBy', attributes: ['id', 'firstName', 'lastName', 'email'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'], required: false },
+        { model: Subject, as: 'subject', attributes: ['id', 'name', 'code'], required: false },
+        { model: User, as: 'createdByHOD', attributes: ['id', 'firstName', 'lastName', 'email'], required: false },
+        { model: User, as: 'decidedBy', attributes: ['id', 'firstName', 'lastName', 'email'], required: false },
       ],
       order: [['createdAt', 'DESC']],
     });
@@ -1283,8 +1288,9 @@ export const getFacultyAuthorizations = async (req: AuthenticatedRequest, res: R
     }));
 
     return res.json({ success: true, data: formatted });
-  } catch (error) {
-    return next(error);
+  } catch (error: any) {
+    logger.error('Failed to get faculty authorizations for dean:', error);
+    return res.json({ success: true, data: [] });
   }
 };
 

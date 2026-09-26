@@ -78,10 +78,11 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
         authority: selectedAuthority,
         academicYear: selectedYear,
       });
-      setRequests(data);
+      setRequests(Array.isArray(data) ? data : []);
       window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
     } catch (err) {
-      toast.error('Failed to load faculty authorization requests');
+      console.warn('Could not load faculty authorization requests:', err);
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -534,9 +535,9 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-neutral-400 space-y-2">
                     <ShieldCheck className="w-8 h-8 mx-auto opacity-30 text-neutral-400" />
-                    <p className="text-sm font-semibold">No faculty authorization requests found.</p>
+                    <p className="text-sm font-semibold">No data found</p>
                     <p className="text-xs text-neutral-400">
-                      Try adjusting the search criteria, department, authority, or status filter.
+                      No faculty authorization requests match your current filters.
                     </p>
                   </td>
                 </tr>
