@@ -83,7 +83,7 @@ export const HodStudentDetailPage: React.FC = () => {
                   {student.name}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                  Sem {student.semester} • Section {student.section || 'Unassigned'}
+                  Sem {student.semester} • {student.section && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(student.section) ? `Section ${student.section.replace(/^(Section|Sec)\s*/i, '').trim()}` : 'Unassigned'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   USN: {student.usn}

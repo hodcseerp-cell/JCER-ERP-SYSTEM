@@ -36,6 +36,14 @@ import existingStudentOnboardingService, {
   OnboardingBatchRecord,
 } from '../../../services/existingStudentOnboarding.service';
 
+const DEFAULT_DEPARTMENTS = [
+  { id: '1', name: 'Computer Science & Engineering', code: 'CSE' },
+  { id: '2', name: 'Electronics & Communication Engineering', code: 'ECE' },
+  { id: '3', name: 'Mechanical Engineering', code: 'ME' },
+  { id: '4', name: 'Civil Engineering', code: 'CV' },
+  { id: '5', name: 'Computer Science & Engineering (AIML)', code: 'CSE-AIML' },
+];
+
 export const ExistingStudentOnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,20 +52,20 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ONBOARD' | 'HISTORY'>('ONBOARD');
 
   // Academic Context Selection
-  const [contextLoading, setContextLoading] = useState<boolean>(true);
+  const [contextLoading, setContextLoading] = useState<boolean>(false);
   const [context, setContext] = useState<OnboardingContext>({
-    departments: [],
+    departments: DEFAULT_DEPARTMENTS,
     academicYears: ['2026-2027', '2025-2026', '2024-2025'],
     schemes: ['2025', '2022', '2021', '2018'],
     semesters: [1, 2, 3, 4, 5, 6, 7, 8],
     sections: ['A', 'B', 'C', 'D'],
   });
 
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2026-2027');
-  const [selectedScheme, setSelectedScheme] = useState<string>('2025');
-  const [selectedSemester, setSelectedSemester] = useState<number>(3);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
+  const [selectedScheme, setSelectedScheme] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<number | ''>('');
   const [selectedDepartmentCode, setSelectedDepartmentCode] = useState<string>('');
-  const [selectedSection, setSelectedSection] = useState<string>('A');
+  const [selectedSection, setSelectedSection] = useState<string>('');
 
   // File & Upload State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -101,15 +109,11 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
     try {
       setContextLoading(true);
       const data = await existingStudentOnboardingService.getContext();
-      setContext(data);
-      if (data.departments.length > 0 && !selectedDepartmentCode) {
-        setSelectedDepartmentCode(data.departments[0].code);
-      }
-      if (data.academicYears.length > 0) {
-        setSelectedAcademicYear(data.academicYears[0]);
+      if (data) {
+        setContext(data);
       }
     } catch (err: any) {
-      toast.error('Failed to load academic context.');
+      console.warn('Notice loading academic context (using fallback defaults):', err);
     } finally {
       setContextLoading(false);
     }
@@ -132,9 +136,16 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
   const handleDownloadTemplate = async () => {
     try {
       toast.info('Downloading Excel template...');
-      await existingStudentOnboardingService.downloadTemplate();
+      await existingStudentOnboardingService.downloadTemplate({
+        academicYear: selectedAcademicYear,
+        scheme: selectedScheme,
+        semester: selectedSemester || undefined,
+        departmentCode: selectedDepartmentCode || 'CSE',
+        section: selectedSection,
+      });
       toast.success('Template downloaded successfully.');
     } catch (err: any) {
+      console.error('Failed to download Excel template:', err);
       toast.error('Failed to download Excel template.');
     }
   };
@@ -167,6 +178,26 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
   };
 
   const handleValidate = async () => {
+    if (!selectedAcademicYear) {
+      toast.warn('Please select an Academic Year first.');
+      return;
+    }
+    if (!selectedScheme) {
+      toast.warn('Please select a Scheme (Syllabus) first.');
+      return;
+    }
+    if (selectedSemester === '' || !selectedSemester) {
+      toast.warn('Please select a Current Semester first.');
+      return;
+    }
+    if (!selectedDepartmentCode) {
+      toast.warn('Please select a Department first.');
+      return;
+    }
+    if (!selectedSection) {
+      toast.warn('Please select a Section first.');
+      return;
+    }
     if (!selectedFile) {
       toast.error('Please select an Excel file first.');
       return;
@@ -177,7 +208,7 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
       const res = await existingStudentOnboardingService.validateFile(selectedFile, {
         academicYear: selectedAcademicYear,
         scheme: selectedScheme,
-        semester: selectedSemester,
+        semester: Number(selectedSemester),
         departmentCode: selectedDepartmentCode,
         section: selectedSection,
       });
@@ -214,18 +245,19 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
       setImporting(true);
       const res = await existingStudentOnboardingService.importStudents({
         fileName: selectedFile?.name || 'existing_students_import.xlsx',
-        academicYear: selectedAcademicYear,
-        scheme: selectedScheme,
-        semester: selectedSemester,
-        departmentCode: selectedDepartmentCode,
-        section: selectedSection,
+        academicYear: selectedAcademicYear || '2026-2027',
+        scheme: selectedScheme || '2025',
+        semester: Number(selectedSemester) || 3,
+        departmentCode: selectedDepartmentCode || 'CSE',
+        section: selectedSection || 'A',
         records: validRecords,
       });
 
       setImportSuccessData(res);
       toast.success(`Successfully onboarded ${res.totalImported} existing students!`);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to complete student onboarding.');
+      console.error('Import error details:', err);
+      toast.error(err.response?.data?.error || err.message || 'Failed to complete student onboarding.');
     } finally {
       setImporting(false);
     }
@@ -235,6 +267,11 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
     setSelectedFile(null);
     setValidationResult(null);
     setImportSuccessData(null);
+    setSelectedAcademicYear('');
+    setSelectedScheme('');
+    setSelectedSemester('');
+    setSelectedDepartmentCode('');
+    setSelectedSection('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -352,10 +389,15 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 <select
                   value={selectedAcademicYear}
                   onChange={(e) => setSelectedAcademicYear(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    !selectedAcademicYear ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select Academic Year
+                  </option>
                   {context.academicYears.map((yr) => (
-                    <option key={yr} value={yr}>
+                    <option key={yr} value={yr} className="text-slate-800 dark:text-white">
                       {yr}
                     </option>
                   ))}
@@ -370,10 +412,15 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 <select
                   value={selectedScheme}
                   onChange={(e) => setSelectedScheme(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    !selectedScheme ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select Scheme
+                  </option>
                   {context.schemes.map((sc) => (
-                    <option key={sc} value={sc}>
+                    <option key={sc} value={sc} className="text-slate-800 dark:text-white">
                       Scheme {sc}
                     </option>
                   ))}
@@ -387,12 +434,17 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 </label>
                 <select
                   value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => setSelectedSemester(e.target.value === '' ? '' : Number(e.target.value))}
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    selectedSemester === '' ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select Current Semester
+                  </option>
                   {context.semesters.map((sem) => (
-                    <option key={sem} value={sem}>
-                      Semester {sem} {sem === 3 ? '(Current 3rd Sem)' : ''}
+                    <option key={sem} value={sem} className="text-slate-800 dark:text-white">
+                      Semester {sem}
                     </option>
                   ))}
                 </select>
@@ -406,10 +458,15 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 <select
                   value={selectedDepartmentCode}
                   onChange={(e) => setSelectedDepartmentCode(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    !selectedDepartmentCode ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select Department
+                  </option>
                   {context.departments.map((dept) => (
-                    <option key={dept.id} value={dept.code}>
+                    <option key={dept.id} value={dept.code} className="text-slate-800 dark:text-white">
                       {dept.code} — {dept.name}
                     </option>
                   ))}
@@ -424,10 +481,15 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 <select
                   value={selectedSection}
                   onChange={(e) => setSelectedSection(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    !selectedSection ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
+                  }`}
                 >
+                  <option value="" disabled>
+                    Select Section
+                  </option>
                   {context.sections.map((sec) => (
-                    <option key={sec} value={sec}>
+                    <option key={sec} value={sec} className="text-slate-800 dark:text-white">
                       Section {sec}
                     </option>
                   ))}
@@ -691,20 +753,20 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-50/70 dark:bg-neutral-800/40 text-slate-500 dark:text-neutral-400 font-bold border-b border-slate-200 dark:border-neutral-800 uppercase tracking-wider">
-                        <th className="py-3 px-3">#</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3">USN</th>
-                        <th className="py-3 px-3">Student Name</th>
-                        <th className="py-3 px-3">Enrollment No</th>
-                        <th className="py-3 px-3">Department</th>
-                        <th className="py-3 px-3">Scheme</th>
-                        <th className="py-3 px-3">Sem</th>
-                        <th className="py-3 px-3">Sec</th>
-                        <th className="py-3 px-3">Roll No</th>
-                        <th className="py-3 px-3">Academic Year</th>
-                        <th className="py-3 px-3">Type</th>
-                        <th className="py-3 px-3">Validation Notes</th>
+                      <tr className="bg-black text-white font-extrabold border-b border-black uppercase tracking-wider">
+                        <th className="py-3.5 px-3 text-white font-extrabold">#</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Status</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">USN</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Student Name</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Enrollment No</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Department</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Scheme</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Sem</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Sec</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Roll No</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Academic Year</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Type</th>
+                        <th className="py-3.5 px-3 text-white font-extrabold">Validation Notes</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-neutral-800/60 font-medium">
@@ -919,19 +981,19 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50/70 dark:bg-neutral-800/40 text-slate-500 dark:text-neutral-400 font-bold border-b border-slate-200 dark:border-neutral-800 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Date & Time</th>
-                  <th className="py-3.5 px-4">File Name</th>
-                  <th className="py-3.5 px-4">Academic Year</th>
-                  <th className="py-3.5 px-4">Scheme</th>
-                  <th className="py-3.5 px-4">Semester</th>
-                  <th className="py-3.5 px-4">Department</th>
-                  <th className="py-3.5 px-4">Section</th>
-                  <th className="py-3.5 px-4">Total</th>
-                  <th className="py-3.5 px-4">Successful</th>
-                  <th className="py-3.5 px-4">Failed</th>
-                  <th className="py-3.5 px-4">Imported By</th>
-                  <th className="py-3.5 px-4">Status</th>
+                <tr className="bg-black text-white font-extrabold border-b border-black uppercase tracking-wider">
+                  <th className="py-3.5 px-4 text-white font-extrabold">Date & Time</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">File Name</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Academic Year</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Scheme</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Semester</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Department</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Section</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Total</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Successful</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Failed</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Imported By</th>
+                  <th className="py-3.5 px-4 text-white font-extrabold">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-800 font-medium">

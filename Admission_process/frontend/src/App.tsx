@@ -55,6 +55,8 @@ import HodDashboardPage from './pages/hod/HodDashboardPage';
 import HodStudentsPage from './pages/hod/HodStudentsPage';
 import HodStudentsSemesterPage from './pages/hod/HodStudentsSemesterPage';
 import HodStudentsSectionPage from './pages/hod/HodStudentsSectionPage';
+import HodSectionDetailPage from './pages/hod/HodSectionDetailPage';
+import HodSectionAllocatePage from './pages/hod/HodSectionAllocatePage';
 import HodStudentDetailPage from './pages/hod/HodStudentDetailPage';
 import HodFacultyListPage from './pages/hod/HodFacultyListPage';
 import HodCreateFacultyPage from './pages/hod/HodCreateFacultyPage';
@@ -69,6 +71,7 @@ import HodStudentPerformancePage from './pages/hod/HodStudentPerformancePage';
 import HodSheetsAccessPage from './pages/hod/HodSheetsAccessPage';
 import HodReportsPage from './pages/hod/HodReportsPage';
 import HodSettingsPage from './pages/hod/HodSettingsPage';
+import HodGoogleSheetsConnectPage from './pages/hod/HodGoogleSheetsConnectPage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -364,10 +367,12 @@ export const App: React.FC = () => (
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<HodDashboardPage />} />
 
-              {/* Students */}
+              {/* Students & Section Allocations */}
               <Route path="students" element={<HodStudentsPage />} />
               <Route path="students/semesters" element={<HodStudentsSemesterPage />} />
               <Route path="students/sections" element={<HodStudentsSectionPage />} />
+              <Route path="students/sections/:sectionId" element={<HodSectionDetailPage />} />
+              <Route path="students/sections/:sectionId/allocate" element={<HodSectionAllocatePage />} />
               <Route path="students/:id" element={<HodStudentDetailPage />} />
 
               {/* Faculty */}
@@ -402,6 +407,7 @@ export const App: React.FC = () => (
               <Route path="sheets/marks" element={<HodSheetsAccessPage />} />
               <Route path="sheets/access" element={<HodSheetsAccessPage />} />
               <Route path="sheets/sync-history" element={<HodSheetsAccessPage />} />
+              <Route path="google-sheets/connect" element={<HodGoogleSheetsConnectPage />} />
 
               {/* Reports & Settings */}
               <Route path="reports" element={<HodReportsPage />} />

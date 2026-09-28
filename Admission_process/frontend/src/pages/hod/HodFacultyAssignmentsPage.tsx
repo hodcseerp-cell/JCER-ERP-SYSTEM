@@ -12,6 +12,7 @@ import {
   Lock,
   RefreshCw,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import hodService from '../../services/hod.service';
 
 export const HodFacultyAssignmentsPage: React.FC = () => {
@@ -40,9 +41,10 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
         attendanceAccess: type === 'attn' ? !att : att,
         marksAccess: type === 'marks' ? !marks : marks,
       });
+      toast.success('Access updated successfully.');
       fetchAssignments();
-    } catch (err) {
-      alert('Failed to update access toggle.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update access toggle.');
     }
   };
 

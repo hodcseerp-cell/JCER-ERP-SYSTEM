@@ -101,29 +101,8 @@ export async function seed(exitOnComplete = false) {
     console.log('✓ Semesters created.');
 
     // ─── 4. Sections ────────────────────────────────────────────────────────
-    for (const dept of depts) {
-      for (let sem = 1; sem <= 8; sem++) {
-        for (const secName of ['Section A', 'Section B']) {
-          await Section.findOrCreate({
-            where: {
-              departmentId: dept.id,
-              semester: sem,
-              academicYear: '2026-27',
-              name: secName,
-            },
-            defaults: {
-              departmentId: dept.id,
-              semester: sem,
-              academicYear: '2026-27',
-              name: secName,
-              capacity: 60,
-              status: 'ACTIVE',
-            },
-          });
-        }
-      }
-    }
-    console.log('✓ Sections created.');
+    // Sections are intentionally created on-demand by HODs per semester/department
+    console.log('✓ Sections ready for HOD creation.');
 
     // ─── 5. Rejection Reasons ──────────────────────────────────────────────
     const reasons = [

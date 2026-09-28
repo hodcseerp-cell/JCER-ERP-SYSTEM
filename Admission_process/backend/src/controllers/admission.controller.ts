@@ -676,21 +676,12 @@ export const listAdmissions = async (
       includeFullDetails: req.query.includeFullDetails === 'true'
     });
     
-    if (!result || result.total === 0) {
-      return res.json({
-        success: true,
-        data: [],
-        total: 0
-      });
-    }
-
     return res.json({ success: true, data: result });
   } catch (err) {
     console.error("Error in listAdmissions controller:", err);
     return res.json({
       success: true,
-      data: [],
-      total: 0
+      data: { total: 0, page: 1, totalPages: 1, applications: [] }
     });
   }
 };
@@ -2419,17 +2410,16 @@ export const bulkAssignUsns = async (
       if (admission.applicationStatus === 'ENROLLED') {
         const student = await Student.findOne({ where: { userId: admission.userId }, transaction });
         if (student) {
-          const m = cleanUsn ? cleanUsn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/) : null;
-          let rollNumber = student.rollNumber;
-          let batchYear = student.batchYear;
-          if (m && cleanUsn) {
-            batchYear = parseInt('20' + m[1]);
-            rollNumber = `${batchYear}${m[2]}${m[3]}`;
-          }
-          await student.update({ usn: cleanUsn || null, enrollmentNumber: cleanUsn || null, rollNumber, batchYear }, { transaction });
+          // Requirement 1 & 5: Permanent Student Identity
+          // USN is updated on the existing student record.
+          // Never overwrite permanent enrollmentNumber or replace historical rollNumber.
+          await student.update({
+            usn: cleanUsn || null,
+            ...(student.enrollmentNumber ? {} : { enrollmentNumber: cleanUsn || null }),
+          }, { transaction });
         }
         const user = await User.findByPk(admission.userId, { transaction });
-        if (user) await user.update({ username: cleanUsn ? cleanUsn.toLowerCase() : user.email }, { transaction });
+        if (user && cleanUsn) await user.update({ username: cleanUsn.toLowerCase() }, { transaction });
       }
 
       await AuditLog.create({
@@ -2532,17 +2522,16 @@ export const assignSingleUsn = async (
         if (admission.applicationStatus === 'ENROLLED') {
           const student = await Student.findOne({ where: { userId: admission.userId }, transaction });
           if (student) {
-            const m = cleanUsn ? cleanUsn.match(/^2JR(\d{2})([A-Z]{2})(\d{3})$/) : null;
-            let rollNumber = student.rollNumber;
-            let batchYear = student.batchYear;
-            if (m && cleanUsn) {
-              batchYear = parseInt('20' + m[1]);
-              rollNumber = `${batchYear}${m[2]}${m[3]}`;
-            }
-            await student.update({ usn: cleanUsn || null, enrollmentNumber: cleanUsn || null, rollNumber, batchYear }, { transaction });
+            // Requirement 1 & 5: Permanent Student Identity
+            // USN is updated on the existing student record.
+            // Never overwrite permanent enrollmentNumber or replace historical rollNumber.
+            await student.update({
+              usn: cleanUsn || null,
+              ...(student.enrollmentNumber ? {} : { enrollmentNumber: cleanUsn || null }),
+            }, { transaction });
           }
           const user = await User.findByPk(admission.userId, { transaction });
-          if (user) await user.update({ username: cleanUsn ? cleanUsn.toLowerCase() : user.email }, { transaction });
+          if (user && cleanUsn) await user.update({ username: cleanUsn.toLowerCase() }, { transaction });
         }
 
         await AuditLog.create({

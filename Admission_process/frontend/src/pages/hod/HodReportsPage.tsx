@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 import {
   FileText,
   Download,
@@ -17,7 +18,7 @@ export const HodReportsPage: React.FC = () => {
     setDownloading(reportName);
     setTimeout(() => {
       setDownloading(null);
-      alert(`${reportName} generated and exported successfully.`);
+      toast.success(`${reportName} generated and exported successfully.`);
     }, 1200);
   };
 

@@ -198,7 +198,7 @@ export const HodLayout: React.FC = () => {
     '/hod/dashboard': 'HOD Dashboard',
     '/hod/students': 'Student Management',
     '/hod/students/semesters': 'Semester Student Breakdown',
-    '/hod/students/sections': 'Section Student Allocations',
+    '/hod/students/sections': 'Section Allocation',
     '/hod/faculty': 'Faculty Management',
     '/hod/faculty/create': 'Create New Faculty',
     '/hod/faculty/assignments': 'Faculty Subject Assignments',
@@ -217,6 +217,12 @@ export const HodLayout: React.FC = () => {
   };
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/hod/students/sections/') && location.pathname.endsWith('/allocate')) {
+      return 'Allocate Students';
+    }
+    if (location.pathname.startsWith('/hod/students/sections/')) {
+      return 'Section Student Details';
+    }
     if (location.pathname.startsWith('/hod/students/') && !['/hod/students/semesters', '/hod/students/sections'].includes(location.pathname)) {
       return 'Student Academic Details';
     }

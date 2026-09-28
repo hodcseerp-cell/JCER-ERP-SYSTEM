@@ -22,6 +22,7 @@ class Student extends Model {
   public admissionType!: 'FRESH' | 'LATERAL' | 'EXISTING' | string;
   public initialSemester!: number;
   public section!: string | null;
+  public sectionId!: string | null;
   public scheme!: string | null;
   public gender!: string | null;
   public previousCollege!: string | null;
@@ -125,6 +126,14 @@ Student.init(
       allowNull: true,
       defaultValue: null,
     },
+    sectionId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'sections',
+        key: 'id',
+      },
+    },
     scheme: {
       type: DataTypes.STRING(20),
       allowNull: true,
@@ -184,15 +193,21 @@ Student.init(
       {
         fields: ['semester'],
       },
+      {
+        fields: ['sectionId'],
+      },
     ],
   }
 );
 
 import Admission from './Admission';
+import Section from './Section';
 
 // Associations
 Student.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 Student.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
+Student.belongsTo(Section, { as: 'sectionEntity', foreignKey: 'sectionId' });
+Section.hasMany(Student, { as: 'students', foreignKey: 'sectionId' });
 User.hasOne(Student, { as: 'student', foreignKey: 'userId' });
 Student.hasOne(Admission, { as: 'admission', foreignKey: 'userId', sourceKey: 'userId' });
 Admission.belongsTo(Student, { as: 'student', foreignKey: 'userId', targetKey: 'userId' });

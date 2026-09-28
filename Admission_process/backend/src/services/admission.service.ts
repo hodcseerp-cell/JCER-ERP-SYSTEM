@@ -10,6 +10,7 @@ import AdmissionDocument from '../models/AdmissionDocument';
 import Department from '../models/Department';
 import User from '../models/User';
 import Student from '../models/Student';
+import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import UsnRegistry from '../models/UsnRegistry';
 import RejectionReason from '../models/RejectionReason';
 import SystemConfiguration from '../models/SystemConfiguration';
@@ -1792,16 +1793,21 @@ class AdmissionService {
           }
         }
 
+        const isLateral = (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY');
+        const semNum = isLateral ? 3 : 1;
+        const effectiveRollNumber = semNum === 1 ? (rollNumber || null) : null;
+
         const existingStudent = await Student.findOne({ where: { userId: admission.userId }, transaction });
+        let createdStudent = existingStudent;
         if (!existingStudent) {
-          await Student.create({
+          createdStudent = await Student.create({
             userId: admission.userId,
             usn: admission.usn || null,
             enrollmentNumber,
-            rollNumber,
+            rollNumber: effectiveRollNumber,
             batchYear,
             departmentId: admission.branchId!,
-            semester: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 3 : 1,
+            semester: semNum,
             dateOfBirth: dobDate,
             address: addr ? [addr.currentAddressLine1, addr.currentCity, addr.currentState, addr.currentPincode].filter(Boolean).join(', ') : '',
             fatherName: parent?.fatherName || '',
@@ -1809,12 +1815,35 @@ class AdmissionService {
             parentPhone: parent?.fatherPhone || '',
             parentEmail: parent?.fatherEmail || '',
             admissionStatus: 'APPROVED',
-            admissionType: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 'LATERAL' : 'FRESH',
-            initialSemester: (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY') ? 3 : 1,
+            admissionType: isLateral ? 'LATERAL' : 'FRESH',
+            initialSemester: semNum,
             currentAcademicYear: admission.academicYear || '2026-2027',
           }, { transaction });
         } else {
           generatedUsn = existingStudent.enrollmentNumber;
+        }
+
+        if (createdStudent) {
+          const [enrollment, created] = await StudentAcademicEnrollment.findOrCreate({
+            where: {
+              studentId: createdStudent.id,
+              academicYearId: admission.academicYear || '2026-27',
+            },
+            defaults: {
+              studentId: createdStudent.id,
+              academicYearId: admission.academicYear || '2026-27',
+              schemeId: '2025',
+              departmentId: admission.branchId!,
+              semesterId: semNum,
+              rollNumber: effectiveRollNumber,
+              entrySemester: semNum,
+              status: 'ACTIVE',
+            },
+            transaction,
+          });
+          if (!created && enrollment.departmentId !== admission.branchId) {
+            await enrollment.update({ departmentId: admission.branchId!, semesterId: semNum }, { transaction });
+          }
         }
 
         // Elevate user role to STUDENT and auto-assign USN as username

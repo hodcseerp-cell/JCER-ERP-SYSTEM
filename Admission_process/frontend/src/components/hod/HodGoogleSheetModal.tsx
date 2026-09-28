@@ -17,6 +17,7 @@ import {
   Check,
   Plus,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import hodService from '../../services/hod.service';
 import GoogleAccountConnection, { GoogleAccountData } from './GoogleAccountConnection';
 
@@ -455,9 +456,10 @@ export const HodGoogleSheetModal: React.FC<HodGoogleSheetModalProps> = ({
         tabId,
         subjectId: subjectId === 'UNMAPPED' ? null : subjectId,
       });
+      toast.success('Tab mapping updated successfully.');
       loadInitialData(selectedDivision);
-    } catch (err) {
-      alert('Failed to update tab mapping.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update tab mapping.');
     }
   };
 

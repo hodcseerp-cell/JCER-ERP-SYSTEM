@@ -18,6 +18,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import hodService from '../../services/hod.service';
 
 export const HodSheetsAccessPage: React.FC = () => {
@@ -66,24 +67,25 @@ export const HodSheetsAccessPage: React.FC = () => {
         assignmentId: row.assignmentId,
         accessId: row.googleAccessId,
       });
+      toast.success('Access verified successfully.');
       fetchMatrix();
-    } catch (err) {
-      alert('Verification failed. Please check Google Drive API status.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Verification failed. Please check Google Drive API status.');
     } finally {
       setUpdatingId(null);
     }
   };
 
   const handleRevokeAccess = async (row: any) => {
-    if (!confirm(`Revoke Google Sheet access for ${row.facultyName}?`)) return;
     setUpdatingId(row.assignmentId);
     try {
       await hodService.revokeFacultyGoogleSheetAccess(row.facultyId, {
         assignmentId: row.assignmentId,
       });
+      toast.success(`Google Sheet access revoked for ${row.facultyName}.`);
       fetchMatrix();
-    } catch (err) {
-      alert('Failed to revoke Google Sheet access.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to revoke Google Sheet access.');
     } finally {
       setUpdatingId(null);
     }

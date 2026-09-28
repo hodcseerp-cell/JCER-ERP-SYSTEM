@@ -563,9 +563,9 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
         {/* Applications List Table */}
         <div className="overflow-x-auto rounded-xl border border-neutral-100 dark:border-neutral-800">
           <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-neutral-50 dark:bg-neutral-800/40 text-neutral-500 dark:text-neutral-400 border-b border-neutral-100 dark:border-neutral-800 text-[10px] uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3 w-12 text-center">
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800 text-[10px]">
+              <tr className="text-white">
+                <th className="px-4 py-3 w-12 text-center text-white">
                   <input 
                     type="checkbox" 
                     checked={data?.applications.length ? selectedIds.length === data.applications.length : false}
@@ -573,14 +573,14 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                     className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 w-4 h-4 cursor-pointer"
                   />
                 </th>
-                <th className="px-4 py-3 font-bold">App ID</th>
-                <th className="px-4 py-3 font-bold">Applicant Info</th>
-                <th className="px-4 py-3 font-bold">Branch</th>
-                <th className="px-4 py-3 font-bold">Entrance / Merit</th>
-                <th className="px-4 py-3 font-bold">Submitted Date</th>
-                <th className="px-4 py-3 font-bold">Status</th>
-                <th className="px-4 py-3 font-bold">{getActionColumnHeader(status)}</th>
-                <th className="px-4 py-3 font-bold text-right">Actions</th>
+                <th className="px-4 py-3 font-bold text-white">App ID</th>
+                <th className="px-4 py-3 font-bold text-white">Applicant Info</th>
+                <th className="px-4 py-3 font-bold text-white">Branch</th>
+                <th className="px-4 py-3 font-bold text-white">Entrance / Merit</th>
+                <th className="px-4 py-3 font-bold text-white">Submitted Date</th>
+                <th className="px-4 py-3 font-bold text-white">Status</th>
+                <th className="px-4 py-3 font-bold text-white">{getActionColumnHeader(status)}</th>
+                <th className="px-4 py-3 font-bold text-right text-white">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 bg-white dark:bg-transparent">

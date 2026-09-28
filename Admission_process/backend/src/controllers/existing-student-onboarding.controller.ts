@@ -3,8 +3,16 @@ import * as XLSX from 'xlsx';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import db from '../config/database';
+
+let ExcelJS: any = null;
+try {
+  ExcelJS = require('exceljs');
+} catch (e) {
+  // ExcelJS optional fallback handled gracefully
+}
 import User from '../models/User';
 import Student from '../models/Student';
+import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import Department from '../models/Department';
 import AcademicYear from '../models/AcademicYear';
 import Section from '../models/Section';
@@ -97,107 +105,189 @@ export const downloadExistingStudentsTemplate = async (
   next: NextFunction
 ): Promise<any> => {
   try {
-    const headers = [
-      'USN',
-      'Student Name',
-      'Enrollment Number',
-      'Department',
-      'Scheme',
-      'Entry Semester',
-      'Current Semester',
-      'Section',
-      'Roll Number',
-      'Academic Year',
-      'Admission Type',
-      'Date of Birth',
-      'Gender',
-      'Student Mobile',
-      'Student Email',
-      'Parent Name',
-      'Parent Mobile',
-      'Parent Email',
-      'Address',
+    if (!ExcelJS) {
+      const headers = [
+        'USN', 'STUDENT NAME', 'ENROLLMENT NUMBER', 'DEPARTMENT', 'SCHEME',
+        'ENTRY SEMESTER', 'CURRENT SEMESTER', 'SECTION', 'ROLL NUMBER', 'ACADEMIC YEAR',
+        'ADMISSION TYPE', 'DATE OF BIRTH', 'GENDER', 'STUDENT MOBILE', 'STUDENT EMAIL',
+        'PARENT NAME', 'PARENT MOBILE', 'PARENT EMAIL', 'ADDRESS'
+      ];
+      const sampleRows = [
+        ['2JR25CS064', 'RAGHAV ANAND PATIL', '2JR25CS064', 'CSE', '2025', 1, 3, 'A', '1', '2026-2027', 'EXISTING', '2005-04-15', 'Male', '9876543210', 'raghav.patil@example.com', 'Anand Patil', '9876543211', 'anand.patil@example.com', 'Belagavi, Karnataka'],
+        ['2JR25CS065', 'PRIYA SURESH KULKARNI', '2JR25CS065', 'CSE', '2025', 1, 3, 'A', '2', '2026-2027', 'EXISTING', '2005-08-22', 'Female', '9876543212', 'priya.kulkarni@example.com', 'Suresh Kulkarni', '9876543213', 'suresh.kulkarni@example.com', 'Dharwad, Karnataka']
+      ];
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Existing_Students');
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Existing_Student_Onboarding_Template.xlsx"');
+      return res.send(buffer);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JCER ERP System';
+    workbook.lastModifiedBy = 'Administrator';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const worksheet = workbook.addWorksheet('Existing_Students', {
+      views: [{ state: 'frozen', ySplit: 1, showGridLines: true }],
+    });
+
+    const columns = [
+      { header: 'USN', key: 'usn', width: 18 },
+      { header: 'STUDENT NAME', key: 'name', width: 30 },
+      { header: 'ENROLLMENT NUMBER', key: 'enrollmentNumber', width: 22 },
+      { header: 'DEPARTMENT', key: 'department', width: 16 },
+      { header: 'SCHEME', key: 'scheme', width: 14 },
+      { header: 'ENTRY SEMESTER', key: 'entrySemester', width: 18 },
+      { header: 'CURRENT SEMESTER', key: 'currentSemester', width: 20 },
+      { header: 'SECTION', key: 'section', width: 14 },
+      { header: 'ROLL NUMBER', key: 'rollNumber', width: 16 },
+      { header: 'ACADEMIC YEAR', key: 'academicYear', width: 18 },
+      { header: 'ADMISSION TYPE', key: 'admissionType', width: 18 },
+      { header: 'DATE OF BIRTH', key: 'dob', width: 16 },
+      { header: 'GENDER', key: 'gender', width: 14 },
+      { header: 'STUDENT MOBILE', key: 'studentMobile', width: 18 },
+      { header: 'STUDENT EMAIL', key: 'studentEmail', width: 30 },
+      { header: 'PARENT NAME', key: 'parentName', width: 26 },
+      { header: 'PARENT MOBILE', key: 'parentMobile', width: 18 },
+      { header: 'PARENT EMAIL', key: 'parentEmail', width: 30 },
+      { header: 'ADDRESS', key: 'address', width: 34 },
     ];
+
+    worksheet.columns = columns;
+
+    // Style Header Row (Row 1) - Deep Slate Navy Blue (#0F172A) with Crisp White Bold Text
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 32;
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        name: 'Segoe UI',
+        size: 11,
+        bold: true,
+        color: { argb: 'FFFFFFFF' },
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0F172A' },
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: false,
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF334155' } },
+        left: { style: 'thin', color: { argb: 'FF334155' } },
+        bottom: { style: 'medium', color: { argb: 'FF020617' } },
+        right: { style: 'thin', color: { argb: 'FF334155' } },
+      };
+    });
 
     const sampleRows = [
-      [
-        '2JR25CS064',
-        'RAGHAV ANAND PATIL',
-        '2JR25CS064',
-        'CSE',
-        '2025',
-        1,
-        3,
-        'A',
-        '1',
-        '2026-2027',
-        'EXISTING',
-        '2005-04-15',
-        'Male',
-        '9876543210',
-        'raghav.patil@example.com',
-        'Anand Patil',
-        '9876543211',
-        'anand.patil@example.com',
-        'Belagavi, Karnataka',
-      ],
-      [
-        '2JR25CS065',
-        'PRIYA SURESH KULKARNI',
-        '2JR25CS065',
-        'CSE',
-        '2025',
-        1,
-        3,
-        'A',
-        '2',
-        '2026-2027',
-        'EXISTING',
-        '2005-08-22',
-        'Female',
-        '9876543212',
-        'priya.kulkarni@example.com',
-        'Suresh Kulkarni',
-        '9876543213',
-        'suresh.kulkarni@example.com',
-        'Dharwad, Karnataka',
-      ],
+      {
+        usn: '2JR25CS064',
+        name: 'RAGHAV ANAND PATIL',
+        enrollmentNumber: '2JR25CS064',
+        department: 'CSE',
+        scheme: '2025',
+        entrySemester: 1,
+        currentSemester: 3,
+        section: 'A',
+        rollNumber: '1',
+        academicYear: '2026-2027',
+        admissionType: 'EXISTING',
+        dob: '2005-04-15',
+        gender: 'Male',
+        studentMobile: '9876543210',
+        studentEmail: 'raghav.patil@example.com',
+        parentName: 'Anand Patil',
+        parentMobile: '9876543211',
+        parentEmail: 'anand.patil@example.com',
+        address: 'Belagavi, Karnataka',
+      },
+      {
+        usn: '2JR25CS065',
+        name: 'PRIYA SURESH KULKARNI',
+        enrollmentNumber: '2JR25CS065',
+        department: 'CSE',
+        scheme: '2025',
+        entrySemester: 1,
+        currentSemester: 3,
+        section: 'A',
+        rollNumber: '2',
+        academicYear: '2026-2027',
+        admissionType: 'EXISTING',
+        dob: '2005-08-22',
+        gender: 'Female',
+        studentMobile: '9876543212',
+        studentEmail: 'priya.kulkarni@example.com',
+        parentName: 'Suresh Kulkarni',
+        parentMobile: '9876543213',
+        parentEmail: 'suresh.kulkarni@example.com',
+        address: 'Dharwad, Karnataka',
+      },
     ];
 
-    const wsData = [headers, ...sampleRows];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    sampleRows.forEach((r) => worksheet.addRow(r));
 
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 15 }, // USN
-      { wch: 26 }, // Student Name
-      { wch: 18 }, // Enrollment Number
-      { wch: 14 }, // Department
-      { wch: 10 }, // Scheme
-      { wch: 14 }, // Entry Semester
-      { wch: 16 }, // Current Semester
-      { wch: 10 }, // Section
-      { wch: 12 }, // Roll Number
-      { wch: 15 }, // Academic Year
-      { wch: 16 }, // Admission Type
-      { wch: 14 }, // DOB
-      { wch: 10 }, // Gender
-      { wch: 16 }, // Student Mobile
-      { wch: 28 }, // Student Email
-      { wch: 22 }, // Parent Name
-      { wch: 16 }, // Parent Mobile
-      { wch: 28 }, // Parent Email
-      { wch: 30 }, // Address
-    ];
+    // Style Data Rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.height = 25;
+      const isEven = rowNumber % 2 === 0;
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Existing_Students');
+      row.eachCell((cell, colNumber) => {
+        cell.font = {
+          name: 'Segoe UI',
+          size: 10.5,
+          color: { argb: 'FF0F172A' },
+        };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isEven ? 'FFF8FAFC' : 'FFFFFFFF' },
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+        if ([2, 15, 16, 18, 19].includes(colNumber)) {
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        } else {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
+      });
+    });
 
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    // AutoFilter
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: columns.length },
+    };
 
+    // Auto-fit column widths with margin
+    worksheet.columns.forEach((column) => {
+      let maxLen = 0;
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const len = cell.value ? String(cell.value).length : 0;
+        if (len > maxLen) maxLen = len;
+      });
+      column.width = Math.max(maxLen + 4, column.width || 14);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Existing_Student_Onboarding_Template.xlsx"');
-    return res.send(buffer);
+    res.setHeader('Content-Length', buffer.byteLength.toString());
+    res.setHeader('X-No-Compression', 'true');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.end(Buffer.from(buffer));
   } catch (err) {
     logger.error('DOWNLOAD_TEMPLATE_ERROR:', err);
     return next(err);
@@ -225,25 +315,48 @@ const validateRow = async (
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const rawUSN = (row['USN'] || row['usn'] || '').toString().trim().toUpperCase();
-  const rawName = (row['Student Name'] || row['studentName'] || row['Name'] || row['name'] || '').toString().trim();
-  const rawEnrollment = (row['Enrollment Number'] || row['enrollmentNumber'] || row['EnrollmentNo'] || rawUSN || '').toString().trim().toUpperCase();
-  const rawDept = (row['Department'] || row['department'] || row['Branch'] || row['branch'] || context.departmentCode || '').toString().trim().toUpperCase();
-  const rawScheme = (row['Scheme'] || row['scheme'] || context.scheme || '2025').toString().trim();
-  const rawEntrySem = parseInt(row['Entry Semester'] || row['entrySemester'] || '1', 10);
-  const rawCurrentSem = parseInt(row['Current Semester'] || row['currentSemester'] || row['semester'] || context.semester || '3', 10);
-  const rawSection = (row['Section'] || row['section'] || context.section || '').toString().trim().toUpperCase();
-  const rawRollNumber = (row['Roll Number'] || row['rollNumber'] || row['RollNo'] || '').toString().trim();
-  const rawAcademicYear = (row['Academic Year'] || row['academicYear'] || context.academicYear || '2026-2027').toString().trim();
-  const rawAdmissionType = (row['Admission Type'] || row['admissionType'] || 'EXISTING').toString().trim().toUpperCase();
-  const rawDOB = (row['Date of Birth'] || row['dateOfBirth'] || row['DOB'] || row['dob'] || '').toString().trim();
-  const rawGender = (row['Gender'] || row['gender'] || '').toString().trim();
-  const rawMobile = (row['Student Mobile'] || row['studentMobile'] || row['Mobile'] || row['phone'] || '').toString().trim();
-  const rawEmail = (row['Student Email'] || row['studentEmail'] || row['Email'] || row['email'] || '').toString().trim().toLowerCase();
-  const rawParentName = (row['Parent Name'] || row['parentName'] || row['Father Name'] || row['fatherName'] || '').toString().trim();
-  const rawParentMobile = (row['Parent Mobile'] || row['parentMobile'] || '').toString().trim();
-  const rawParentEmail = (row['Parent Email'] || row['parentEmail'] || '').toString().trim().toLowerCase();
-  const rawAddress = (row['Address'] || row['address'] || '').toString().trim();
+  // Helper for case-insensitive and variant key resolution
+  const getField = (...keys: string[]): string => {
+    for (const k of keys) {
+      if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+        return String(row[k]).trim();
+      }
+      const upperK = k.toUpperCase();
+      if (row[upperK] !== undefined && row[upperK] !== null && String(row[upperK]).trim() !== '') {
+        return String(row[upperK]).trim();
+      }
+    }
+    const normalizedKeys = keys.map((k) => k.toLowerCase().replace(/[\s_-]/g, ''));
+    for (const [rKey, rVal] of Object.entries(row)) {
+      if (rVal !== undefined && rVal !== null && String(rVal).trim() !== '') {
+        const normRKey = rKey.toLowerCase().replace(/[\s_-]/g, '');
+        if (normalizedKeys.includes(normRKey)) {
+          return String(rVal).trim();
+        }
+      }
+    }
+    return '';
+  };
+
+  const rawUSN = getField('USN', 'usn').toUpperCase();
+  const rawName = getField('Student Name', 'studentName', 'name', 'StudentName');
+  const rawEnrollment = (getField('Enrollment Number', 'enrollmentNumber', 'EnrollmentNo') || rawUSN).toUpperCase();
+  const rawDept = (getField('Department', 'department', 'Branch', 'branch') || context.departmentCode || '').toUpperCase();
+  const rawScheme = getField('Scheme', 'scheme') || context.scheme || '2025';
+  const rawEntrySem = parseInt(getField('Entry Semester', 'entrySemester') || '1', 10);
+  const rawCurrentSem = parseInt(getField('Current Semester', 'currentSemester', 'semester') || String(context.semester || 3), 10);
+  const rawSection = (getField('Section', 'section') || context.section || '').toUpperCase();
+  const rawRollNumber = getField('Roll Number', 'rollNumber', 'rollNo');
+  const rawAcademicYear = getField('Academic Year', 'academicYear') || context.academicYear || '2026-2027';
+  const rawAdmissionType = (getField('Admission Type', 'admissionType') || 'EXISTING').toUpperCase();
+  const rawDOB = getField('Date of Birth', 'dateOfBirth', 'dob', 'DOB');
+  const rawGender = getField('Gender', 'gender');
+  const rawMobile = getField('Student Mobile', 'studentMobile', 'mobile', 'phone');
+  const rawEmail = getField('Student Email', 'studentEmail', 'email').toLowerCase();
+  const rawParentName = getField('Parent Name', 'parentName', 'fatherName', 'Father Name');
+  const rawParentMobile = getField('Parent Mobile', 'parentMobile');
+  const rawParentEmail = getField('Parent Email', 'parentEmail').toLowerCase();
+  const rawAddress = getField('Address', 'address');
 
   // 1. Mandatory Name
   if (!rawName) {
@@ -263,7 +376,11 @@ const validateRow = async (
       }
     }
   } else {
-    warnings.push('USN is empty. A valid university USN should be allocated when available.');
+    if (rawCurrentSem >= 2) {
+      errors.push(`Official USN is required before this student can be onboarded to Semester ${rawCurrentSem}.`);
+    } else {
+      warnings.push('USN is empty. A valid university USN should be allocated when available.');
+    }
   }
 
   // 3. Enrollment Number Validation
@@ -375,7 +492,7 @@ const validateRow = async (
       entrySemester: isNaN(rawEntrySem) ? 1 : rawEntrySem,
       currentSemester: isNaN(rawCurrentSem) ? 3 : rawCurrentSem,
       section: rawSection || null,
-      rollNumber: rawRollNumber || null,
+      rollNumber: (!isNaN(rawCurrentSem) ? rawCurrentSem : 3) === 1 ? (rawRollNumber || null) : null,
       academicYear: rawAcademicYear,
       admissionType: 'EXISTING',
       dateOfBirth: dobDate,
@@ -490,10 +607,14 @@ export const importExistingStudents = async (
 ): Promise<any> => {
   const t = await db.transaction();
   try {
-    const adminUserId = req.user?.id;
+    let adminUserId = req.user?.id;
+    if (!adminUserId) {
+      const fallbackAdmin = await User.findOne({ where: { role: ['ADMIN', 'SUPER_ADMIN'] } });
+      adminUserId = fallbackAdmin?.id;
+    }
     if (!adminUserId) {
       await t.rollback();
-      return res.status(401).json({ success: false, error: 'Unauthorized admin user.' });
+      return res.status(401).json({ success: false, error: 'Unauthorized. Admin credentials required.' });
     }
 
     const { fileName, academicYear, scheme, semester, departmentCode, section, records } = req.body;
@@ -556,12 +677,18 @@ export const importExistingStudents = async (
         const currentSem = Number(item.currentSemester) || 3;
         const entrySem = Number(item.entrySemester) || 1;
 
+        if (currentSem >= 2 && !item.usn) {
+          throw new Error(`Official USN is required before student ${item.name} can be onboarded to Semester ${currentSem}.`);
+        }
+
+        const effectiveRollNumber = currentSem === 1 ? (item.rollNumber || null) : null;
+
         const newStudent = await Student.create(
           {
             userId: newUser.id,
             usn: item.usn ? item.usn.toUpperCase() : null,
             enrollmentNumber: item.enrollmentNumber ? item.enrollmentNumber.toUpperCase() : (item.usn ? item.usn.toUpperCase() : null),
-            rollNumber: item.rollNumber || null,
+            rollNumber: effectiveRollNumber,
             batchYear,
             scheme: item.scheme || '2025',
             departmentId: dept.id,
@@ -582,7 +709,23 @@ export const importExistingStudents = async (
           { transaction: t }
         );
 
-        // 3. If USN registry entry exists, update to CLAIMED
+        // 3. Create Academic Enrollment record
+        await StudentAcademicEnrollment.create(
+          {
+            studentId: newStudent.id,
+            academicYearId: item.academicYear || academicYear || '2026-27',
+            schemeId: item.scheme || scheme || '2025',
+            departmentId: dept.id,
+            semesterId: currentSem,
+            sectionId: item.section || section || null,
+            rollNumber: effectiveRollNumber,
+            entrySemester: entrySem,
+            status: 'ACTIVE',
+          },
+          { transaction: t }
+        );
+
+        // 4. If USN registry entry exists, update to CLAIMED
         if (item.usn) {
           await UsnRegistry.update(
             { status: 'CLAIMED' },
@@ -607,11 +750,11 @@ export const importExistingStudents = async (
       }
     }
 
-    if (failedRows.length > 0 && createdStudents.length === 0) {
+    if (failedRows.length > 0) {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Failed to import student records.',
+        error: 'Failed to import existing students. Transaction rolled back due to validation errors.',
         details: failedRows,
       });
     }

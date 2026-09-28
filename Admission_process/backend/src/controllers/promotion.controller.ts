@@ -7,6 +7,7 @@ import Admission from '../models/Admission';
 import Department from '../models/Department';
 import PromotionBatch from '../models/PromotionBatch';
 import StudentPromotionHistory from '../models/StudentPromotionHistory';
+import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import admissionService from '../services/admission.service';
 
 interface AuthenticatedRequest extends Request {
@@ -221,6 +222,17 @@ export const previewPromotion = async (req: Request, res: Response, next: NextFu
         return;
       }
 
+      // Requirement 4: Official USN is mandatory before promoting to Semester 2+
+      if (toSem >= 2 && (!student.usn || !student.usn.trim())) {
+        skippedList.push({
+          id,
+          name,
+          usn: student.usn,
+          reason: 'Official USN is required before this student can be promoted to Semester 2.'
+        });
+        return;
+      }
+
       eligibleList.push({
         id,
         name,
@@ -336,13 +348,25 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
         return;
       }
 
+      // Requirement 4: Official USN is mandatory before promoting to Semester 2+
+      if (toSem >= 2 && (!student.usn || !student.usn.trim())) {
+        skippedList.push({
+          id,
+          name,
+          usn: student.usn,
+          reason: 'Official USN is required before this student can be promoted to Semester 2.'
+        });
+        return;
+      }
+
       validIds.push(id);
     });
 
     if (validIds.length === 0) {
+      const usnError = skippedList.find(s => s.reason?.includes('Official USN is required'));
       return res.status(400).json({
         success: false,
-        error: 'No eligible students found to promote.',
+        error: usnError ? usnError.reason : 'No eligible students found to promote.',
         data: {
           promotedCount: 0,
           skippedCount: skippedList.length,
@@ -398,14 +422,25 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
         continue;
       }
 
+      if (toSem >= 2 && (!student.usn || !student.usn.trim())) {
+        skippedList.push({
+          id: student.id,
+          name,
+          usn: student.usn,
+          reason: 'Official USN is required before this student can be promoted to Semester 2.'
+        });
+        continue;
+      }
+
       finalPromoteIds.push(student.id);
     }
 
     if (finalPromoteIds.length === 0) {
       await transaction.rollback();
+      const usnError = skippedList.find(s => s.reason?.includes('Official USN is required'));
       return res.status(400).json({
         success: false,
-        error: 'All selected students skipped due to concurrent updates.',
+        error: usnError ? usnError.reason : 'All selected students skipped due to concurrent updates.',
         data: {
           promotedCount: 0,
           skippedCount: skippedList.length,
@@ -424,15 +459,41 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
       remarks: remarks || `Bulk Promotion of ${finalPromoteIds.length} students to ${promYear} (${toSem}th Sem)`
     }, { transaction });
 
-    // Update students & insert history
+    // Update students & insert history & create new StudentAcademicEnrollment
     for (const student of lockedStudents) {
       if (!finalPromoteIds.includes(student.id)) continue;
 
+      // Update student: semester increments, section reset, rollNumber set to NULL for Sem 2+
       await student.update({
         semester: toSem,
         currentAcademicYear: promYear,
+        rollNumber: null, // Requirement 2, 3, 4: roll_number = NULL for semester >= 2
+        sectionId: null,
+        section: null,
         lastPromotedAt: new Date(),
         lastPromotedBy: operatorId
+      }, { transaction });
+
+      // Update previous active academic enrollments to PROMOTED
+      await StudentAcademicEnrollment.update(
+        { status: 'PROMOTED' },
+        {
+          where: { studentId: student.id, status: 'ACTIVE' },
+          transaction
+        }
+      );
+
+      // Create new academic enrollment for the target semester with rollNumber = null
+      await StudentAcademicEnrollment.create({
+        studentId: student.id,
+        departmentId: student.departmentId,
+        academicYearId: promYear,
+        schemeId: student.scheme || '2025',
+        semesterId: toSem,
+        sectionId: null,
+        rollNumber: null, // Requirement 3 & 4: roll_number = NULL
+        entrySemester: student.initialSemester || 1,
+        status: 'ACTIVE'
       }, { transaction });
 
       await StudentPromotionHistory.create({

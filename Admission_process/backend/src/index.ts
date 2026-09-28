@@ -1,3 +1,4 @@
+// Trigger backend reload - 2026-09-27T17:23:00 - adminAdmissionRouter synchronized
 import app from './app';
 import sequelize, { logDatabaseConfiguration } from './config/database';
 import { initRedis } from './config/redis';
@@ -8,6 +9,7 @@ import './models/GoogleSheetTab';
 import './models/FacultyGoogleSheetAccess';
 import './models/GoogleSheetSyncLog';
 import './models/GoogleOAuthToken';
+import './models/GoogleSheetResource';
 
 const PORT = process.env.PORT || 5000;
 

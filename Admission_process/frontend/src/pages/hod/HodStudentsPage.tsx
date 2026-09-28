@@ -1,508 +1,945 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   GraduationCap,
   Search,
-  Filter,
   Users,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle,
   Eye,
   CheckCircle2,
   Calendar,
   Layers,
-  ArrowUpDown,
-  BookOpen,
   RefreshCw,
-  Download,
+  User,
+  Clock,
+  BookOpen,
+  ClipboardList,
   FileSpreadsheet,
-  ChevronDown,
-  Circle,
-  ExternalLink,
 } from 'lucide-react';
+import { RootState } from '../../store';
 import hodService, { HodStudentItem } from '../../services/hod.service';
-import HodGoogleSheetModal from '../../components/hod/HodGoogleSheetModal';
 
 export const HodStudentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialSem = searchParams.get('semester') || '1';
+  const { user } = useSelector((state: RootState) => state.auth);
+
+  const deptCode = user?.department?.code || 'ECE';
+  const activeAY = '2026-27';
+
+  const initialSem = searchParams.get('semester') || 'ALL';
   const initialSec = searchParams.get('section') || 'ALL';
 
   const [students, setStudents] = useState<HodStudentItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [availableSections, setAvailableSections] = useState<string[]>(['A', 'B', 'C']);
 
-  // Filters
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  // Applied Filters State
+  const [search, setSearch] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<string>(initialSem);
   const [selectedSection, setSelectedSection] = useState<string>(initialSec);
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [academicYear, setAcademicYear] = useState<string>(activeAY);
+  const [status, setStatus] = useState<string>('ALL');
+  const [admissionType, setAdmissionType] = useState<string>('ALL');
+  const [qualification, setQualification] = useState<string>('ALL');
+  const [gender, setGender] = useState<string>('ALL');
+  const [category, setCategory] = useState<string>('ALL');
+  const [district, setDistrict] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('date');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
-  // Google Sheets Modal & Status State
-  const [googleDropdownOpen, setGoogleDropdownOpen] = useState<boolean>(false);
-  const [googleModalOpen, setGoogleModalOpen] = useState<boolean>(false);
-  const [activeSheetType, setActiveSheetType] = useState<'ATTENDANCE' | 'ACADEMIC_MARKS'>('ATTENDANCE');
-  const [semesterConnections, setSemesterConnections] = useState<{
-    attendanceConnected: boolean;
-    marksConnected: boolean;
-  }>({ attendanceConnected: false, marksConnected: false });
+  // Pending Filters State (applied when user clicks "Apply Filters")
+  const [pendingSearch, setPendingSearch] = useState<string>('');
+  const [pendingSemester, setPendingSemester] = useState<string>(initialSem);
+  const [pendingSection, setPendingSection] = useState<string>(initialSec);
+  const [pendingAcademicYear, setPendingAcademicYear] = useState<string>(activeAY);
+  const [pendingStatus, setPendingStatus] = useState<string>('ALL');
+  const [pendingAdmissionType, setPendingAdmissionType] = useState<string>('ALL');
+  const [pendingQualification, setPendingQualification] = useState<string>('ALL');
+  const [pendingGender, setPendingGender] = useState<string>('ALL');
+  const [pendingCategory, setPendingCategory] = useState<string>('ALL');
+  const [pendingDistrict, setPendingDistrict] = useState<string>('');
+  const [pendingStartDate, setPendingStartDate] = useState<string>('');
+  const [pendingEndDate, setPendingEndDate] = useState<string>('');
+  const [pendingSortBy, setPendingSortBy] = useState<string>('date');
+  const [pendingSortOrder, setPendingSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
   // Pagination
   const [page, setPage] = useState<number>(1);
-  const [limit] = useState<number>(12);
+  const [limit] = useState<number>(10);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalStudents, setTotalStudents] = useState<number>(0);
 
+  // Sync URL query params with state (e.g. from HOD Semester Breakdown "View Cohort")
   useEffect(() => {
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
-    const oauthCallback = searchParams.get('oauth_callback');
-    if (code && oauthCallback) {
-      hodService
-        .submitGoogleOAuthCallback({ code, state: state || undefined })
-        .then(() => {
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete('code');
-          newParams.delete('state');
-          newParams.delete('oauth_callback');
-          setSearchParams(newParams, { replace: true });
-          fetchSemesterSheetStatus();
-        })
-        .catch((e) => {
-          console.warn('OAuth callback handling notice:', e);
-        });
+    const urlSem = searchParams.get('semester') || 'ALL';
+    const urlSec = searchParams.get('section') || 'ALL';
+    if (urlSem !== selectedSemester) {
+      setSelectedSemester(urlSem);
+      setPendingSemester(urlSem);
+      setPage(1);
     }
+    if (urlSec !== selectedSection) {
+      setSelectedSection(urlSec);
+      setPendingSection(urlSec);
+      setPage(1);
+    }
+  }, [searchParams]);
+
+  // Load available sections dynamically for HOD's department
+  useEffect(() => {
+    hodService
+      .getStudentSections()
+      .then((secData) => {
+        if (Array.isArray(secData) && secData.length > 0) {
+          const uniqueNames = Array.from(new Set(secData.map((s) => s.name).filter(Boolean)));
+          if (uniqueNames.length > 0) {
+            uniqueNames.sort();
+            setAvailableSections(uniqueNames);
+          }
+        }
+      })
+      .catch((err) => console.warn('Could not load department sections:', err));
   }, []);
 
+  // Fetch student data whenever active filter/page states change
   useEffect(() => {
     fetchStudents();
-    fetchSemesterSheetStatus();
-  }, [page, selectedSemester, selectedSection, selectedStatus]);
+  }, [
+    page,
+    selectedSemester,
+    selectedSection,
+    academicYear,
+    status,
+    admissionType,
+    qualification,
+    gender,
+    category,
+    district,
+    startDate,
+    endDate,
+    sortBy,
+    sortOrder,
+    search,
+  ]);
 
-  const fetchSemesterSheetStatus = async () => {
-    if (selectedSemester === 'ALL') {
-      setSemesterConnections({ attendanceConnected: false, marksConnected: false });
-      return;
-    }
-    try {
-      const data = await hodService.getSemesterGoogleSheets(selectedSemester);
-      setSemesterConnections({
-        attendanceConnected: Boolean(data?.attendance),
-        marksConnected: Boolean(data?.marks),
-      });
-    } catch (err) {
-      // ignore
-    }
-  };
+  // Debounced auto-search when user types in search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pendingSearch.trim() !== search) {
+        setSearch(pendingSearch.trim());
+        setPage(1);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [pendingSearch]);
 
   const fetchStudents = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await hodService.getStudents({
         page,
         limit,
-        semester: selectedSemester,
-        section: selectedSection,
-        status: selectedStatus,
-        search: searchTerm,
+        semester: selectedSemester === 'ALL' ? undefined : selectedSemester,
+        section: selectedSection === 'ALL' ? undefined : selectedSection,
+        status: status === 'ALL' ? undefined : status,
+        academicYear: academicYear === 'ALL' ? undefined : academicYear,
+        admissionType: admissionType === 'ALL' ? undefined : admissionType,
+        qualification: qualification === 'ALL' ? undefined : qualification,
+        gender: gender === 'ALL' ? undefined : gender,
+        category: category === 'ALL' ? undefined : category,
+        district: district.trim() || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        search: search.trim() || undefined,
+        sortBy,
+        sortOrder,
       });
-      setStudents(res.students);
-      setTotalPages(res.pagination.totalPages);
-      setTotalStudents(res.pagination.total);
-    } catch (err: any) {
-      console.error('Failed to load students:', err);
-      setError('Unable to load students for this department.');
+
+      setStudents(res.students || []);
+      setTotalPages(res.pagination?.totalPages || 1);
+      setTotalStudents(res.pagination?.total || 0);
+    } catch (err) {
+      console.error('Failed to load department students:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Quick Filter Semester Selection
+  const handleSelectSemester = (sem: string) => {
+    setSelectedSemester(sem);
+    setPendingSemester(sem);
     setPage(1);
+
+    const newParams = new URLSearchParams(searchParams);
+    if (sem === 'ALL') {
+      newParams.delete('semester');
+    } else {
+      newParams.set('semester', sem);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Quick Filter Section Selection
+  const handleSelectSection = (sec: string) => {
+    setSelectedSection(sec);
+    setPendingSection(sec);
+    setPage(1);
+
+    const newParams = new URLSearchParams(searchParams);
+    if (sec === 'ALL') {
+      newParams.delete('section');
+    } else {
+      newParams.set('section', sec);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Explicit Search Execution
+  const handleExecuteSearch = () => {
+    setSearch(pendingSearch.trim());
+    setSelectedSemester(pendingSemester);
+    setSelectedSection(pendingSection);
+    setAcademicYear(pendingAcademicYear);
+    setStatus(pendingStatus);
+    setAdmissionType(pendingAdmissionType);
+    setQualification(pendingQualification);
+    setGender(pendingGender);
+    setCategory(pendingCategory);
+    setDistrict(pendingDistrict);
+    setStartDate(pendingStartDate);
+    setEndDate(pendingEndDate);
+    setSortBy(pendingSortBy);
+    setSortOrder(pendingSortOrder);
+    setPage(1);
+
+    const newParams = new URLSearchParams(searchParams);
+    if (pendingSemester !== 'ALL') newParams.set('semester', pendingSemester);
+    else newParams.delete('semester');
+    if (pendingSection !== 'ALL') newParams.set('section', pendingSection);
+    else newParams.delete('section');
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Reset Filters
+  const handleResetFilters = () => {
+    setPendingSearch('');
+    setPendingAcademicYear('ALL');
+    setPendingSemester('ALL');
+    setPendingSection('ALL');
+    setPendingStatus('ALL');
+    setPendingAdmissionType('ALL');
+    setPendingQualification('ALL');
+    setPendingGender('ALL');
+    setPendingCategory('ALL');
+    setPendingDistrict('');
+    setPendingStartDate('');
+    setPendingEndDate('');
+    setPendingSortBy('date');
+    setPendingSortOrder('DESC');
+
+    setSearch('');
+    setSelectedSemester('ALL');
+    setSelectedSection('ALL');
+    setAcademicYear('ALL');
+    setStatus('ALL');
+    setAdmissionType('ALL');
+    setQualification('ALL');
+    setGender('ALL');
+    setCategory('ALL');
+    setDistrict('');
+    setStartDate('');
+    setEndDate('');
+    setSortBy('date');
+    setSortOrder('DESC');
+    setPage(1);
+
+    const newParams = new URLSearchParams();
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleRefresh = () => {
     fetchStudents();
   };
 
-  const openGoogleModal = (type: 'ATTENDANCE' | 'ACADEMIC_MARKS') => {
-    setActiveSheetType(type);
-    setGoogleDropdownOpen(false);
-    setGoogleModalOpen(true);
+  // Status mapping for badge colors
+  const STATUS_COLOR_MAP: Record<string, string> = {
+    ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+    ENROLLED: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800',
+    APPROVED: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800',
+    VALIDATED: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800',
+    SUBMITTED: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800',
+    UNDER_REVIEW: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+    PENDING: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800',
+    REJECTED: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800',
+    CANCELLED: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800',
+  };
+
+  // Helper to format section cleanly as "A", "B", etc. without "Sec " or UUID strings
+  const formatSectionDisplay = (sec: string | null | undefined): string => {
+    if (!sec) return '—';
+    const trimmed = String(sec).trim();
+    if (!trimmed || trimmed === '—') return '—';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+      return '—';
+    }
+    const clean = trimmed.replace(/^(Section|Sec)\s*/i, '').trim();
+    return clean || '—';
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* ── Page Header (Admin / HOD Style) ──────────────────────────────────── */}
+    <div className="space-y-6 animate-fade-in w-full pb-12">
+      {/* ── Top Row: KPI Card & Actions (Admin Style) ────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          {/* Total Students Counter Card */}
-          <div className="bg-neutral-900 text-white rounded-2xl px-5 py-3 shadow-sm border border-neutral-800">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
+        {/* Total Department Students KPI Card */}
+        <div className="p-3.5 rounded-2xl border text-left transition-all duration-300 shadow-sm relative overflow-hidden flex flex-col justify-between h-20 w-56 bg-neutral-900 border-neutral-950 text-white dark:bg-neutral-950 dark:border-neutral-900">
+          <div className="flex justify-between items-start w-full">
+            <span className="text-[10px] font-black uppercase tracking-wider leading-none opacity-75">
               Total Department Students
             </span>
-            <div className="text-2xl font-black mt-0.5">
-              {totalStudents} <span className="text-xs font-semibold text-neutral-400">students</span>
-            </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+          </div>
+          <div className="flex items-baseline gap-1 mt-auto">
+            <span className="text-xl font-black leading-none">{totalStudents}</span>
+            <span className="text-[9px] font-bold opacity-60">students</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          
-          {/* Google Sheets Action Dropdown (Matching Screenshot Pill) */}
-          <div className="relative">
-            <button
-              onClick={() => setGoogleDropdownOpen(!googleDropdownOpen)}
-              className="px-4 py-2 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
-            >
-              <span className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
-                G
-              </span>
-              <span>Google Sheets</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-
-            {googleDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-neutral-200 dark:border-neutral-800 py-2 z-30 animate-fadeIn">
-                <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-neutral-400 border-b border-neutral-100 dark:border-neutral-800">
-                  Semester {selectedSemester !== 'ALL' ? selectedSemester : '1'} Sheets
-                </div>
-
-                <button
-                  onClick={() => openGoogleModal('ATTENDANCE')}
-                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Import Attendance</span>
-                  </div>
-                  {semesterConnections.attendanceConnected ? (
-                    <span className="text-[10px] font-black text-emerald-600">✓ Connected</span>
-                  ) : (
-                    <span className="text-[10px] text-neutral-400">○ Not Connected</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => openGoogleModal('ACADEMIC_MARKS')}
-                  className="w-full text-left px-4 py-2.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-amber-600" />
-                    <span>Import Academic Marks</span>
-                  </div>
-                  {semesterConnections.marksConnected ? (
-                    <span className="text-[10px] font-black text-emerald-600">✓ Connected</span>
-                  ) : (
-                    <span className="text-[10px] text-neutral-400">○ Not Connected</span>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-
+        {/* Right Actions: Breakdown, Allocations, Refresh */}
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
           <Link
             to="/hod/students/semesters"
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-sm flex items-center gap-2"
           >
-            <Calendar className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            <Calendar size={14} className="text-violet-600 dark:text-violet-400" />
             <span>Semester Breakdown</span>
           </Link>
+
           <Link
             to="/hod/students/sections"
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-sm flex items-center gap-2"
           >
-            <Layers className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            <Layers size={14} className="text-violet-600 dark:text-violet-400" />
             <span>Section Allocations</span>
           </Link>
-          <button
-            onClick={() => {
-              fetchStudents();
-              fetchSemesterSheetStatus();
-            }}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5"
+
+          <Link
+            to="/hod/google-sheets/connect"
+            className="px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-sm flex items-center gap-2"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-neutral-500 ${loading ? 'animate-spin' : ''}`} />
+            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
+            <span>Connect Academic Sheet</span>
+          </Link>
+
+          <button
+            onClick={handleRefresh}
+            className="p-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-sm flex items-center gap-2 text-xs font-bold text-neutral-600 dark:text-neutral-300 cursor-pointer"
+            title="Refresh student list"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* ── Quick Filter Pills (Matching Admin Screenshot 2) ────────────────── */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
-        {/* Semester quick pills with live sheet connection indicators */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500 min-w-36">
-              Quick Filter By Semester:
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                onClick={() => {
-                  setSelectedSemester('ALL');
-                  setPage(1);
-                }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                  selectedSemester === 'ALL'
-                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
-                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
-                }`}
-              >
-                ALL SEM
-              </button>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                <button
-                  key={sem}
-                  onClick={() => {
-                    setSelectedSemester(String(sem));
-                    setPage(1);
-                  }}
-                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
-                    selectedSemester === String(sem)
-                      ? 'bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white font-bold shadow-sm border border-[#1e3a8a]/40'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
-                  }`}
-                >
-                  Sem {sem}
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* ── Quick Filter by Semester ────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-450 dark:text-neutral-500">
+          Quick Filter by Semester
+        </label>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth">
+          <button
+            onClick={() => handleSelectSemester('ALL')}
+            className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[75px] h-10 flex items-center justify-center text-xs font-black shadow-sm cursor-pointer ${
+              selectedSemester === 'ALL'
+                ? 'bg-blue-600 border-blue-700 text-white'
+                : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+            }`}
+          >
+            <span className="w-full text-center leading-none">ALL SEM</span>
+          </button>
 
-          {/* Connection Status Indicator for selected semester */}
-          {selectedSemester !== 'ALL' && (
-            <div className="flex items-center gap-3 text-[11px] font-bold self-start sm:self-auto bg-slate-50 dark:bg-neutral-800 px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700">
-              <span className="text-neutral-400 uppercase text-[9px]">Sem {selectedSemester} Connections:</span>
-              <button
-                onClick={() => openGoogleModal('ATTENDANCE')}
-                className={`flex items-center gap-1 hover:underline ${
-                  semesterConnections.attendanceConnected ? 'text-emerald-600' : 'text-neutral-400'
-                }`}
-              >
-                <span>Attendance:</span>
-                <span>{semesterConnections.attendanceConnected ? '✓ Connected' : '○ Not Connected'}</span>
-              </button>
-              <span className="text-neutral-300">|</span>
-              <button
-                onClick={() => openGoogleModal('ACADEMIC_MARKS')}
-                className={`flex items-center gap-1 hover:underline ${
-                  semesterConnections.marksConnected ? 'text-emerald-600' : 'text-neutral-400'
-                }`}
-              >
-                <span>Marks:</span>
-                <span>{semesterConnections.marksConnected ? '✓ Connected' : '○ Not Connected'}</span>
-              </button>
-            </div>
-          )}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+            <button
+              key={s}
+              onClick={() => handleSelectSemester(s.toString())}
+              className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[75px] h-10 flex items-center justify-center text-xs font-black shadow-sm cursor-pointer ${
+                selectedSemester === s.toString()
+                  ? 'bg-blue-600 border-blue-700 text-white'
+                  : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+              }`}
+            >
+              <span className="w-full text-center leading-none">Sem {s}</span>
+            </button>
+          ))}
         </div>
+      </div>
 
-        {/* Section quick pills */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500 min-w-36">
-            Quick Filter By Section:
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {['ALL', 'A', 'B', 'C'].map((sec) => (
+      {/* ── Quick Filter by Section ─────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-450 dark:text-neutral-500">
+          Quick Filter by Section
+        </label>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth">
+          <button
+            onClick={() => handleSelectSection('ALL')}
+            className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[85px] h-10 flex items-center justify-center text-xs font-black shadow-sm cursor-pointer ${
+              selectedSection === 'ALL'
+                ? 'bg-neutral-900 border-neutral-950 text-white dark:bg-white dark:text-neutral-900'
+                : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+            }`}
+          >
+            <span className="w-full text-center leading-none">All Sections</span>
+          </button>
+
+          {availableSections.map((sec) => {
+            const cleanLabel = formatSectionDisplay(sec);
+            const isSecActive =
+              selectedSection === sec ||
+              (cleanLabel !== '—' && formatSectionDisplay(selectedSection) === cleanLabel);
+            return (
               <button
                 key={sec}
-                onClick={() => {
-                  setSelectedSection(sec);
-                  setPage(1);
-                }}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
-                  selectedSection === sec
-                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-sm'
-                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'
+                onClick={() => handleSelectSection(sec)}
+                className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[85px] h-10 flex items-center justify-center text-xs font-black shadow-sm cursor-pointer ${
+                  isSecActive
+                    ? 'bg-neutral-900 border-neutral-950 text-white dark:bg-white dark:text-neutral-900'
+                    : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
                 }`}
               >
-                {sec === 'ALL' ? 'All Sections' : `Section ${sec}`}
+                <span className="w-full text-center leading-none">
+                  Section {cleanLabel !== '—' ? cleanLabel : sec}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Search Bar + Status dropdown */}
-        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-lg">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+      {/* ── Search & Advanced Filters Panel (Admin Style) ────────────────────── */}
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-sm border border-neutral-200/60 dark:border-neutral-800">
+        {/* Search Input Row */}
+        <div className="px-5 py-3.5 flex items-center gap-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-400 transition-all">
+            <Search className="shrink-0 text-neutral-400" size={16} />
             <input
               type="text"
-              placeholder="Search by student name, USN, or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-24 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-            <button
-              type="submit"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[11px] transition-colors"
-            >
-              Search
-            </button>
-          </form>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-neutral-500">Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setPage(1);
+              placeholder="Search by name, USN, enrollment number, email..."
+              value={pendingSearch}
+              onChange={(e) => setPendingSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleExecuteSearch();
+                }
               }}
-              className="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-800 dark:text-neutral-200 focus:ring-2 focus:ring-violet-500"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="APPROVED">Approved</option>
-              <option value="VALIDATED">Validated</option>
-              <option value="PENDING">Pending</option>
-            </select>
+              className="flex-1 bg-transparent text-sm text-neutral-800 dark:text-white placeholder:text-neutral-400 outline-none font-medium"
+            />
+            {pendingSearch && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingSearch('');
+                  setSearch('');
+                  setPage(1);
+                }}
+                className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors text-xs font-bold cursor-pointer"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleExecuteSearch}
+            className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+          >
+            <Search size={14} />
+            <span>Search</span>
+          </button>
+        </div>
+
+        {/* Advanced Filters Grid */}
+        <div className="px-5 pt-4 pb-5 space-y-4">
+          {/* Row 1: 6 Primary Dropdowns */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-3.5 gap-y-3">
+            {/* Academic Year */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Academic Year
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <Calendar size={12} />
+                </span>
+                <select
+                  value={pendingAcademicYear}
+                  onChange={(e) => setPendingAcademicYear(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Years</option>
+                  {Array.from({ length: 5 }).map((_, i) => {
+                    const y = 2026 + i;
+                    const opt = `${y}-${(y + 1).toString().slice(2)}`;
+                    return (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+
+            {/* Semester */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Semester
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <GraduationCap size={12} />
+                </span>
+                <select
+                  value={pendingSemester}
+                  onChange={(e) => setPendingSemester(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Semesters</option>
+                  <option value="1">1st Semester</option>
+                  <option value="2">2nd Semester</option>
+                  <option value="3">3rd Semester</option>
+                  <option value="4">4th Semester</option>
+                  <option value="5">5th Semester</option>
+                  <option value="6">6th Semester</option>
+                  <option value="7">7th Semester</option>
+                  <option value="8">8th Semester</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Status
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <Clock size={12} />
+                </span>
+                <select
+                  value={pendingStatus}
+                  onChange={(e) => setPendingStatus(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="ENROLLED">Admission Confirmed</option>
+                  <option value="APPROVED">Verified (Admin)</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="UNDER_REVIEW">Under Review</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Admission Type */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Admission Type
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <BookOpen size={12} />
+                </span>
+                <select
+                  value={pendingAdmissionType}
+                  onChange={(e) => setPendingAdmissionType(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Types</option>
+                  <option value="KCET">KCET</option>
+                  <option value="DCET">DCET (Lateral)</option>
+                  <option value="MANAGEMENT">Management</option>
+                  <option value="COMEDK">COMEDK</option>
+                  <option value="EXISTING">Existing</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Qualification */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Qualification
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <BookOpen size={12} />
+                </span>
+                <select
+                  value={pendingQualification}
+                  onChange={(e) => setPendingQualification(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Qualifications</option>
+                  <option value="PUC">PUC / 12th</option>
+                  <option value="DIPLOMA">Diploma</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Gender */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Gender
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                  <User size={12} />
+                </span>
+                <select
+                  value={pendingGender}
+                  onChange={(e) => setPendingGender(e.target.value)}
+                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                >
+                  <option value="ALL">All Genders</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Category, District, Submitted Date Range, Sort By, Actions */}
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+            {/* Category */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                Category
+              </label>
+              <select
+                value={pendingCategory}
+                onChange={(e) => setPendingCategory(e.target.value)}
+                className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer min-w-[130px] h-[36px]"
+              >
+                <option value="ALL">All Categories</option>
+                <option value="GM">GM (General Merit)</option>
+                <option value="OBC">OBC</option>
+                <option value="SC">SC</option>
+                <option value="ST">ST</option>
+                <option value="2A">2A</option>
+                <option value="2B">2B</option>
+                <option value="3A">3A</option>
+                <option value="3B">3B</option>
+                <option value="C1">C1</option>
+              </select>
+            </div>
+
+            {/* District */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                District
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Belagavi"
+                value={pendingDistrict}
+                onChange={(e) => setPendingDistrict(e.target.value)}
+                className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 w-32 placeholder:text-neutral-400 h-[36px]"
+              />
+            </div>
+
+            {/* Submitted Date Range */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Submitted Date Range
+              </label>
+              <div className="flex items-center gap-2 h-[36px]">
+                <input
+                  type="date"
+                  value={pendingStartDate}
+                  onChange={(e) => setPendingStartDate(e.target.value)}
+                  className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 h-full"
+                />
+                <span className="text-xs font-semibold text-neutral-400">to</span>
+                <input
+                  type="date"
+                  value={pendingEndDate}
+                  onChange={(e) => setPendingEndDate(e.target.value)}
+                  className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 h-full"
+                />
+              </div>
+            </div>
+
+            {/* Sort By */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                Sort By
+              </label>
+              <div className="flex items-center gap-2 h-[36px]">
+                <select
+                  value={pendingSortBy}
+                  onChange={(e) => setPendingSortBy(e.target.value)}
+                  className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer h-full"
+                >
+                  <option value="date">Date Submitted</option>
+                  <option value="rank">Enrollment Number</option>
+                  <option value="name">Student Name</option>
+                  <option value="usn">USN</option>
+                  <option value="updatedAt">Last Updated</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setPendingSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'))}
+                  className="flex items-center gap-1 px-3 py-2 border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 rounded-lg text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 transition-colors whitespace-nowrap h-full cursor-pointer"
+                >
+                  {pendingSortOrder === 'DESC' ? '↓ Newest' : '↑ Oldest'}
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Actions: Reset & Apply Filters */}
+            <div className="flex items-center gap-3 ml-auto pt-1">
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg border border-rose-300 dark:border-rose-700 bg-white dark:bg-neutral-900 text-rose-500 dark:text-rose-400 text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+              >
+                Reset Filters
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteSearch}
+                className="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              >
+                Apply Filters
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Students Table (Admin Professional Table Style) ──────────────────── */}
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
-              <tr>
-                <th className="py-3.5 px-4">Student</th>
-                <th className="py-3.5 px-4">USN / Enrollment</th>
-                <th className="py-3.5 px-4 text-center">Semester</th>
-                <th className="py-3.5 px-4 text-center">Section</th>
-                <th className="py-3.5 px-4 text-center">Attendance %</th>
-                <th className="py-3.5 px-4 text-center">Batch</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-violet-600 border-t-transparent" />
-                    <p className="mt-2 text-xs font-bold">Loading department students...</p>
-                  </td>
+      {/* ── Student Table (Admin Style) ─────────────────────────────────────── */}
+      <div className="bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 rounded-3xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-20 flex flex-col items-center justify-center gap-4">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-blue-600 border-t-transparent" />
+            <p className="text-xs font-black uppercase tracking-widest text-neutral-400">
+              Loading department students...
+            </p>
+          </div>
+        ) : students.length === 0 ? (
+          <div className="p-20 text-center space-y-3">
+            <ClipboardList className="mx-auto text-neutral-300 dark:text-neutral-700" size={48} />
+            <h3 className="text-base font-extrabold text-neutral-800 dark:text-white">
+              No Students Found
+            </h3>
+            <p className="text-xs font-semibold text-neutral-500 max-w-md mx-auto">
+              {search || selectedSemester !== 'ALL' || selectedSection !== 'ALL' || status !== 'ALL'
+                ? 'Try adjusting your filters or search terms.'
+                : 'No students are currently enrolled in this department for the selected academic context.'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
+                <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
+                  <th className="py-4 px-4 text-white">Student</th>
+                  <th className="py-4 px-4 text-white">USN / Enrollment</th>
+                  <th className="py-4 px-4 text-center text-white">Semester</th>
+                  <th className="py-4 px-4 text-center text-white">Section</th>
+                  <th className="py-4 px-4 text-center text-white">Attendance %</th>
+                  <th className="py-4 px-4 text-center text-white">Batch</th>
+                  <th className="py-4 px-4 text-center text-white">Status</th>
+                  <th className="py-4 px-4 text-right text-white">Actions</th>
                 </tr>
-              ) : students.length > 0 ? (
-                students.map((student) => {
-                  const isDefaulter = student.attendancePercentage < 75;
+              </thead>
+              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/40 text-xs font-semibold">
+                {students.map((student) => {
+                  const displayIdentifier =
+                    student.usn || student.enrollmentNumber || student.applicationNumber || '—';
+
                   return (
-                    <tr key={student.id} className="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-xs ring-1 ring-neutral-200 shadow-xs">
-                            {student.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-neutral-900 dark:text-white">{student.name}</div>
-                            <div className="text-[11px] text-neutral-400">{student.email}</div>
-                          </div>
+                    <tr
+                      key={student.id}
+                      className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20 transition-colors"
+                    >
+                      {/* Student info */}
+                      <td className="py-4 px-4">
+                        <div>
+                          <button
+                            onClick={() => navigate(`/hod/students/${student.id}`)}
+                            className="font-bold text-neutral-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                          >
+                            {student.name}
+                          </button>
+    
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 font-mono font-bold text-neutral-800 dark:text-neutral-200">
-                        {student.usn}
+
+                      {/* USN / Enrollment */}
+                      <td className="py-4 px-4 font-mono font-black text-sm text-neutral-900 dark:text-white whitespace-nowrap">
+                        <button
+                          onClick={() => navigate(`/hod/students/${student.id}`)}
+                          className="hover:underline text-left text-sm font-black tracking-wide text-neutral-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400 transition-colors cursor-pointer"
+                        >
+                          {displayIdentifier}
+                        </button>
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-bold text-[11px] border border-neutral-200 dark:border-neutral-700">
-                          Sem {student.semester}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {student.section ? (
-                          <span className="font-bold text-neutral-800 dark:text-neutral-200">
-                            Sec {student.section}
+
+                      {/* Semester */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        {student.semester ? (
+                          <span className="px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-900">
+                            Sem {student.semester}
                           </span>
                         ) : (
-                          <span className="text-neutral-400 italic text-[11px]">Unassigned</span>
+                          <span className="text-neutral-400 font-semibold">—</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="inline-flex items-center gap-1.5">
-                          <span className={`font-black text-xs ${
-                            isDefaulter ? 'text-rose-600' : 'text-emerald-600'
-                          }`}>
-                            {student.attendancePercentage}%
+
+                      {/* Section */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        {formatSectionDisplay(student.section) !== '—' ? (
+                          <span className="inline-block px-2.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 font-bold text-neutral-800 dark:text-neutral-200">
+                            {formatSectionDisplay(student.section)}
                           </span>
-                          {isDefaulter && (
-                            <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-extrabold text-[9px] uppercase tracking-wider">
-                              Defaulter
+                        ) : (
+                          <span className="text-neutral-400 font-semibold">—</span>
+                        )}
+                      </td>
+
+                      {/* Attendance % */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        {student.attendancePercentage === null ||
+                        student.attendancePercentage === undefined ? (
+                          <span className="text-neutral-400 font-semibold">—</span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span
+                              className={`font-black text-xs ${
+                                student.isDefaulter ? 'text-rose-600' : 'text-emerald-600'
+                              }`}
+                            >
+                              {typeof student.attendancePercentage === 'number'
+                                ? `${student.attendancePercentage.toFixed(1)}%`
+                                : `${student.attendancePercentage}%`}
                             </span>
-                          )}
-                        </div>
+                            {student.isDefaulter && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider">
+                                Defaulter
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
-                      <td className="py-3.5 px-4 text-center text-neutral-500 font-semibold">
-                        {student.batchYear || '2023-27'}
+
+                      {/* Batch */}
+                      <td className="py-4 px-4 text-center text-neutral-500 font-semibold whitespace-nowrap">
+                        {student.batchYear || '2026'}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                          <CheckCircle2 className="w-3 h-3" /> {student.admissionStatus || 'ACTIVE'}
+
+                      {/* Status */}
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+                            STATUS_COLOR_MAP[student.admissionStatus] ||
+                            STATUS_COLOR_MAP.ACTIVE
+                          }`}
+                        >
+                          <CheckCircle2 size={12} />
+                          {student.admissionStatus || 'ACTIVE'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <Link
-                          to={`/hod/students/${student.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-900 hover:text-white dark:bg-neutral-800 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 text-neutral-800 dark:text-neutral-200 font-bold text-[11px] transition-all"
+
+                      {/* Actions */}
+                      <td className="py-4 px-4 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => navigate(`/hod/students/${student.id}`)}
+                          className="p-1.5 px-3 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-700 dark:text-neutral-300 transition-colors inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                          title="View Student"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye size={14} />
                           <span>View</span>
-                        </Link>
+                        </button>
                       </td>
                     </tr>
                   );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
-                    <p className="text-sm font-bold text-neutral-700 dark:text-neutral-300">No Students Found</p>
-                    <p className="text-xs text-neutral-400 mt-1">Try adjusting your filters or search terms.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {/* ── Pagination Footer ──────────────────────────────────────────────── */}
-        <div className="px-5 py-3.5 bg-neutral-50 dark:bg-neutral-850 border-t border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between text-xs">
+        {/* ── Pagination Footer (Admin Style) ─────────────────────────────────── */}
+        <div className="px-5 py-3.5 bg-neutral-50 dark:bg-neutral-850 border-t border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <span className="text-neutral-500 font-medium">
-            Showing Page <strong className="text-neutral-900 dark:text-white">{page}</strong> of <strong className="text-neutral-900 dark:text-white">{totalPages || 1}</strong> ({totalStudents} total students)
+            Showing Page <strong className="text-neutral-900 dark:text-white">{page}</strong> of{' '}
+            <strong className="text-neutral-900 dark:text-white">{totalPages || 1}</strong> ({totalStudents} total
+            students)
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="p-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-neutral-800"
+              className="px-2.5 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-neutral-800 font-bold flex items-center gap-1 cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Previous</span>
             </button>
-            <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 px-2">
-              {page}
-            </span>
+
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const pNum = i + 1;
+              if (
+                totalPages > 6 &&
+                pNum !== 1 &&
+                pNum !== totalPages &&
+                Math.abs(pNum - page) > 1
+              ) {
+                if (pNum === 2 || pNum === totalPages - 1) {
+                  return (
+                    <span key={pNum} className="px-2 text-neutral-400">
+                      …
+                    </span>
+                  );
+                }
+                return null;
+              }
+
+              return (
+                <button
+                  key={pNum}
+                  onClick={() => setPage(pNum)}
+                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    page === pNum
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-white dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  {pNum}
+                </button>
+              );
+            })}
+
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="p-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-neutral-800"
+              className="px-2.5 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-neutral-800 font-bold flex items-center gap-1 cursor-pointer"
             >
-              <ChevronRight className="w-4 h-4" />
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
-
-      {/* ── Google Sheets Modal ──────────────────────────────────────────────── */}
-      <HodGoogleSheetModal
-        isOpen={googleModalOpen}
-        onClose={() => setGoogleModalOpen(false)}
-        semester={selectedSemester !== 'ALL' ? selectedSemester : 1}
-        sheetType={activeSheetType}
-        academicYear="2026-27"
-        onSuccess={() => {
-          fetchSemesterSheetStatus();
-        }}
-      />
     </div>
   );
 };

@@ -211,14 +211,14 @@ export const StudentManagementPage: React.FC = () => {
       <div className="glass-panel rounded-2xl shadow-ambient border border-neutral-200/50 dark:border-neutral-800/40 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-neutral-50/80 dark:bg-neutral-800/50 text-neutral-500 dark:text-neutral-400 border-b border-neutral-200/60 dark:border-neutral-700/60 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="px-5 py-4 font-bold">No</th>
-                <th className="px-5 py-4 font-bold">Name</th>
-                <th className="px-5 py-4 font-bold">Enrollment #</th>
-                <th className="px-5 py-4 font-bold">Dept & Sem</th>
-                <th className="px-5 py-4 font-bold">Status</th>
-                <th className="px-5 py-4 font-bold text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white border-b border-neutral-800 text-xs uppercase tracking-wider font-extrabold">
+              <tr className="text-white">
+                <th className="px-5 py-4 font-bold text-white">No</th>
+                <th className="px-5 py-4 font-bold text-white">Name</th>
+                <th className="px-5 py-4 font-bold text-white">Enrollment #</th>
+                <th className="px-5 py-4 font-bold text-white">Dept & Sem</th>
+                <th className="px-5 py-4 font-bold text-white">Status</th>
+                <th className="px-5 py-4 font-bold text-right text-white">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 bg-white dark:bg-transparent">

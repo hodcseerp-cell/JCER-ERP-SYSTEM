@@ -64,6 +64,8 @@ export const HodDashboardPage: React.FC = () => {
   const deptCode = data?.department?.code || user?.department?.code || 'CSE';
   const stats = data?.stats;
 
+  const totalStudentsCount = stats?.totalStudents ?? 0;
+
   return (
     <div className="space-y-6">
       
@@ -175,7 +177,7 @@ export const HodDashboardPage: React.FC = () => {
           </div>
           <div className="mt-3">
             <h3 className="text-2xl sm:text-3xl font-black text-neutral-900 dark:text-white">
-              {loading ? '...' : (stats?.totalStudents ?? 0)}
+              {loading ? '...' : totalStudentsCount}
             </h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">Enrolled in {deptCode}</p>
           </div>

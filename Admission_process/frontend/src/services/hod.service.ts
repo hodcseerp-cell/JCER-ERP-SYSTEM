@@ -100,19 +100,79 @@ export interface HodDepartmentInfo {
 export interface HodStudentItem {
   id: string;
   userId: string;
-  usn: string;
-  enrollmentNumber: string;
+  usn: string | null;
+  enrollmentNumber: string | null;
+  applicationNumber?: string | null;
   name: string;
   email: string;
   phone: string;
   semester: number;
-  section: string;
+  section: string | null;
   batchYear: number;
   admissionStatus: string;
   admissionType: string;
+  qualification?: string | null;
+  gender?: string | null;
+  category?: string | null;
   profileImage?: string;
-  attendancePercentage: number;
+  attendancePercentage: number | null;
   isDefaulter: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface HodSectionItem {
+  id: string;
+  name: string;
+  semester: number;
+  academicYear: string;
+  capacity: number;
+  maxCapacity?: number;
+  classroom?: string | null;
+  description?: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  studentCount: number;
+  availableCapacity: number;
+  fillPercentage: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface HodSectionStudentItem {
+  id: string;
+  userId: string;
+  usn: string | null;
+  enrollmentNumber: string | null;
+  rollNumber: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  semester: number;
+  sectionId?: string | null;
+  section?: string | null;
+  admissionType: string;
+  admissionStatus: string;
+  gender?: string | null;
+  category?: string | null;
+  currentSectionId?: string | null;
+  currentSection?: string | null;
+  isAllocatedToThisSection?: boolean;
+  isAllocatedToOtherSection?: boolean;
+  isUnallocated?: boolean;
+}
+
+export interface HodSectionCohortData {
+  section: HodSectionItem;
+  siblingSections: Array<{ id: string; name: string; capacity: number }>;
+  stats: {
+    totalStudents: number;
+    allocatedStudents: number;
+    unallocatedStudents: number;
+    sectionCapacity: number;
+    sectionAllocatedCount: number;
+    remainingCapacity: number;
+  };
+  students: HodSectionStudentItem[];
 }
 
 export interface HodFacultyItem {
@@ -247,7 +307,17 @@ export const hodService = {
     semester?: string | number;
     section?: string;
     status?: string;
+    admissionType?: string;
+    qualification?: string;
+    gender?: string;
+    category?: string;
+    district?: string;
+    academicYear?: string;
+    startDate?: string;
+    endDate?: string;
     search?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }): Promise<{ students: HodStudentItem[]; pagination: { total: number; page: number; limit: number; totalPages: number } }> => {
     const res = await API.get('/hod/students', { params });
     return res.data.data;
@@ -263,9 +333,186 @@ export const hodService = {
     return res.data.data;
   },
 
-  getStudentSections: async (): Promise<Array<{ id: string; name: string; semester: number; academicYear: string; maxCapacity: number; studentCount: number }>> => {
-    const res = await API.get('/hod/students/sections');
-    return res.data.data;
+  getStudentSections: async (semester?: number | string, academicYear?: string): Promise<HodSectionItem[]> => {
+    try {
+      const res = await API.get('/hod/students/sections', { params: { semester, academicYear } });
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get('/hod/sections', { params: { semester, academicYear } });
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  getSections: async (semester?: number | string, academicYear?: string): Promise<HodSectionItem[]> => {
+    try {
+      const res = await API.get('/hod/students/sections', { params: { semester, academicYear } });
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get('/hod/sections', { params: { semester, academicYear } });
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  getSectionById: async (sectionId: string): Promise<HodSectionItem> => {
+    try {
+      const res = await API.get(`/hod/students/sections/${sectionId}`);
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get(`/hod/sections/${sectionId}`);
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  createSection: async (data: {
+    name: string;
+    semester: number;
+    capacity: number;
+    academicYear?: string;
+    classroom?: string;
+    description?: string;
+  }): Promise<HodSectionItem> => {
+    try {
+      const res = await API.post('/hod/students/sections', data);
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post('/hod/sections', data);
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  updateSection: async (
+    sectionId: string,
+    data: Partial<{ name: string; capacity: number; classroom: string; description: string; status: 'ACTIVE' | 'INACTIVE' }>
+  ): Promise<HodSectionItem> => {
+    try {
+      const res = await API.put(`/hod/students/sections/${sectionId}`, data);
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.put(`/hod/sections/${sectionId}`, data);
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  deleteSection: async (sectionId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.delete(`/hod/students/sections/${sectionId}`);
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.delete(`/hod/sections/${sectionId}`);
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  getSectionStudents: async (sectionId: string): Promise<{ section: HodSectionItem; students: HodSectionStudentItem[] }> => {
+    try {
+      const res = await API.get(`/hod/students/sections/${sectionId}/students`);
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get(`/hod/sections/${sectionId}/students`);
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  getSectionCohort: async (sectionId: string): Promise<HodSectionCohortData> => {
+    try {
+      const res = await API.get(`/hod/students/sections/${sectionId}/cohort`);
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get(`/hod/sections/${sectionId}/cohort`);
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  bulkAllocateStudents: async (
+    sectionId: string,
+    studentAllocations: Array<{ studentId: string; rollNumber?: string }>
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.post(`/hod/students/sections/${sectionId}/bulk-allocate`, { studentAllocations });
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post(`/hod/sections/${sectionId}/bulk-allocate`, { studentAllocations });
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  moveStudentSection: async (
+    sectionId: string,
+    studentId: string,
+    targetSectionId: string,
+    newRollNumber?: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.patch(`/hod/students/sections/${sectionId}/students/${studentId}/move`, {
+        targetSectionId,
+        newRollNumber,
+      });
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.patch(`/hod/sections/${sectionId}/students/${studentId}/move`, {
+          targetSectionId,
+          newRollNumber,
+        });
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  removeStudentFromSection: async (sectionId: string, studentId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.delete(`/hod/students/sections/${sectionId}/students/${studentId}/remove`);
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.delete(`/hod/sections/${sectionId}/students/${studentId}/remove`);
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  bulkDistributeStudents: async (
+    distributions: Array<{ sectionId: string; studentIds: string[]; rollNumbers?: Record<string, string> }>
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.post('/hod/students/sections/distribute', { distributions });
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post('/hod/sections/distribute', { distributions });
+        return fallback.data;
+      }
+      throw err;
+    }
   },
 
   // 3. Faculty

@@ -19,6 +19,7 @@ import {
   Calendar,
   BookOpen,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import hodService, { HodSubjectItem } from '../../services/hod.service';
 
 export const HodFacultyManagePage: React.FC = () => {
@@ -79,9 +80,10 @@ export const HodFacultyManagePage: React.FC = () => {
         attendanceAccess: field === 'attn' ? !currentAtt : currentAtt,
         marksAccess: field === 'marks' ? !currentMarks : currentMarks,
       });
+      toast.success('Sheet access permissions updated.');
       loadFacultyDetails();
-    } catch (err) {
-      alert('Failed to update sheet access.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update sheet access.');
     }
   };
 
@@ -91,8 +93,9 @@ export const HodFacultyManagePage: React.FC = () => {
     try {
       const res = await hodService.resetFacultyPassword(id);
       setGeneratedPassword(res.temporaryPassword);
-    } catch (err) {
-      alert('Failed to reset password.');
+      toast.success('Temporary password generated successfully.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to reset password.');
     } finally {
       setResettingPassword(false);
     }
@@ -101,16 +104,14 @@ export const HodFacultyManagePage: React.FC = () => {
   const handleToggleAccountStatus = async (currentStatus: string) => {
     if (!id) return;
     const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    if (!window.confirm(`Are you sure you want to ${newStatus === 'ACTIVE' ? 'activate' : 'deactivate'} this faculty account? Past attendance, marks, and audit history will remain intact.`)) {
-      return;
-    }
 
     setTogglingStatus(true);
     try {
       await hodService.toggleFacultyStatus(id, newStatus);
+      toast.success(`Faculty account ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'} successfully.`);
       loadFacultyDetails();
-    } catch (err) {
-      alert('Failed to update faculty account status.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update faculty account status.');
     } finally {
       setTogglingStatus(false);
     }
@@ -125,9 +126,10 @@ export const HodFacultyManagePage: React.FC = () => {
         section: selectedSection,
       });
       setEditingAssignmentId(null);
+      toast.success('Faculty assignment updated successfully.');
       loadFacultyDetails();
-    } catch (err) {
-      alert('Failed to update assignment.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update assignment.');
     } finally {
       setUpdatingAssignment(false);
     }

@@ -19,6 +19,9 @@ export interface AuthenticatedRequest extends Request {
     profileImage?: string;
     status?: string;
   };
+  departmentId?: string;
+  department?: any;
+  hod?: any;
   correlationId?: string;
 }
 

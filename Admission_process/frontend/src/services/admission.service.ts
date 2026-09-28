@@ -300,12 +300,16 @@ const admissionService = {
     if (Array.isArray(data)) {
       return {
         applications: data,
-        total: res.data.total || 0,
+        total: res.data.total || data.length || 0,
         page: params.page || 1,
-        totalPages: Math.ceil((res.data.total || 0) / (params.limit || 20))
+        totalPages: Math.ceil((res.data.total || data.length || 0) / (params.limit || 20)) || 1
       } as AdmissionListResult;
     }
-    return data as AdmissionListResult;
+    if (data && typeof data === 'object' && 'applications' in data) {
+      return data as AdmissionListResult;
+    }
+    // Fallback: empty result
+    return { applications: [], total: 0, page: params.page || 1, totalPages: 1 };
   },
 
   /** GET /api/admin/admissions/:id — full application detail */

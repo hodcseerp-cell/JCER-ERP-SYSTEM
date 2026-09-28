@@ -2,6 +2,7 @@
 import express, { Application, Request, Response, RequestHandler, NextFunction } from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import multer from 'multer';
 import path from 'path';
 import compression from 'compression';
 import { authMiddleware, AuthenticatedRequest } from './middleware/auth.middleware';
@@ -19,6 +20,7 @@ import authRoutes from './routes/auth.routes';
 import systemRoutes from './routes/system.routes';
 import adminRoutes from './routes/admin.routes';
 import adminOfficeRouter from './routes/admin-office.routes';
+import * as existingOnboardingController from './controllers/existing-student-onboarding.controller';
 import { getBranches, downloadHandbook } from './controllers/admission.controller';
 import { studentRouter, applicationRouter, adminAdmissionRouter } from './routes/admission.routes';
 import principalRoutes from './routes/principal.routes';
@@ -280,14 +282,14 @@ v1Router.use('/admin/promotion', promotionRoutes);
 // Application endpoints
 v1Router.use('/application', applicationRouter);
 
+// Admin dashboard + onboarding + profile routes
+v1Router.use('/admin', adminRoutes);
+
 // Admin admission management
 v1Router.use('/admin', adminAdmissionRouter);
 
 // Admin office endpoints
 v1Router.use('/admin', adminOfficeRouter);
-
-// Admin dashboard + profile routes
-v1Router.use('/admin', adminRoutes);
 
 // Principal Dashboard routes
 v1Router.use('/principal', principalRoutes);
@@ -309,13 +311,55 @@ v1Router.get('/google-sheets/sync-history', (authMiddleware as any), (getGoogleS
 // Faculty Google Sheets access endpoint
 v1Router.get('/faculty/my-sheets', (authMiddleware as any), (getFacultyMySheets as any));
 
+// Explicit bulletproof routes for Existing Student Onboarding
+const existingOnboardingUpload = multer({ storage: multer.memoryStorage() });
+const safeUploadFile = (req: any, res: any, next: any) => {
+  existingOnboardingUpload.single('file')(req, res, (err: any) => {
+    if (err) return res.status(400).json({ success: false, error: err.message || 'File upload error' });
+    next();
+  });
+};
+
+// Mount on v1Router under all possible URL paths
+v1Router.post('/admin/onboarding/existing-students/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+v1Router.post('/admin/students/existing-onboarding/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+v1Router.post('/onboarding/existing-students/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+v1Router.post('/students/existing-onboarding/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+
+v1Router.post('/admin/onboarding/existing-students/validate', safeUploadFile, existingOnboardingController.validateExistingStudents);
+v1Router.post('/admin/students/existing-onboarding/validate', safeUploadFile, existingOnboardingController.validateExistingStudents);
+v1Router.post('/onboarding/existing-students/validate', safeUploadFile, existingOnboardingController.validateExistingStudents);
+v1Router.post('/students/existing-onboarding/validate', safeUploadFile, existingOnboardingController.validateExistingStudents);
+
+v1Router.get('/admin/onboarding/existing-students/context', (authMiddleware as any), existingOnboardingController.getOnboardingContext);
+v1Router.get('/admin/students/existing-onboarding/context', (authMiddleware as any), existingOnboardingController.getOnboardingContext);
+v1Router.get('/onboarding/existing-students/context', (authMiddleware as any), existingOnboardingController.getOnboardingContext);
+v1Router.get('/students/existing-onboarding/context', (authMiddleware as any), existingOnboardingController.getOnboardingContext);
+
+v1Router.get('/admin/onboarding/existing-students/template', existingOnboardingController.downloadExistingStudentsTemplate);
+v1Router.get('/admin/students/existing-onboarding/template', existingOnboardingController.downloadExistingStudentsTemplate);
+v1Router.get('/onboarding/existing-students/template', existingOnboardingController.downloadExistingStudentsTemplate);
+v1Router.get('/students/existing-onboarding/template', existingOnboardingController.downloadExistingStudentsTemplate);
+
+v1Router.get('/admin/onboarding/existing-students/history', (authMiddleware as any), existingOnboardingController.getOnboardingHistory);
+v1Router.get('/admin/students/existing-onboarding/history', (authMiddleware as any), existingOnboardingController.getOnboardingHistory);
+v1Router.get('/onboarding/existing-students/history', (authMiddleware as any), existingOnboardingController.getOnboardingHistory);
+v1Router.get('/students/existing-onboarding/history', (authMiddleware as any), existingOnboardingController.getOnboardingHistory);
+
 // Mount the v1 router to both versioned and legacy base paths
 app.use('/api', v1Router);
 app.use('/api/v1', v1Router);
 
+// Direct top-level app route aliases to guarantee 100% resolution even without /api prefix
+app.post('/api/admin/onboarding/existing-students/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+app.post('/api/admin/students/existing-onboarding/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+app.post('/admin/onboarding/existing-students/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+app.post('/admin/students/existing-onboarding/import', (authMiddleware as any), existingOnboardingController.importExistingStudents);
+
 // ── Global 404 handler ────────────────────────────────────────────────────────
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Endpoint not found' });
+app.use((req: Request, res: Response) => {
+  logger.warn(`404 NOT FOUND: [${req.method}] ${req.originalUrl}`);
+  res.status(404).json({ error: 'Endpoint not found', path: req.originalUrl, method: req.method });
 });
 
 // ── Global Error Handler ───────────────────────────────────────────────────────

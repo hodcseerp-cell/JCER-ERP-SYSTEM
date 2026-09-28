@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import UsnRegistry from '../models/UsnRegistry';
 import User from '../models/User';
 import Student from '../models/Student';
+import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import Department from '../models/Department';
 import db from '../config/database';
 
@@ -252,9 +253,10 @@ export const bulkUploadStudents = async (
           const batchYear = new Date().getFullYear();
           const seqStr = String(s.usn.slice(-3));
           const enrollmentNumber = s.usn;
-          const rollNumber = `${batchYear}${s.departmentCode}${seqStr}`;
+          const isSem1 = Number(s.semester || 1) === 1;
+          const rollNumber = isSem1 ? `${batchYear}${s.departmentCode}${seqStr}` : null;
 
-          await Student.create({
+          const newStudent = await Student.create({
             userId: user.id,
             usn: s.usn,
             enrollmentNumber,
@@ -272,6 +274,18 @@ export const bulkUploadStudents = async (
             admissionType: s.semester === 3 ? 'LATERAL' : 'FRESH',
             initialSemester: s.semester === 3 ? 3 : 1,
             currentAcademicYear: '2026-2027',
+          }, { transaction });
+
+          await StudentAcademicEnrollment.create({
+            studentId: newStudent.id,
+            academicYearId: '2026-27',
+            schemeId: '2025',
+            departmentId: s.departmentId,
+            semesterId: s.semester || 1,
+            sectionId: null,
+            rollNumber,
+            entrySemester: s.semester === 3 ? 3 : 1,
+            status: 'ACTIVE',
           }, { transaction });
 
           // Update registry entry status

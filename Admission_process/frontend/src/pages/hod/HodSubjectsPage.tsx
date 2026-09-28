@@ -11,7 +11,10 @@ import {
   RefreshCw,
   X,
   Trash2,
+  AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import hodService, { HodSubjectItem } from '../../services/hod.service';
 
 export const HodSubjectsPage: React.FC = () => {
@@ -28,7 +31,12 @@ export const HodSubjectsPage: React.FC = () => {
   const [type, setType] = useState('IPCC');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Subject deletion & Academic data protection state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; code: string; name: string } | null>(null);
+  const [academicWarning, setAcademicWarning] = useState<{ id: string; code: string; message: string; details?: any } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
 
   useEffect(() => {
     fetchSubjects();
@@ -41,6 +49,7 @@ export const HodSubjectsPage: React.FC = () => {
       setSubjects(data);
     } catch (err) {
       console.error('Failed to load subjects:', err);
+      toast.error('Failed to load department subjects.');
     } finally {
       setLoading(false);
     }
@@ -69,6 +78,7 @@ export const HodSubjectsPage: React.FC = () => {
       setCredits('4');
       setType('IPCC');
       setFormError(null);
+      toast.success('Subject created successfully.');
       fetchSubjects();
     } catch (err: any) {
       console.error('Failed to create subject:', err);
@@ -77,22 +87,53 @@ export const HodSubjectsPage: React.FC = () => {
         err?.response?.data?.message ||
         'Failed to create subject. Please check the inputs and try again.';
       setFormError(backendError);
-      alert(backendError);
+      toast.error(backendError);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteSubject = async (id: string, subCode: string) => {
-    if (!window.confirm(`Are you sure you want to delete subject ${subCode}?`)) return;
+  const confirmDeleteSubject = async () => {
+    if (!deleteTarget) return;
+    const { id, code: subCode } = deleteTarget;
     setDeletingId(id);
     try {
       await hodService.deleteSubject(id);
+      toast.success(`Subject ${subCode} deleted successfully.`);
+      setDeleteTarget(null);
       fetchSubjects();
-    } catch (err) {
-      alert('Failed to delete subject.');
+    } catch (err: any) {
+      console.error('Failed to delete subject:', err);
+      const resData = err?.response?.data;
+      if (resData?.code === 'SUBJECT_HAS_ACADEMIC_DATA') {
+        setDeleteTarget(null);
+        setAcademicWarning({
+          id,
+          code: subCode,
+          message: resData.message || 'Subject cannot be deleted because academic records exist.',
+          details: resData.details,
+        });
+      } else {
+        const msg = resData?.message || resData?.error || 'Failed to delete subject. Please try again.';
+        toast.error(msg);
+      }
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeactivateSubject = async () => {
+    if (!academicWarning) return;
+    setDeactivating(true);
+    try {
+      await hodService.updateSubject(academicWarning.id, { status: 'INACTIVE' });
+      toast.success(`Subject ${academicWarning.code} marked as INACTIVE.`);
+      setAcademicWarning(null);
+      fetchSubjects();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update subject status.');
+    } finally {
+      setDeactivating(false);
     }
   };
 
@@ -227,13 +268,13 @@ export const HodSubjectsPage: React.FC = () => {
               <div className="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs">
                 <button
                   type="button"
-                  onClick={() => handleDeleteSubject(sub.id, sub.code)}
+                  onClick={() => setDeleteTarget({ id: sub.id, code: sub.code, name: sub.name })}
                   disabled={deletingId === sub.id}
                   className="text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
                   title="Delete subject"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>{deletingId === sub.id ? 'Deleting...' : 'Delete'}</span>
+                  <span>Delete</span>
                 </button>
                 <Link
                   to="/hod/faculty/assignments"
@@ -353,6 +394,93 @@ export const HodSubjectsPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm Subject Delete Modal ─────────────────────────────────────── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-neutral-900 dark:text-white">Delete Subject</h3>
+                <p className="text-xs text-neutral-500">{deleteTarget.code} — {deleteTarget.name}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-600 dark:text-neutral-300 font-medium">
+              Are you sure you want to delete this curriculum offering? This will permanently remove the subject if no student or faculty records are linked.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSubject}
+                disabled={Boolean(deletingId)}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                {deletingId ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Academic Protection & Inactive Offer Modal ──────────────────────── */}
+      {academicWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-2xl">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-neutral-900 dark:text-white">Subject Deletion Blocked</h3>
+                <span className="text-[11px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full">
+                  CODE: SUBJECT_HAS_ACADEMIC_DATA
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-600 dark:text-neutral-300 font-medium">
+              The subject <strong className="text-neutral-900 dark:text-white">{academicWarning.code}</strong> cannot be deleted because academic records are actively or historically linked to it (such as faculty assignments, attendance, assessments, or Google Sheets).
+            </p>
+
+            <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60 text-xs space-y-1.5">
+              <div className="font-bold text-neutral-800 dark:text-neutral-200">Recommended Production Action:</div>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                Marking the subject as <strong>INACTIVE</strong> preserves historical grade sheets and attendance logs while hiding it from future semester assignments.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+              <button
+                type="button"
+                onClick={() => setAcademicWarning(null)}
+                className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleDeactivateSubject}
+                disabled={deactivating}
+                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                {deactivating ? 'Deactivating...' : 'Mark as INACTIVE'}
+              </button>
+            </div>
           </div>
         </div>
       )}

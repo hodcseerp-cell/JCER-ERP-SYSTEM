@@ -472,11 +472,50 @@ export const mapGoogleSheetTab = async (
       return res.status(400).json({ error: `Subject not found for Semester ${connection.semester} in department scope.` });
     }
 
+    // Verify no duplicate mapping across tabs within the same spreadsheet
+    const existingDuplicate = await GoogleSheetTab.findOne({
+      where: {
+        googleSheetConnectionId: connection.id,
+        subjectId: subject.id,
+        id: { [Op.ne]: tab.id },
+      },
+    });
+    if (existingDuplicate) {
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_SUBJECT_MAPPING',
+        message: `Subject ${subject.name} (${subject.code}) is already mapped to tab "${existingDuplicate.sheetTitle}". Each tab must map to a unique ERP subject.`,
+      });
+    }
+
     await tab.update({
       subjectId: subject.id,
       subjectCode: subject.code,
       status: 'MAPPED',
     });
+
+    // Create or update google_sheet_resources record (Requirement 14 Step 9)
+    try {
+      const assignment = await FacultyAssignment.findOne({
+        where: {
+          subjectId: subject.id,
+          departmentId,
+          semester: connection.semester,
+        },
+      });
+
+      const GoogleSheetResource = (await import('../models/GoogleSheetResource')).default;
+      await GoogleSheetResource.create({
+        facultyAssignmentId: assignment?.id || null,
+        sheetType: connection.sheetType,
+        googleSpreadsheetId: connection.googleSpreadsheetId,
+        googleSheetTabId: tab.googleSheetId,
+        sheetUrl: connection.googleSpreadsheetUrl,
+        status: 'MAPPED',
+      });
+    } catch (resourceErr) {
+      logger.warn('GOOGLE_SHEET_RESOURCE_CREATE_NOTICE:', resourceErr);
+    }
 
     return res.json({
       success: true,
