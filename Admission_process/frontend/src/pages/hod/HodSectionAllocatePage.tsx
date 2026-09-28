@@ -25,6 +25,7 @@ import hodService, {
   HodSectionStudentItem,
   HodSectionItem,
 } from '../../services/hod.service';
+import usePersistentState from '../../hooks/usePersistentState';
 
 export const HodSectionAllocatePage: React.FC = () => {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -37,19 +38,19 @@ export const HodSectionAllocatePage: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Filters
-  const [activeTab, setActiveTab] = useState<'UNALLOCATED' | 'ALL' | 'OTHER'>('UNALLOCATED');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  // Filters (persisted across tabs & reloads)
+  const [activeTab, setActiveTab] = usePersistentState<'UNALLOCATED' | 'ALL' | 'OTHER'>(`hod_sec_alloc_tab_${sectionId}`, 'UNALLOCATED');
+  const [searchQuery, setSearchQuery] = usePersistentState<string>(`hod_sec_alloc_search_${sectionId}`, '');
 
   // Selected Students: studentId -> rollNumber
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [rollNumberMap, setRollNumberMap] = useState<Record<string, string>>({});
 
-  // Tool Modals
+  // Tool Modals (persisted tool inputs)
   const [equalDistModalOpen, setEqualDistModalOpen] = useState<boolean>(false);
   const [distPreview, setDistPreview] = useState<Array<{ sectionId: string; sectionName: string; current: number; toAdd: number; final: number; capacity: number }>>([]);
-  const [rollPrefix, setRollPrefix] = useState<string>('');
-  const [rollStartNumber, setRollStartNumber] = useState<number>(1);
+  const [rollPrefix, setRollPrefix] = usePersistentState<string>(`hod_sec_alloc_prefix_${sectionId}`, '');
+  const [rollStartNumber, setRollStartNumber] = usePersistentState<number>(`hod_sec_alloc_startnum_${sectionId}`, 1);
 
   // Auto-dismiss notification
   useEffect(() => {

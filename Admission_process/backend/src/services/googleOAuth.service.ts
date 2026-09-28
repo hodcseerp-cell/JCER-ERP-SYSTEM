@@ -118,7 +118,11 @@ export const googleOAuthService = {
   /**
    * Exchanges an authorization code for access & refresh tokens and fetches the authenticated Google user profile
    */
-  async exchangeCodeForTokens(code: string, redirectUriOverride?: string): Promise<{
+  async exchangeCodeForTokens(
+    code: string,
+    redirectUriOverride?: string,
+    fallbackUser?: { email?: string; name?: string }
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
@@ -133,13 +137,15 @@ export const googleOAuthService = {
 
     if (!clientId || !clientSecret || (typeof code === 'string' && code.startsWith('mock-'))) {
       // Simulation mode for developer testing without Google credentials
+      const userEmail = fallbackUser?.email || 'hod@college.edu';
+      const userName = fallbackUser?.name || 'HOD User';
       return {
         accessToken: `mock-access-token-${Date.now()}`,
         refreshToken: `mock-refresh-token-${Date.now()}`,
         expiresIn: 3600,
-        email: 'yuvarajbtalawar@gmail.com',
-        googleAccountId: '10982374618293746',
-        displayName: 'Yuvaraj Talawar',
+        email: userEmail,
+        googleAccountId: `google_${Date.now()}`,
+        displayName: userName,
         profilePicture: undefined,
       };
     }
@@ -160,24 +166,28 @@ export const googleOAuthService = {
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
-    let googleEmail = 'yuvarajbtalawar@gmail.com';
+    let googleEmail = '';
     let googleAccountId: string | undefined;
     let displayName: string | undefined;
     let profilePicture: string | undefined;
 
     try {
-      // Fetch user profile to get connected Google identity
+      // Fetch user profile to get connected Google identity from Google Userinfo API
       const userInfoResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: { Authorization: `Bearer ${access_token}` },
       });
       if (userInfoResponse.data) {
-        googleEmail = userInfoResponse.data.email || googleEmail;
+        googleEmail = userInfoResponse.data.email || '';
         googleAccountId = userInfoResponse.data.id || undefined;
         displayName = userInfoResponse.data.name || undefined;
         profilePicture = userInfoResponse.data.picture || undefined;
       }
     } catch (uErr: any) {
       logger.warn('Failed to fetch userinfo from Google API:', uErr?.message);
+    }
+
+    if (!googleEmail && fallbackUser?.email) {
+      googleEmail = fallbackUser.email;
     }
 
     return {
@@ -209,48 +219,44 @@ export const googleOAuthService = {
   ): Promise<GoogleOAuthToken> {
     const expiry = new Date(Date.now() + (expiresIn - 60) * 1000); // 1-minute buffer
 
-    let tokenRecord = await GoogleOAuthToken.findOne({
-      where: {
-        [Op.or]: [{ userId }, { connectedBy: userId }],
-        status: 'ACTIVE',
-      },
-      order: [['updatedAt', 'DESC']],
+    // Deactivate previous active tokens for this specific user
+    await GoogleOAuthToken.update(
+      { status: 'REVOKED' },
+      {
+        where: {
+          [Op.or]: [{ userId }, { connectedBy: userId }],
+          status: 'ACTIVE',
+        },
+      }
+    );
+
+    const tokenRecord = await GoogleOAuthToken.create({
+      userId,
+      connectedBy: userId,
+      departmentId: departmentId || null,
+      googleAccountEmail: email,
+      userEmail: email,
+      googleAccountId: profile?.googleAccountId || null,
+      displayName: profile?.displayName || null,
+      profilePicture: profile?.profilePicture || null,
+      encryptedAccessToken: encryptToken(accessToken),
+      encryptedRefreshToken: encryptToken(refreshToken),
+      tokenExpiry: expiry,
+      scope: 'drive,spreadsheets,email,profile',
+      lastUsedAt: new Date(),
+      status: 'ACTIVE',
     });
 
-    if (tokenRecord) {
-      await tokenRecord.update({
-        userId,
-        connectedBy: userId,
-        departmentId: departmentId || tokenRecord.departmentId || null,
-        googleAccountEmail: email,
-        userEmail: email,
-        googleAccountId: profile?.googleAccountId || tokenRecord.googleAccountId || null,
-        displayName: profile?.displayName || tokenRecord.displayName || null,
-        profilePicture: profile?.profilePicture || tokenRecord.profilePicture || null,
-        encryptedAccessToken: encryptToken(accessToken),
-        ...(refreshToken ? { encryptedRefreshToken: encryptToken(refreshToken) } : {}),
-        tokenExpiry: expiry,
-        lastUsedAt: new Date(),
-        status: 'ACTIVE',
-      });
-    } else {
-      tokenRecord = await GoogleOAuthToken.create({
-        userId,
-        connectedBy: userId,
-        departmentId: departmentId || null,
-        googleAccountEmail: email,
-        userEmail: email,
-        googleAccountId: profile?.googleAccountId || null,
-        displayName: profile?.displayName || null,
-        profilePicture: profile?.profilePicture || null,
-        encryptedAccessToken: encryptToken(accessToken),
-        encryptedRefreshToken: encryptToken(refreshToken),
-        tokenExpiry: expiry,
-        scope: 'drive,spreadsheets,email,profile',
-        lastUsedAt: new Date(),
-        status: 'ACTIVE',
-      });
-    }
+    // Safe backend diagnostic log (NEVER logs raw tokens or secrets)
+    logger.info('[GoogleOAuth] User Google Account Connected Successfully:', {
+      erpUserId: userId,
+      googleAccountId: profile?.googleAccountId || null,
+      googleEmail: email,
+      displayName: profile?.displayName || null,
+      scopes: 'drive,spreadsheets,email,profile',
+      tokenExpiry: expiry.toISOString(),
+      connectionId: tokenRecord.id,
+    });
 
     return tokenRecord;
   },
@@ -311,24 +317,18 @@ export const googleOAuthService = {
   },
 
   /**
-   * Retrieves a guaranteed-valid access token for a user or department
+   * Retrieves a guaranteed-valid access token strictly for the authenticated ERP user
    */
-  async getValidAccessTokenForUser(userId: string, departmentId?: string): Promise<{ token: string; email: string } | null> {
-    const whereClause: any = { status: 'ACTIVE' };
-    if (userId) {
-      whereClause[Op.or] = [{ userId }, { connectedBy: userId }];
-    } else if (departmentId) {
-      whereClause.departmentId = departmentId;
-    }
+  async getValidAccessTokenForUser(userId: string, _departmentId?: string): Promise<{ token: string; email: string } | null> {
+    if (!userId) return null;
 
-    let tokenRecord = await GoogleOAuthToken.findOne({ where: whereClause });
-
-    if (!tokenRecord && departmentId) {
-      // Fallback to department active token if user token not found
-      tokenRecord = await GoogleOAuthToken.findOne({
-        where: { departmentId, status: 'ACTIVE' },
-      });
-    }
+    const tokenRecord = await GoogleOAuthToken.findOne({
+      where: {
+        [Op.or]: [{ userId }, { connectedBy: userId }],
+        status: 'ACTIVE',
+      },
+      order: [['updatedAt', 'DESC']],
+    });
 
     if (!tokenRecord) {
       return null;
@@ -341,7 +341,7 @@ export const googleOAuthService = {
         const refreshed = await this.refreshAccessToken(tokenRecord);
         return { token: refreshed, email: tokenRecord.googleAccountEmail || tokenRecord.userEmail };
       } catch (err: any) {
-        logger.error('Failed to refresh Google access token:', err);
+        logger.error('Failed to refresh Google access token for user:', err);
         return null;
       }
     }
@@ -358,17 +358,18 @@ export const googleOAuthService = {
   },
 
   /**
-   * Disconnects Google account for authenticated user
+   * Disconnects Google account strictly for authenticated user
    */
-  async disconnectUserGoogleAccount(userId: string, departmentId?: string): Promise<boolean> {
-    const whereClause: any = { status: 'ACTIVE' };
-    if (userId) {
-      whereClause[Op.or] = [{ userId }, { connectedBy: userId }];
-    } else if (departmentId) {
-      whereClause.departmentId = departmentId;
-    }
+  async disconnectUserGoogleAccount(userId: string, _departmentId?: string): Promise<boolean> {
+    if (!userId) return false;
 
-    const tokenRecords = await GoogleOAuthToken.findAll({ where: whereClause });
+    const tokenRecords = await GoogleOAuthToken.findAll({
+      where: {
+        [Op.or]: [{ userId }, { connectedBy: userId }],
+        status: 'ACTIVE',
+      },
+    });
+
     if (tokenRecords.length > 0) {
       for (const rec of tokenRecords) {
         await rec.update({ status: 'REVOKED' });
@@ -386,9 +387,9 @@ export const googleOAuthService = {
   },
 
   /**
-   * Gets current connected status and full profile for authenticated user/HOD
+   * Gets current connected status and full profile strictly for authenticated user/HOD
    */
-  async getUserGoogleAccount(userId?: string, departmentId?: string): Promise<{
+  async getUserGoogleAccount(userId?: string, _departmentId?: string): Promise<{
     connected: boolean;
     isConnected: boolean;
     email: string | null;
@@ -400,31 +401,28 @@ export const googleOAuthService = {
     lastConnectedAt: Date | null;
     lastUsedAt: Date | null;
   }> {
-    let tokenRecord: GoogleOAuthToken | null = null;
-    if (userId) {
-      tokenRecord = await GoogleOAuthToken.findOne({
-        where: {
-          [Op.or]: [{ userId }, { connectedBy: userId }],
-          status: 'ACTIVE',
-        },
-        order: [['updatedAt', 'DESC']],
-      });
+    if (!userId) {
+      return {
+        connected: false,
+        isConnected: false,
+        email: null,
+        displayName: null,
+        googleAccountId: null,
+        profilePicture: null,
+        status: 'DISCONNECTED',
+        connectedAt: null,
+        lastConnectedAt: null,
+        lastUsedAt: null,
+      };
     }
 
-    if (!tokenRecord && departmentId) {
-      tokenRecord = await GoogleOAuthToken.findOne({
-        where: { departmentId, status: 'ACTIVE' },
-        order: [['updatedAt', 'DESC']],
-      });
-    }
-
-    // Global persistence fallback: any active OAuth token in the system
-    if (!tokenRecord) {
-      tokenRecord = await GoogleOAuthToken.findOne({
-        where: { status: 'ACTIVE' },
-        order: [['updatedAt', 'DESC']],
-      });
-    }
+    const tokenRecord = await GoogleOAuthToken.findOne({
+      where: {
+        [Op.or]: [{ userId }, { connectedBy: userId }],
+        status: 'ACTIVE',
+      },
+      order: [['updatedAt', 'DESC']],
+    });
 
     if (!tokenRecord) {
       return {
@@ -441,15 +439,16 @@ export const googleOAuthService = {
       };
     }
 
-    const email = tokenRecord.googleAccountEmail || tokenRecord.userEmail || 'yuvarajbtalawar@gmail.com';
+    const isExpired = tokenRecord.tokenExpiry ? tokenRecord.tokenExpiry.getTime() < Date.now() : false;
+
     return {
-      connected: true,
-      isConnected: true,
-      email,
+      connected: !isExpired,
+      isConnected: !isExpired,
+      email: tokenRecord.googleAccountEmail || tokenRecord.userEmail || null,
       displayName: tokenRecord.displayName || null,
       googleAccountId: tokenRecord.googleAccountId || null,
       profilePicture: tokenRecord.profilePicture || null,
-      status: 'CONNECTED',
+      status: isExpired ? 'EXPIRED' : 'CONNECTED',
       connectedAt: tokenRecord.createdAt,
       lastConnectedAt: tokenRecord.updatedAt || tokenRecord.createdAt,
       lastUsedAt: tokenRecord.lastUsedAt || tokenRecord.updatedAt || tokenRecord.createdAt,

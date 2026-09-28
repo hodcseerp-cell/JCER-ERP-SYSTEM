@@ -72,7 +72,7 @@ GoogleSheetTab.init(
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('MAPPED', 'UNMAPPED', 'PENDING_MAPPING', 'IGNORED'),
+      type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: 'UNMAPPED',
     },

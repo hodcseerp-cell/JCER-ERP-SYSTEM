@@ -20,6 +20,7 @@ import UsnRegistry from '../models/UsnRegistry';
 import AuditLog from '../models/AuditLog';
 import ExistingStudentOnboardingBatch from '../models/ExistingStudentOnboardingBatch';
 import logger from '../utils/logger.util';
+import { normalizeAcademicYear, areAcademicYearsEqual } from '../utils/academicYear.util';
 
 interface AuthRequest extends Request {
   user?: {
@@ -441,7 +442,7 @@ const validateRow = async (
   if (context.departmentCode && department && department.code.toUpperCase() !== context.departmentCode.toUpperCase()) {
     warnings.push(`Row department (${department.code}) differs from selected context (${context.departmentCode}).`);
   }
-  if (context.academicYear && rawAcademicYear !== context.academicYear) {
+  if (context.academicYear && rawAcademicYear && !areAcademicYearsEqual(rawAcademicYear, context.academicYear)) {
     warnings.push(`Row academic year (${rawAcademicYear}) differs from selected context (${context.academicYear}).`);
   }
   if (context.semester && rawCurrentSem !== context.semester) {
@@ -632,6 +633,15 @@ export const importExistingStudents = async (
       deptMap.set(d.code.toUpperCase(), d);
     });
 
+    // Query available academic years in DB to match registered year or fallback to canonical format
+    const dbAcademicYears = await AcademicYear.findAll({ transaction: t }).catch(() => []);
+    const resolveAcademicYear = (rawYear?: string): string => {
+      if (!rawYear) return '2026-27';
+      const matched = dbAcademicYears.find((ay: any) => areAcademicYearsEqual(ay.year, rawYear));
+      if (matched) return matched.year;
+      return normalizeAcademicYear(rawYear) || rawYear;
+    };
+
     const defaultPasswordHash = await bcrypt.hash('password123', 10);
     const createdStudents: any[] = [];
     const failedRows: any[] = [];
@@ -682,6 +692,7 @@ export const importExistingStudents = async (
         }
 
         const effectiveRollNumber = currentSem === 1 ? (item.rollNumber || null) : null;
+        const targetAcademicYear = resolveAcademicYear(item.academicYear || academicYear);
 
         const newStudent = await Student.create(
           {
@@ -694,7 +705,7 @@ export const importExistingStudents = async (
             departmentId: dept.id,
             semester: currentSem,
             section: item.section || null,
-            currentAcademicYear: item.academicYear || academicYear || '2026-2027',
+            currentAcademicYear: targetAcademicYear,
             initialSemester: entrySem,
             admissionStatus: 'APPROVED',
             admissionType: 'EXISTING',
@@ -713,7 +724,7 @@ export const importExistingStudents = async (
         await StudentAcademicEnrollment.create(
           {
             studentId: newStudent.id,
-            academicYearId: item.academicYear || academicYear || '2026-27',
+            academicYearId: targetAcademicYear,
             schemeId: item.scheme || scheme || '2025',
             departmentId: dept.id,
             semesterId: currentSem,
@@ -769,7 +780,7 @@ export const importExistingStudents = async (
     const batch = await ExistingStudentOnboardingBatch.create(
       {
         fileName: fileName || `existing_students_${Date.now()}.xlsx`,
-        academicYear: academicYear || '2026-2027',
+        academicYear: resolveAcademicYear(academicYear),
         scheme: scheme || '2025',
         semester: Number(semester) || 3,
         departmentId: deptId,

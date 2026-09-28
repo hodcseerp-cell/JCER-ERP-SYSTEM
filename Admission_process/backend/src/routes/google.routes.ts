@@ -10,7 +10,7 @@ const router = express.Router();
 router.get(
   '/account',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.getCurrentUserGoogleAccount as any
 );
@@ -18,7 +18,7 @@ router.get(
 router.get(
   '/oauth/status',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.getCurrentUserGoogleAccount as any
 );
@@ -26,7 +26,7 @@ router.get(
 router.get(
   '/oauth/auth-url',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.getGoogleOAuthAuthUrl as any
 );
@@ -34,7 +34,7 @@ router.get(
 router.get(
   '/connect',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.getGoogleOAuthAuthUrl as any
 );
@@ -44,10 +44,15 @@ router.get(
   googleSheetsController.mockConnectGoogleOAuth as any
 );
 
+router.get(
+  '/oauth/callback',
+  googleSheetsController.handleGoogleOAuthCallbackGet as any
+);
+
 router.post(
   '/oauth/callback',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.handleGoogleOAuthCallback as any
 );
@@ -55,9 +60,17 @@ router.post(
 router.post(
   '/oauth/disconnect',
   authMiddleware as any,
-  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'TEACHER', 'FACULTY') as any,
   resolveHodDepartmentScope as any,
   googleSheetsController.disconnectGoogleOAuth as any
+);
+
+router.post(
+  '/sheets/validate',
+  authMiddleware as any,
+  authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any,
+  resolveHodDepartmentScope as any,
+  googleSheetsController.validateGoogleSpreadsheet as any
 );
 
 export default router;

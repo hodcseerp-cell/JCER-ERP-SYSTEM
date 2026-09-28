@@ -65,7 +65,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
   const [selectedScheme, setSelectedScheme] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<number | ''>('');
   const [selectedDepartmentCode, setSelectedDepartmentCode] = useState<string>('');
-  const [selectedSection, setSelectedSection] = useState<string>('');
 
   // File & Upload State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -141,7 +140,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
         scheme: selectedScheme,
         semester: selectedSemester || undefined,
         departmentCode: selectedDepartmentCode || 'CSE',
-        section: selectedSection,
       });
       toast.success('Template downloaded successfully.');
     } catch (err: any) {
@@ -194,10 +192,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
       toast.warn('Please select a Department first.');
       return;
     }
-    if (!selectedSection) {
-      toast.warn('Please select a Section first.');
-      return;
-    }
     if (!selectedFile) {
       toast.error('Please select an Excel file first.');
       return;
@@ -210,7 +204,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
         scheme: selectedScheme,
         semester: Number(selectedSemester),
         departmentCode: selectedDepartmentCode,
-        section: selectedSection,
       });
       setValidationResult(res);
       setPreviewPage(1);
@@ -249,7 +242,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
         scheme: selectedScheme || '2025',
         semester: Number(selectedSemester) || 3,
         departmentCode: selectedDepartmentCode || 'CSE',
-        section: selectedSection || 'A',
         records: validRecords,
       });
 
@@ -271,7 +263,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
     setSelectedScheme('');
     setSelectedSemester('');
     setSelectedDepartmentCode('');
-    setSelectedSection('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -380,7 +371,7 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
             </div>
 
             {/* Context Selectors */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
               {/* Academic Year */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
@@ -468,29 +459,6 @@ export const ExistingStudentOnboardingPage: React.FC = () => {
                   {context.departments.map((dept) => (
                     <option key={dept.id} value={dept.code} className="text-slate-800 dark:text-white">
                       {dept.code} — {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Section */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
-                  Section
-                </label>
-                <select
-                  value={selectedSection}
-                  onChange={(e) => setSelectedSection(e.target.value)}
-                  className={`w-full px-3 py-2 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 transition-colors ${
-                    !selectedSection ? 'text-slate-400 dark:text-neutral-500' : 'text-slate-800 dark:text-white'
-                  }`}
-                >
-                  <option value="" disabled>
-                    Select Section
-                  </option>
-                  {context.sections.map((sec) => (
-                    <option key={sec} value={sec} className="text-slate-800 dark:text-white">
-                      Section {sec}
                     </option>
                   ))}
                 </select>

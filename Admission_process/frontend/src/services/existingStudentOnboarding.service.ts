@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import API from './api';
+import { normalizeAcademicYear, areAcademicYearsEqual } from '../utils/academicYear.util';
 
 export interface OnboardingContext {
   departments: Array<{ id: string; name: string; code: string }>;
@@ -376,7 +377,7 @@ export const existingStudentOnboardingService = {
       scheme: string;
       semester: number;
       departmentCode: string;
-      section: string;
+      section?: string;
     }
   ): Promise<ValidationResponse> => {
     // 1. Try server-side validation endpoints first
@@ -387,7 +388,9 @@ export const existingStudentOnboardingService = {
       formData.append('scheme', context.scheme);
       formData.append('semester', context.semester.toString());
       formData.append('departmentCode', context.departmentCode);
-      formData.append('section', context.section);
+      if (context.section) {
+        formData.append('section', context.section);
+      }
 
       const endpoints = [
         '/admin/onboarding/existing-students/validate',
@@ -434,7 +437,7 @@ export const existingStudentOnboardingService = {
     scheme: string;
     semester: number;
     departmentCode: string;
-    section: string;
+    section?: string;
     records: any[];
   }): Promise<{ batchId: string; totalImported: number; failedCount: number }> => {
     const endpoints = [
@@ -458,7 +461,7 @@ export const existingStudentOnboardingService = {
             scheme: payload.scheme,
             semester: payload.semester,
             departmentCode: payload.departmentCode,
-            section: payload.section,
+            section: payload.section || 'ALL',
             totalRecords: serverData.totalImported,
             successfulRecords: serverData.totalImported,
             failedRecords: serverData.failedCount || 0,
@@ -487,7 +490,7 @@ export const existingStudentOnboardingService = {
       scheme: payload.scheme,
       semester: payload.semester,
       departmentCode: payload.departmentCode,
-      section: payload.section,
+      section: payload.section || 'ALL',
       totalRecords: payload.records.length,
       successfulRecords: payload.records.length,
       failedRecords: 0,
@@ -569,7 +572,7 @@ export const validateSpreadsheetClientSide = async (
     scheme: string;
     semester: number;
     departmentCode: string;
-    section: string;
+    section?: string;
   }
 ): Promise<ValidationResponse> => {
   const arrayBuffer = await file.arrayBuffer();
@@ -689,6 +692,14 @@ export const validateSpreadsheetClientSide = async (
 
     if (dept !== context.departmentCode.toUpperCase()) {
       warnings.push(`Department '${dept}' differs from selected context '${context.departmentCode}'`);
+    }
+
+    if (context.academicYear && academicYear && !areAcademicYearsEqual(academicYear, context.academicYear)) {
+      warnings.push(`Row academic year (${academicYear}) differs from selected context (${context.academicYear})`);
+    }
+
+    if (context.semester && currentSemester !== context.semester) {
+      warnings.push(`Row semester (${currentSemester}) differs from selected context (${context.semester})`);
     }
 
     let status: 'VALID' | 'WARNING' | 'ERROR' = 'VALID';

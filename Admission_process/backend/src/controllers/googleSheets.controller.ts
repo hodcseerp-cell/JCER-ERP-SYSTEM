@@ -14,6 +14,8 @@ import googleOAuthService from '../services/googleOAuth.service';
 import googleSheetsService from '../services/googleSheets.service';
 import logger from '../utils/logger.util';
 
+import Section from '../models/Section';
+
 /**
  * Helper to record structured audit logs
  */
@@ -103,20 +105,54 @@ export const getSemesterGoogleSheets = async (
             connectedAt: conn.connectedAt,
             lastSyncedAt: conn.lastSyncedAt,
             connectedBy: conn.connectedByUser,
-            tabs: conn.tabs || [],
+            tabs: (conn.tabs || []).map((t: any) => ({
+              id: t.id,
+              sheetId: t.googleSheetId,
+              title: t.sheetTitle,
+              index: t.sheetIndex,
+              sheetType: t.sheetType,
+              subjectId: t.subjectId,
+              subjectCode: t.subjectCode,
+              status: t.status,
+              mappedSubject: t.subject ? { id: t.subject.id, name: t.subject.name, code: t.subject.code } : null,
+            })),
           }
         : null;
 
-    // Build dynamic division list: minimum A, B, C, D plus any other sections present in connections or requested
-    const divisionSet = new Set(['A', 'B', 'C', 'D']);
+    // Fetch actual sections from database for this department and semester
+    const startYear = academicYear.split(/[-–/]/)[0].trim();
+    const deptDbSections = await Section.findAll({
+      where: {
+        departmentId,
+        semester,
+        status: 'ACTIVE',
+      },
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+    });
+
+    const divisionSet = new Set<string>();
+    deptDbSections.forEach((s) => {
+      divisionSet.add(normalizeSection(s.name));
+    });
+
+    // Also include any sections present in active connections
     connections.forEach((c) => {
       if (c.sheetType === 'ATTENDANCE' && c.section) {
         divisionSet.add(normalizeSection(c.section));
       }
     });
+
     if (requestedSection) {
       divisionSet.add(normalizeSection(requestedSection));
     }
+
+    // Default fallback if no sections in DB yet
+    if (divisionSet.size === 0) {
+      divisionSet.add('A');
+      divisionSet.add('B');
+    }
+
     const divisionsList = Array.from(divisionSet).sort((a, b) => a.localeCompare(b));
     const divisions = divisionsList.map((div) => {
       const conn = connections.find(
@@ -125,6 +161,7 @@ export const getSemesterGoogleSheets = async (
       return {
         section: div,
         divisionName: `Division ${div}`,
+        sectionName: `Section ${div}`,
         isConnected: Boolean(conn && conn.status === 'ACTIVE'),
         connection: formatConnection(conn),
       };
@@ -141,7 +178,7 @@ export const getSemesterGoogleSheets = async (
       attendanceConnection = connections.find((c) => c.sheetType === 'ATTENDANCE') || null;
     }
 
-    const marksConnection = connections.find((c) => c.sheetType === 'ACADEMIC_MARKS') || null;
+    const marksConnection = connections.find((c) => c.sheetType === 'BITWISE_MARKS' || c.sheetType === 'ACADEMIC_MARKS') || null;
 
     return res.json({
       success: true,
@@ -150,6 +187,8 @@ export const getSemesterGoogleSheets = async (
         academicYear,
         divisions,
         attendance: formatConnection(attendanceConnection),
+        attendanceConnections: connections.filter((c) => c.sheetType === 'ATTENDANCE').map(formatConnection),
+        bitwiseMarks: formatConnection(marksConnection),
         marks: formatConnection(marksConnection),
         allConnections: connections.map(formatConnection),
       },
@@ -161,8 +200,218 @@ export const getSemesterGoogleSheets = async (
 };
 
 /**
+ * POST /api/hod/semesters/:semesterId/google-sheets/attendance/batch
+ * Connects multiple section-specific Attendance Google Sheets for a semester in one action.
+ */
+export const connectSemesterAttendanceSheetsBatch = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const departmentId = req.departmentId;
+    const semester = parseInt(req.params.semesterId, 10);
+    const { connections, academicYear = '2026-27' } = req.body;
+
+    if (isNaN(semester) || semester < 1 || semester > 8) {
+      return res.status(400).json({ error: 'Valid semester (1-8) is required.' });
+    }
+
+    if (!Array.isArray(connections) || connections.length === 0) {
+      return res.status(400).json({ error: 'At least one section connection is required.' });
+    }
+
+    // Validate no duplicate sections in the request
+    const seenSections = new Set<string>();
+    for (let i = 0; i < connections.length; i++) {
+      const item = connections[i];
+      if (!item.section || !String(item.section).trim()) {
+        return res.status(400).json({ error: `Row ${i + 1}: Select a section.` });
+      }
+      if (!item.spreadsheetUrl || !String(item.spreadsheetUrl).trim()) {
+        return res.status(400).json({ error: `Row ${i + 1}: Enter the Google Spreadsheet URL.` });
+      }
+
+      const normSec = normalizeSection(item.section);
+      if (seenSections.has(normSec)) {
+        return res.status(400).json({ error: 'Each section can have only one attendance sheet.' });
+      }
+      seenSections.add(normSec);
+
+      const sId = googleSheetsService.extractSpreadsheetId(item.spreadsheetUrl);
+      if (!sId) {
+        return res.status(400).json({ error: `Row ${i + 1}: Enter a valid Google Sheets URL.` });
+      }
+    }
+
+    // Check Google Account OAuth connection strictly for authenticated HOD user
+    const currentUserId = req.user?.id || '';
+    const authStatus = await googleOAuthService.getUserGoogleAccount(currentUserId);
+    const tokenInfo = await googleOAuthService.getValidAccessTokenForUser(currentUserId);
+
+    if (!authStatus.connected || !tokenInfo?.token) {
+      return res.status(400).json({
+        error: 'No active Google account connected for your HOD account. Please connect your Google account before linking spreadsheets.',
+      });
+    }
+
+    const connectedEmail = authStatus.email || tokenInfo.email || req.user?.email || '';
+
+    // Fetch department subjects for tab mapping
+    const departmentSubjects = await Subject.findAll({
+      where: { departmentId, semester },
+    });
+
+    const results: any[] = [];
+
+    for (let i = 0; i < connections.length; i++) {
+      const item = connections[i];
+      const normSec = normalizeSection(item.section);
+      const spreadsheetId = googleSheetsService.extractSpreadsheetId(item.spreadsheetUrl)!;
+
+      // Validate Drive file, MIME type (XLSX check), and Sheets tab discovery
+      const validation = await googleSheetsService.validateGoogleSpreadsheetAccess(
+        spreadsheetId,
+        tokenInfo.token,
+        { id: authStatus.googleAccountId, email: connectedEmail }
+      );
+
+      if (validation.errorCode || !validation.supportedType || !validation.tabs || validation.tabs.length === 0) {
+        logger.warn(`Spreadsheet validation failed for Section ${normSec}:`, validation);
+        return res.status(400).json({
+          error: `Section ${normSec}: ${validation.errorMessage || 'Unable to connect spreadsheet.'}`,
+          diagnostic: validation,
+        });
+      }
+
+      const sheetMetadata = {
+        title: validation.file?.name || 'Spreadsheet',
+        tabs: validation.tabs,
+      };
+
+      // Deactivate previous active connection for this semester + section
+      const previousConnection = await GoogleSheetConnection.findOne({
+        where: {
+          departmentId,
+          semester,
+          academicYear,
+          section: normSec,
+          sheetType: 'ATTENDANCE',
+          status: 'ACTIVE',
+        },
+      });
+
+      if (previousConnection) {
+        await previousConnection.update({
+          status: 'DISCONNECTED',
+          disconnectedBy: req.user?.id,
+          disconnectedAt: new Date(),
+        });
+      }
+
+      // Create GoogleSheetConnection record
+      const connection = await GoogleSheetConnection.create({
+        departmentId,
+        academicYear,
+        semester,
+        section: normSec,
+        sheetType: 'ATTENDANCE',
+        googleSpreadsheetId: spreadsheetId,
+        googleSpreadsheetUrl: item.spreadsheetUrl.trim(),
+        googleAccountEmail: connectedEmail,
+        status: 'ACTIVE',
+        connectedBy: req.user?.id,
+        connectedAt: new Date(),
+      });
+
+      // Create tabs
+      const createdTabs: any[] = [];
+      for (const tab of sheetMetadata.tabs) {
+        const cleanUpper = tab.title.trim().toUpperCase();
+        const isSpecialTab = cleanUpper.includes('FINAL MARKS') || cleanUpper === 'FINAL' || cleanUpper.includes('FORM RESPONSES');
+
+        const tabNumberMatch = cleanUpper.match(/\d+/);
+        const tabNumber = tabNumberMatch ? tabNumberMatch[0] : '';
+
+        const matchedSubject = !isSpecialTab
+          ? departmentSubjects.find((sub) => {
+              const cleanCode = (sub.code || '').trim().toUpperCase();
+              const cleanName = (sub.name || '').trim().toUpperCase();
+              const codeNumberMatch = cleanCode.match(/\d+/);
+              const codeNumber = codeNumberMatch ? codeNumberMatch[0] : '';
+
+              return (
+                cleanUpper === cleanCode ||
+                cleanUpper.includes(cleanCode) ||
+                cleanCode.includes(cleanUpper) ||
+                cleanName.includes(cleanUpper) ||
+                (Boolean(tabNumber) && Boolean(codeNumber) && tabNumber === codeNumber)
+              );
+            })
+          : null;
+
+        const tabRecord = await GoogleSheetTab.create({
+          googleSheetConnectionId: connection.id,
+          googleSpreadsheetId: connection.googleSpreadsheetId,
+          googleSheetId: String(tab.sheetId),
+          sheetTitle: tab.title,
+          sheetIndex: tab.index,
+          sheetType: isSpecialTab ? 'SPECIAL' : 'SUBJECT',
+          subjectId: matchedSubject?.id || null,
+          subjectCode: matchedSubject?.code || (isSpecialTab ? null : tab.title),
+          status: matchedSubject ? 'MAPPED' : isSpecialTab ? 'IGNORED' : 'UNMAPPED',
+          isHidden: tab.hidden,
+        });
+
+        createdTabs.push({
+          id: tabRecord.id,
+          sheetId: tabRecord.googleSheetId,
+          title: tabRecord.sheetTitle,
+          index: tabRecord.sheetIndex,
+          sheetType: tabRecord.sheetType,
+          subjectId: tabRecord.subjectId,
+          subjectCode: tabRecord.subjectCode,
+          status: tabRecord.status,
+          mappedSubject: matchedSubject ? { id: matchedSubject.id, name: matchedSubject.name, code: matchedSubject.code } : null,
+        });
+      }
+
+      results.push({
+        connection: {
+          id: connection.id,
+          section: normSec,
+          sheetType: 'ATTENDANCE',
+          spreadsheetId: connection.googleSpreadsheetId,
+          spreadsheetUrl: connection.googleSpreadsheetUrl,
+          accountEmail: connection.googleAccountEmail,
+          status: connection.status,
+          connectedAt: connection.connectedAt,
+        },
+        tabs: createdTabs,
+      });
+    }
+
+    await recordAudit(req, 'GOOGLE_SHEET_ATTENDANCE_BATCH_CONNECTED', {
+      semester,
+      academicYear,
+      connectedCount: results.length,
+      sections: Array.from(seenSections),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Successfully connected Attendance Google Sheets for ${results.length} section(s).`,
+      data: results,
+    });
+  } catch (error) {
+    logger.error('CONNECT_SEMESTER_ATTENDANCE_BATCH_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
  * POST /api/hod/semesters/:semesterId/google-sheets/connect
- * Connects an Attendance or Academic Marks Google Sheet for a semester + division and auto-discovers tabs.
+ * Connects an Attendance or Academic/Bitwise Marks Google Sheet for a semester + division and auto-discovers tabs.
  */
 export const connectSemesterGoogleSheet = async (
   req: AuthenticatedRequest,
@@ -179,8 +428,8 @@ export const connectSemesterGoogleSheet = async (
       return res.status(400).json({ error: 'Valid semester (1-8) is required.' });
     }
 
-    if (!spreadsheetUrl || !sheetType || !['ATTENDANCE', 'ACADEMIC_MARKS'].includes(sheetType)) {
-      return res.status(400).json({ error: 'Spreadsheet URL and valid Sheet Type (ATTENDANCE | ACADEMIC_MARKS) are required.' });
+    if (!spreadsheetUrl || !sheetType || !['ATTENDANCE', 'ACADEMIC_MARKS', 'BITWISE_MARKS'].includes(sheetType)) {
+      return res.status(400).json({ error: 'Spreadsheet URL and valid Sheet Type (ATTENDANCE | BITWISE_MARKS | ACADEMIC_MARKS) are required.' });
     }
 
     const spreadsheetId = googleSheetsService.extractSpreadsheetId(spreadsheetUrl);
@@ -188,39 +437,53 @@ export const connectSemesterGoogleSheet = async (
       return res.status(400).json({ error: 'Invalid Google Spreadsheet URL or ID.' });
     }
 
-    // Check Google Account OAuth connection for authenticated HOD user
-    const authStatus = await googleOAuthService.getUserGoogleAccount(req.user?.id || '', departmentId);
-    const tokenInfo = await googleOAuthService.getValidAccessTokenForUser(req.user?.id || '', departmentId);
-    let connectedEmail = authStatus.email || tokenInfo?.email || 'hod@college.edu';
+    // Check Google Account OAuth connection strictly for authenticated HOD user
+    const currentUserId = req.user?.id || '';
+    const authStatus = await googleOAuthService.getUserGoogleAccount(currentUserId);
+    const tokenInfo = await googleOAuthService.getValidAccessTokenForUser(currentUserId);
 
-    // Call Google Sheets API to discover tabs
-    let sheetMetadata: { title: string; tabs: Array<{ sheetId: string; title: string; index: number; hidden: boolean }> } | null = null;
-    try {
-      sheetMetadata = await googleSheetsService.fetchSpreadsheetMetadata(spreadsheetId, tokenInfo?.token);
-    } catch (err: any) {
-      logger.error('Failed to read spreadsheet metadata from Google:', err);
+    if (!authStatus.connected || !tokenInfo?.token) {
       return res.status(400).json({
-        error: 'Unable to connect Google Sheet. Please verify the spreadsheet URL and Google account permissions.',
+        error: 'No active Google account connected for your HOD account. Please connect your Google account before linking spreadsheets.',
       });
     }
 
-    if (!sheetMetadata || !sheetMetadata.tabs) {
+    const connectedEmail = authStatus.email || tokenInfo.email || req.user?.email || '';
+
+    // Validate Drive file, MIME type (XLSX check), and Sheets tab discovery
+    const validation = await googleSheetsService.validateGoogleSpreadsheetAccess(
+      spreadsheetId,
+      tokenInfo.token,
+      { id: authStatus.googleAccountId, email: connectedEmail }
+    );
+
+    if (validation.errorCode || !validation.supportedType || !validation.tabs || validation.tabs.length === 0) {
+      logger.warn('Spreadsheet validation failed:', validation);
       return res.status(400).json({
-        error: 'Unable to connect Google Sheet. Please verify the spreadsheet URL and Google account permissions.',
+        error: validation.errorMessage || 'Unable to connect spreadsheet.',
+        diagnostic: validation,
       });
     }
+
+    const sheetMetadata = {
+      title: validation.file?.name || 'Spreadsheet',
+      tabs: validation.tabs,
+    };
 
     // Fetch department subjects to automatically map tabs
     const departmentSubjects = await Subject.findAll({
       where: { departmentId, semester },
     });
 
+    // Normalize sheetType lookup for previous connection
+    const targetSheetTypes = sheetType === 'ATTENDANCE' ? ['ATTENDANCE'] : ['BITWISE_MARKS', 'ACADEMIC_MARKS'];
+
     // Deactivate previous active connection of this type for this semester + section
     const previousConnectionWhere: any = {
       departmentId,
       semester,
       academicYear,
-      sheetType,
+      sheetType: { [Op.in]: targetSheetTypes },
       status: 'ACTIVE',
     };
     if (sheetType === 'ATTENDANCE') {
@@ -257,19 +520,31 @@ export const connectSemesterGoogleSheet = async (
     // Create tabs and auto-map
     const createdTabs: any[] = [];
     for (const tab of sheetMetadata.tabs) {
-      // Find matching subject by exact code or substring match
-      const matchedSubject = departmentSubjects.find((sub) => {
-        const cleanTitle = tab.title.trim().toUpperCase();
-        const cleanCode = (sub.code || '').trim().toUpperCase();
-        const cleanName = (sub.name || '').trim().toUpperCase();
-        return cleanTitle === cleanCode || cleanTitle.includes(cleanCode) || cleanName.includes(cleanTitle);
-      });
+      const cleanUpper = tab.title.trim().toUpperCase();
+      const isFinalMarksTab = cleanUpper.includes('FINAL MARKS') || cleanUpper === 'FINAL';
+      const isFormResponseTab = cleanUpper.includes('FORM RESPONSES');
+      const isSpecialTab = isFinalMarksTab || isFormResponseTab;
 
-      const isSpecialTab =
-        tab.title.toUpperCase().includes('FINAL MARKS') ||
-        tab.title.toLowerCase().includes('form responses') ||
-        tab.title.toLowerCase().includes('project') ||
-        tab.title.toLowerCase().includes('final');
+      const tabNumberMatch = cleanUpper.match(/\d+/);
+      const tabNumber = tabNumberMatch ? tabNumberMatch[0] : '';
+
+      // Find matching subject by exact code or substring match or numeric match (e.g. CS301 -> BCS301)
+      const matchedSubject = !isSpecialTab
+        ? departmentSubjects.find((sub) => {
+            const cleanCode = (sub.code || '').trim().toUpperCase();
+            const cleanName = (sub.name || '').trim().toUpperCase();
+            const codeNumberMatch = cleanCode.match(/\d+/);
+            const codeNumber = codeNumberMatch ? codeNumberMatch[0] : '';
+
+            return (
+              cleanUpper === cleanCode ||
+              cleanUpper.includes(cleanCode) ||
+              cleanCode.includes(cleanUpper) ||
+              cleanName.includes(cleanUpper) ||
+              (Boolean(tabNumber) && Boolean(codeNumber) && tabNumber === codeNumber)
+            );
+          })
+        : null;
 
       const tabRecord = await GoogleSheetTab.create({
         googleSheetConnectionId: connection.id,
@@ -550,10 +825,27 @@ export const refreshGoogleSheet = async (
     }
 
     const tokenInfo = await googleOAuthService.getValidAccessTokenForUser(req.user?.id || '', departmentId || undefined);
-    const sheetMetadata = await googleSheetsService.fetchSpreadsheetMetadata(
+    if (!tokenInfo?.token) {
+      return res.status(400).json({ error: 'No active Google account connected. Please connect your Google account.' });
+    }
+
+    const validation = await googleSheetsService.validateGoogleSpreadsheetAccess(
       connection.googleSpreadsheetId,
-      tokenInfo?.token
+      tokenInfo.token,
+      { email: tokenInfo.email }
     );
+
+    if (validation.errorCode || !validation.supportedType || !validation.tabs || validation.tabs.length === 0) {
+      return res.status(400).json({
+        error: validation.errorMessage || 'Unable to refresh tabs from Google Sheets.',
+        diagnostic: validation,
+      });
+    }
+
+    const sheetMetadata = {
+      title: validation.file?.name || 'Spreadsheet',
+      tabs: validation.tabs,
+    };
 
     const departmentSubjects = await Subject.findAll({
       where: { departmentId, semester: connection.semester },
@@ -583,17 +875,29 @@ export const refreshGoogleSheet = async (
           isHidden: tab.hidden,
         });
       } else {
+        const cleanUpper = tab.title.trim().toUpperCase();
+        const tabNumberMatch = cleanUpper.match(/\d+/);
+        const tabNumber = tabNumberMatch ? tabNumberMatch[0] : '';
+
         const matchedSubject = departmentSubjects.find((sub) => {
-          const cleanTitle = tab.title.trim().toUpperCase();
           const cleanCode = (sub.code || '').trim().toUpperCase();
-          return cleanTitle === cleanCode || cleanTitle.includes(cleanCode);
+          const cleanName = (sub.name || '').trim().toUpperCase();
+          const codeNumberMatch = cleanCode.match(/\d+/);
+          const codeNumber = codeNumberMatch ? codeNumberMatch[0] : '';
+
+          return (
+            cleanUpper === cleanCode ||
+            cleanUpper.includes(cleanCode) ||
+            cleanCode.includes(cleanUpper) ||
+            cleanName.includes(cleanUpper) ||
+            (Boolean(tabNumber) && Boolean(codeNumber) && tabNumber === codeNumber)
+          );
         });
 
         const isSpecialTab =
-          tab.title.toUpperCase().includes('FINAL MARKS') ||
-          tab.title.toLowerCase().includes('form responses') ||
-          tab.title.toLowerCase().includes('project') ||
-          tab.title.toLowerCase().includes('final');
+          cleanUpper.includes('FINAL MARKS') ||
+          cleanUpper === 'FINAL' ||
+          cleanUpper.includes('FORM RESPONSES');
 
         await GoogleSheetTab.create({
           googleSheetConnectionId: connection.id,
@@ -1105,13 +1409,21 @@ export const mockConnectGoogleOAuth = async (
   try {
     const state = (req.query.state as string) || '';
     const verifiedState = googleOAuthService.verifyOAuthState(state);
-    const targetUserId = verifiedState?.userId || req.user?.id || 'admin-user';
+    const targetUserId = verifiedState?.userId || req.user?.id;
     const targetDeptId = verifiedState?.departmentId || req.departmentId;
 
-    const mockEmail = (req.query.email as string) || 'yuvarajbtalawar@gmail.com';
+    if (!targetUserId) {
+      return res.status(401).send('Unauthorized: Cannot resolve ERP user.');
+    }
+
+    const erpUser = await User.findByPk(targetUserId);
+    const userFullName = erpUser ? `${erpUser.firstName || ''} ${erpUser.lastName || ''}`.trim() : 'HOD User';
+    const userDefaultEmail = erpUser?.email || 'hod@college.edu';
+
+    const mockEmail = (req.query.email as string) || userDefaultEmail;
     const mockProfile = {
-      googleAccountId: '10982374618293746',
-      displayName: 'Yuvaraj Talawar',
+      googleAccountId: `google_${targetUserId}`,
+      displayName: userFullName || mockEmail.split('@')[0],
       profilePicture: undefined,
     };
 
@@ -1197,7 +1509,13 @@ export const handleGoogleOAuthCallback = async (
       return res.status(401).json({ error: 'Unauthorized: Unable to verify ERP user from OAuth state.' });
     }
 
-    const tokens = await googleOAuthService.exchangeCodeForTokens(code);
+    const erpUser = await User.findByPk(targetUserId);
+    const userFallback = {
+      email: erpUser?.email || 'hod@college.edu',
+      name: erpUser ? `${erpUser.firstName || ''} ${erpUser.lastName || ''}`.trim() : 'HOD User',
+    };
+
+    const tokens = await googleOAuthService.exchangeCodeForTokens(code, undefined, userFallback);
     const saved = await googleOAuthService.saveUserToken(
       targetUserId,
       tokens.email,
@@ -1236,6 +1554,89 @@ export const handleGoogleOAuthCallback = async (
 };
 
 /**
+ * GET /api/google/oauth/callback
+ * Handles direct browser redirect from Google OAuth consent flow.
+ */
+export const handleGoogleOAuthCallbackGet = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const code = req.query.code as string;
+    const state = req.query.state as string;
+
+    if (!code) {
+      return res.status(400).send('<h3>Error: Authorization code is missing.</h3>');
+    }
+
+    const verifiedState = googleOAuthService.verifyOAuthState(state);
+    const targetUserId = verifiedState?.userId;
+    const targetDeptId = verifiedState?.departmentId;
+
+    if (!targetUserId) {
+      return res.status(401).send('<h3>Error: Invalid or expired OAuth state parameter.</h3>');
+    }
+
+    const erpUser = await User.findByPk(targetUserId);
+    const userFallback = {
+      email: erpUser?.email || 'hod@college.edu',
+      name: erpUser ? `${erpUser.firstName || ''} ${erpUser.lastName || ''}`.trim() : 'HOD User',
+    };
+
+    const tokens = await googleOAuthService.exchangeCodeForTokens(code, undefined, userFallback);
+    await googleOAuthService.saveUserToken(
+      targetUserId,
+      tokens.email,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiresIn,
+      targetDeptId,
+      {
+        googleAccountId: tokens.googleAccountId,
+        displayName: tokens.displayName,
+        profilePicture: tokens.profilePicture,
+      }
+    );
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Google OAuth Success</title></head>
+        <body style="font-family:system-ui, -apple-system, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; background:#f8fafc; color:#1e293b;">
+          <div style="background:white; padding:32px; border-radius:16px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); text-align:center; max-width:400px;">
+            <div style="width:48px; height:48px; background:#dcfce7; color:#16a34a; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px; font-size:24px;">✓</div>
+            <h2 style="margin:0 0 8px 0; font-size:20px; font-weight:700;">Account Connected</h2>
+            <p style="color:#64748b; font-size:14px; margin:0 0 16px 0;">Google Account <strong>${tokens.email}</strong> is now connected to JCER ERP.</p>
+            <p style="color:#94a3b8; font-size:12px; margin:0;">This window will close automatically...</p>
+          </div>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'GOOGLE_OAUTH_SUCCESS', email: '${tokens.email}' }, '*');
+            }
+            setTimeout(() => {
+              window.close();
+            }, 1200);
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error: any) {
+    logger.error('GOOGLE_OAUTH_GET_CALLBACK_ERROR:', error);
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Google OAuth Failed</title></head>
+        <body style="font-family:system-ui, -apple-system, sans-serif; padding:40px; text-align:center;">
+          <h2 style="color:#dc2626;">Authentication Failed</h2>
+          <p>${error.message || 'Unable to connect Google account.'}</p>
+        </body>
+      </html>
+    `);
+  }
+};
+
+/**
  * POST /api/google/oauth/disconnect
  */
 export const disconnectGoogleOAuth = async (
@@ -1251,6 +1652,49 @@ export const disconnectGoogleOAuth = async (
     return res.json({ success: true, message: 'Google account disconnected successfully.' });
   } catch (error) {
     logger.error('DISCONNECT_GOOGLE_OAUTH_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * POST /api/hod/google-sheets/validate
+ * Validates spreadsheet accessibility, Drive permissions, MIME type (XLSX check), and tab discovery.
+ */
+export const validateGoogleSpreadsheet = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const { spreadsheetUrl, spreadsheetId: inputId } = req.body;
+    const urlOrId = spreadsheetUrl || inputId;
+    if (!urlOrId) {
+      return res.status(400).json({ error: 'Spreadsheet URL or ID is required.' });
+    }
+
+    const currentUserId = req.user?.id || '';
+    const authStatus = await googleOAuthService.getUserGoogleAccount(currentUserId);
+    const tokenInfo = await googleOAuthService.getValidAccessTokenForUser(currentUserId);
+
+    if (!authStatus.connected || !tokenInfo?.token) {
+      return res.status(400).json({
+        error: 'No active Google account connected for your HOD account. Please connect your Google account before validating spreadsheets.',
+      });
+    }
+
+    const validation = await googleSheetsService.validateGoogleSpreadsheetAccess(
+      urlOrId,
+      tokenInfo.token,
+      { id: authStatus.googleAccountId, email: authStatus.email || tokenInfo.email }
+    );
+
+    return res.json({
+      success: validation.errorCode === null,
+      data: validation,
+      error: validation.errorMessage || undefined,
+    });
+  } catch (error) {
+    logger.error('VALIDATE_GOOGLE_SPREADSHEET_ERROR:', error);
     return next(error);
   }
 };

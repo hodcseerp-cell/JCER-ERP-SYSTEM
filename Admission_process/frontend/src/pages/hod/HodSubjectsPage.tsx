@@ -17,18 +17,39 @@ import {
 import { toast } from 'react-toastify';
 import hodService, { HodSubjectItem } from '../../services/hod.service';
 
+import usePersistentState from '../../hooks/usePersistentState';
+import usePersistentFormState from '../../hooks/usePersistentFormState';
+
 export const HodSubjectsPage: React.FC = () => {
   const [subjects, setSubjects] = useState<HodSubjectItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
+  
+  // Persisted semester filter across tab switches & page refreshes
+  const [selectedSemester, setSelectedSemester] = usePersistentState<string>('hod_subjects_semester_filter', 'ALL');
 
   // Modal to create subject
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [semester, setSemester] = useState('3');
-  const [credits, setCredits] = useState('4');
-  const [type, setType] = useState('IPCC');
+  
+  // Persisted subject creation form draft
+  const {
+    formState: subjectForm,
+    updateField: updateSubjectField,
+    clearDraft: clearSubjectDraft,
+  } = usePersistentFormState('hod_create_subject_draft', {
+    code: '',
+    name: '',
+    semester: '3',
+    credits: '4',
+    type: 'IPCC',
+  });
+
+  const { code, name, semester, credits, type } = subjectForm;
+  const setCode = (val: string) => updateSubjectField('code', val);
+  const setName = (val: string) => updateSubjectField('name', val);
+  const setSemester = (val: string) => updateSubjectField('semester', val);
+  const setCredits = (val: string) => updateSubjectField('credits', val);
+  const setType = (val: string) => updateSubjectField('type', val);
+
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -72,11 +93,7 @@ export const HodSubjectsPage: React.FC = () => {
         type: type === 'CC' ? 'CC' : 'IPCC',
       });
       setShowAddModal(false);
-      setCode('');
-      setName('');
-      setSemester('3');
-      setCredits('4');
-      setType('IPCC');
+      clearSubjectDraft();
       setFormError(null);
       toast.success('Subject created successfully.');
       fetchSubjects();

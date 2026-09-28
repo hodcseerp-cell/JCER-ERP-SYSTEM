@@ -114,16 +114,19 @@ export const HodGoogleSheetsConnectPage: React.FC = () => {
       } else {
         await hodService.submitGoogleOAuthCallback({ code: 'mock-auth-code' });
         const updated = await hodService.getGoogleAccountStatus();
+        const isConn = Boolean(updated?.connected || updated?.isConnected) && Boolean(updated?.email);
         setGoogleAccount({
-          connected: Boolean(updated?.connected || updated?.isConnected),
-          isConnected: Boolean(updated?.connected || updated?.isConnected),
-          email: updated?.email || 'hod@college.edu',
-          displayName: updated?.displayName || 'Department HOD',
+          connected: isConn,
+          isConnected: isConn,
+          email: updated?.email || null,
+          displayName: updated?.displayName || null,
           googleAccountId: updated?.googleAccountId || null,
           profilePicture: updated?.profilePicture || null,
-          status: 'CONNECTED',
+          status: isConn ? 'CONNECTED' : 'DISCONNECTED',
         });
-        toast.success(`Google Account connected: ${updated?.email || 'hod@college.edu'}`);
+        if (isConn && updated?.email) {
+          toast.success(`Google Account connected: ${updated.email}`);
+        }
       }
     } catch (err: any) {
       toast.error('Unable to connect Google account.');

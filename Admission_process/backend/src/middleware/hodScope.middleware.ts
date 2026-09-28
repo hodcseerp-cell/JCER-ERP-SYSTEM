@@ -2,6 +2,8 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './auth.middleware';
 import HOD from '../models/HOD';
 import Department from '../models/Department';
+import Teacher from '../models/Teacher';
+import FacultyAssignment from '../models/FacultyAssignment';
 import logger from '../utils/logger.util';
 
 // Extend AuthenticatedRequest with HOD department fields
@@ -62,6 +64,32 @@ export const resolveHodDepartmentScope = async (
         dept = (await Department.findOne({ where: { code: 'CSE' } })) || (await Department.findOne());
       }
 
+      req.departmentId = dept?.id;
+      req.department = dept;
+      return next();
+    }
+
+    // For TEACHER and FACULTY connecting personal Google accounts or viewing resources
+    if (role === 'TEACHER' || role === 'FACULTY') {
+      const teacher = await Teacher.findOne({
+        where: { userId },
+        include: [{ model: Department, as: 'department' }],
+      });
+      if (teacher && (teacher as any).department) {
+        req.departmentId = teacher.departmentId;
+        req.department = (teacher as any).department;
+        return next();
+      }
+      const assignment = await FacultyAssignment.findOne({
+        where: { userId },
+        include: [{ model: Department, as: 'department' }],
+      });
+      if (assignment && (assignment as any).department) {
+        req.departmentId = assignment.departmentId;
+        req.department = (assignment as any).department;
+        return next();
+      }
+      const dept = (await Department.findOne({ where: { code: 'CSE' } })) || (await Department.findOne());
       req.departmentId = dept?.id;
       req.department = dept;
       return next();

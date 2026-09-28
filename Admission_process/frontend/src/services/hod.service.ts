@@ -175,6 +175,90 @@ export interface HodSectionCohortData {
   students: HodSectionStudentItem[];
 }
 
+export interface HodCohortStudentItem {
+  id: string;
+  index: number;
+  usn: string | null;
+  enrollmentNumber: string | null;
+  applicationNumber: string | null;
+  name: string;
+  email: string | null;
+  department: string;
+  semester: number;
+  section: string;
+  rollNumber: string | null;
+  academicYear: string;
+  status: string;
+  admissionType: string;
+}
+
+export interface HodGoogleSheetTabItem {
+  id: string;
+  sheetId: number;
+  title: string;
+  index: number;
+  sheetType: string;
+  subjectId: string | null;
+  subjectCode: string | null;
+  status: string;
+  mappedSubject: {
+    id: string;
+    name: string;
+    code: string;
+    type?: string;
+  } | null;
+}
+
+export interface HodGoogleSheetConnectionItem {
+  id: string;
+  sheetType: 'ATTENDANCE' | 'BITWISE_MARKS' | 'ACADEMIC_MARKS';
+  section: string;
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+  accountEmail: string;
+  status: string;
+  connectedAt: string;
+  lastSyncedAt?: string;
+  connectedBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  tabs: HodGoogleSheetTabItem[];
+}
+
+export interface HodSemesterCohortPayload {
+  semester: number;
+  department: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  academicYear: string;
+  summary: {
+    totalStudents: number;
+    activeStudents: number;
+    sections: string;
+    sectionsList: string[];
+    sectionsBreakdown: Array<{ section: string; count: number }>;
+  };
+  students: HodCohortStudentItem[];
+  googleSheets: {
+    attendance: HodGoogleSheetConnectionItem | null;
+    attendanceConnections?: HodGoogleSheetConnectionItem[];
+    bitwiseMarks: HodGoogleSheetConnectionItem | null;
+  };
+  subjects: Array<{
+    id: string;
+    name: string;
+    code: string;
+    type: string;
+    credits: number;
+    semester: number;
+  }>;
+}
+
 export interface HodFacultyItem {
   id: string;
   userId: string;
@@ -648,6 +732,15 @@ export const hodService = {
     return res.data.data;
   },
 
+  // Dedicated Semester Cohort API
+  getSemesterCohort: async (
+    semester: number | string,
+    params?: { academicYear?: string; search?: string }
+  ): Promise<HodSemesterCohortPayload> => {
+    const res = await API.get(`/hod/students/semesters/${semester}`, { params });
+    return res.data.data;
+  },
+
   // Semester-Scoped Google Sheet APIs
   getSemesterGoogleSheets: async (
     semester: number | string,
@@ -669,12 +762,32 @@ export const hodService = {
     semester: number | string,
     data: {
       spreadsheetUrl: string;
-      sheetType: 'ATTENDANCE' | 'ACADEMIC_MARKS';
+      sheetType: 'ATTENDANCE' | 'ACADEMIC_MARKS' | 'BITWISE_MARKS';
       academicYear?: string;
       section?: string;
     }
   ): Promise<any> => {
     const res = await API.post(`/hod/semesters/${semester}/google-sheets/connect`, data);
+    return res.data;
+  },
+
+  connectSemesterAttendanceSheetsBatch: async (
+    semester: number | string,
+    data: {
+      connections: Array<{ section: string; spreadsheetUrl: string }>;
+      academicYear?: string;
+    }
+  ): Promise<any> => {
+    const res = await API.post(`/hod/semesters/${semester}/google-sheets/attendance/batch`, data);
+    return res.data;
+  },
+
+  validateGoogleSpreadsheet: async (
+    spreadsheetUrl: string,
+    semester?: number | string
+  ): Promise<any> => {
+    const endpoint = semester ? `/hod/semesters/${semester}/google-sheets/validate` : `/hod/google-sheets/validate`;
+    const res = await API.post(endpoint, { spreadsheetUrl });
     return res.data;
   },
 

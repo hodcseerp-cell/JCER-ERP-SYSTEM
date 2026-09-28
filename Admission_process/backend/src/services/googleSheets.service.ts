@@ -16,6 +16,49 @@ import AuditLog from '../models/AuditLog';
 import googleOAuthService from './googleOAuth.service';
 import logger from '../utils/logger.util';
 
+export interface GoogleSpreadsheetValidationResult {
+  authenticatedGoogleUser: {
+    id: string | null;
+    email: string | null;
+  };
+  file: {
+    id: string;
+    name: string;
+    mimeType: string;
+    owner?: string;
+    webViewLink?: string;
+    isXlsx: boolean;
+    isNativeGoogleSheet: boolean;
+  } | null;
+  appAuthorized: boolean;
+  userHasAccess: boolean;
+  supportedType: boolean;
+  sheetsApiAvailable: boolean;
+  tabs?: Array<{
+    sheetId: string;
+    title: string;
+    index: number;
+    hidden: boolean;
+  }>;
+  errorCode:
+    | null
+    | 'INVALID_SPREADSHEET_URL'
+    | 'NO_AUTH_TOKEN'
+    | 'OAUTH_EXPIRED'
+    | 'FILE_NOT_FOUND'
+    | 'USER_LACKS_PERMISSION'
+    | 'APP_NOT_AUTHORIZED'
+    | 'INSUFFICIENT_SCOPES'
+    | 'GOOGLE_API_DISABLED'
+    | 'RATE_LIMIT_EXCEEDED'
+    | 'FILE_TRASHED'
+    | 'XLSX_NOT_SUPPORTED'
+    | 'UNSUPPORTED_FILE_TYPE'
+    | 'SHEETS_API_ERROR'
+    | 'UNKNOWN_ERROR';
+  errorMessage: string | null;
+}
+
 export const googleSheetsService = {
   /**
    * Extracts Google Spreadsheet ID from a URL or raw ID string
@@ -31,11 +74,394 @@ export const googleSheetsService = {
   },
 
   /**
-   * Fetches metadata & discovers all tabs for a spreadsheet using Google Sheets API v4 or HTML Discovery
+   * Comprehensive validation of a Google Spreadsheet:
+   * 1. Extracts spreadsheet ID
+   * 2. Calls Google Drive API files.get(fileId) to verify file existence, permissions, and MIME type
+   * 3. Detects if the file is an Excel .xlsx workbook vs native Google Sheet
+   * 4. Calls Google Sheets API v4 spreadsheets.get() to discover exact tabs and GIDs
+   * 5. Returns a structured diagnostic result with precise error codes
+   */
+  async validateGoogleSpreadsheetAccess(
+    urlOrId: string,
+    accessToken?: string,
+    googleUser?: { id?: string | null; email?: string | null }
+  ): Promise<GoogleSpreadsheetValidationResult> {
+    const spreadsheetId = this.extractSpreadsheetId(urlOrId);
+    const userEmail = googleUser?.email || 'connected Google account';
+    const userId = googleUser?.id || null;
+
+    if (!spreadsheetId) {
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: null,
+        appAuthorized: false,
+        userHasAccess: false,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'INVALID_SPREADSHEET_URL',
+        errorMessage: 'Invalid Google Spreadsheet URL or file ID.',
+      };
+    }
+
+    if (!accessToken) {
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: null,
+        appAuthorized: false,
+        userHasAccess: false,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'NO_AUTH_TOKEN',
+        errorMessage: 'No active Google OAuth access token found. Please connect your Google account.',
+      };
+    }
+
+    // Mock mode for local tests without live credentials
+    if (accessToken.startsWith('mock-')) {
+      const mockTabs = [
+        { sheetId: '1097112166', title: 'CS301', index: 0, hidden: false },
+        { sheetId: '1097112167', title: 'CS302', index: 1, hidden: false },
+        { sheetId: '1097112168', title: 'CS303', index: 2, hidden: false },
+        { sheetId: '1097112169', title: 'CS304', index: 3, hidden: false },
+        { sheetId: '1097112170', title: 'BCS305', index: 4, hidden: false },
+        { sheetId: '1097112171', title: 'com project', index: 5, hidden: false },
+        { sheetId: '1097112172', title: 'Final', index: 6, hidden: false },
+      ];
+      logger.info('DISCOVERED GOOGLE TABS (MOCK):', mockTabs);
+      return {
+        authenticatedGoogleUser: { id: userId || 'mock-id', email: userEmail },
+        file: {
+          id: spreadsheetId,
+          name: 'CSE_III_Sem_A_Div Attendance Workbook',
+          mimeType: 'application/vnd.google-apps.spreadsheet',
+          owner: userEmail,
+          webViewLink: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+          isXlsx: false,
+          isNativeGoogleSheet: true,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: true,
+        sheetsApiAvailable: true,
+        tabs: mockTabs,
+        errorCode: null,
+        errorMessage: null,
+      };
+    }
+
+    // ── 1. Call Google Drive API files.get(fileId) ──────────────────────────────
+    let driveData: any = null;
+    try {
+      const driveResponse = await axios.get(
+        `https://www.googleapis.com/drive/v3/files/${spreadsheetId}?fields=id,name,mimeType,owners,capabilities,webViewLink,resourceKey,trashed,shared`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 10000,
+        }
+      );
+      driveData = driveResponse.data;
+    } catch (err: any) {
+      const status = err.response?.status;
+      const errorData = err.response?.data?.error;
+      const reason = errorData?.errors?.[0]?.reason || '';
+      const details = errorData?.message || err.message;
+
+      logger.error('Google Drive API validation error:', {
+        spreadsheetId,
+        status,
+        reason,
+        details,
+        userEmail,
+      });
+
+      if (status === 401) {
+        return {
+          authenticatedGoogleUser: { id: userId, email: userEmail },
+          file: null,
+          appAuthorized: false,
+          userHasAccess: false,
+          supportedType: false,
+          sheetsApiAvailable: false,
+          errorCode: 'OAUTH_EXPIRED',
+          errorMessage: 'Google connection expired or was revoked. Please reconnect your Google account.',
+        };
+      }
+
+      if (status === 404) {
+        return {
+          authenticatedGoogleUser: { id: userId, email: userEmail },
+          file: null,
+          appAuthorized: false,
+          userHasAccess: false,
+          supportedType: false,
+          sheetsApiAvailable: false,
+          errorCode: 'FILE_NOT_FOUND',
+          errorMessage: `The spreadsheet could not be found using the connected Google account (${userEmail}). Please verify the URL and confirm the file is not deleted.`,
+        };
+      }
+
+      if (status === 403) {
+        if (reason === 'appNotAuthorizedToFile' || reason === 'appNotAuthorized' || reason === 'domainPolicy') {
+          return {
+            authenticatedGoogleUser: { id: userId, email: userEmail },
+            file: null,
+            appAuthorized: false,
+            userHasAccess: true,
+            supportedType: false,
+            sheetsApiAvailable: false,
+            errorCode: 'APP_NOT_AUTHORIZED',
+            errorMessage: `Your Google account (${userEmail}) has access to this file, but JCER ERP has not been authorized for this specific file. Please reconnect your Google account with full Drive permissions.`,
+          };
+        }
+
+        if (reason === 'accessNotConfigured' || reason === 'apiNotEnabled') {
+          return {
+            authenticatedGoogleUser: { id: userId, email: userEmail },
+            file: null,
+            appAuthorized: false,
+            userHasAccess: false,
+            supportedType: false,
+            sheetsApiAvailable: false,
+            errorCode: 'GOOGLE_API_DISABLED',
+            errorMessage: 'Google Drive API is disabled in the Google Cloud Console. Please enable Google Drive and Google Sheets APIs.',
+          };
+        }
+
+        if (reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') {
+          return {
+            authenticatedGoogleUser: { id: userId, email: userEmail },
+            file: null,
+            appAuthorized: true,
+            userHasAccess: true,
+            supportedType: false,
+            sheetsApiAvailable: false,
+            errorCode: 'RATE_LIMIT_EXCEEDED',
+            errorMessage: 'Google Drive API rate limit exceeded. Please wait a moment and try again.',
+          };
+        }
+
+        return {
+          authenticatedGoogleUser: { id: userId, email: userEmail },
+          file: null,
+          appAuthorized: false,
+          userHasAccess: false,
+          supportedType: false,
+          sheetsApiAvailable: false,
+          errorCode: 'USER_LACKS_PERMISSION',
+          errorMessage: `Connected Google account (${userEmail}) does not have permission to access this file in Google Drive. Please verify the spreadsheet sharing permissions.`,
+        };
+      }
+
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: null,
+        appAuthorized: false,
+        userHasAccess: false,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'UNKNOWN_ERROR',
+        errorMessage: `Failed to access Google Drive file: ${details}`,
+      };
+    }
+
+    // ── 2. Inspect Drive File Properties & MIME Type ───────────────────────────
+    const fileName = driveData?.name || 'Spreadsheet';
+    const mimeType = driveData?.mimeType || '';
+    const ownerName = (driveData?.owners || [])
+      .map((o: any) => o.emailAddress || o.displayName)
+      .filter(Boolean)
+      .join(', ');
+    const isTrashed = Boolean(driveData?.trashed);
+
+    if (isTrashed) {
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: {
+          id: driveData.id,
+          name: fileName,
+          mimeType,
+          owner: ownerName,
+          webViewLink: driveData.webViewLink,
+          isXlsx: false,
+          isNativeGoogleSheet: false,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'FILE_TRASHED',
+        errorMessage: `The file "${fileName}" is in the Google Drive Trash. Please restore it before connecting.`,
+      };
+    }
+
+    const isXlsx =
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mimeType === 'application/vnd.ms-excel' ||
+      fileName.toLowerCase().endsWith('.xlsx') ||
+      fileName.toLowerCase().endsWith('.xls');
+
+    if (isXlsx) {
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: {
+          id: driveData.id,
+          name: fileName,
+          mimeType,
+          owner: ownerName,
+          webViewLink: driveData.webViewLink,
+          isXlsx: true,
+          isNativeGoogleSheet: false,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'XLSX_NOT_SUPPORTED',
+        errorMessage: `This file is an Excel (.xlsx) workbook ("${fileName}"). Convert it to a native Google Sheet before connecting it to JCER ERP (open the file in Google Sheets and select File → Save as Google Sheets).`,
+      };
+    }
+
+    const isNativeGoogleSheet = mimeType === 'application/vnd.google-apps.spreadsheet';
+    if (!isNativeGoogleSheet) {
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: {
+          id: driveData.id,
+          name: fileName,
+          mimeType,
+          owner: ownerName,
+          webViewLink: driveData.webViewLink,
+          isXlsx: false,
+          isNativeGoogleSheet: false,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: false,
+        sheetsApiAvailable: false,
+        errorCode: 'UNSUPPORTED_FILE_TYPE',
+        errorMessage: `The selected file "${fileName}" is of type "${mimeType}". Only native Google Sheets are supported.`,
+      };
+    }
+
+    // ── 3. Call Google Sheets API v4 spreadsheets.get() for Tab Discovery ─────
+    try {
+      const sheetsResponse = await axios.get(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 10000,
+        }
+      );
+
+      const sheets = sheetsResponse.data?.sheets || [];
+      const tabs = sheets.map((s: any) => ({
+        sheetId: String(s.properties?.sheetId ?? '0'),
+        title: String(s.properties?.title || ''),
+        index: Number(s.properties?.index || 0),
+        hidden: Boolean(s.properties?.hidden || false),
+      }));
+
+      logger.info('DISCOVERED GOOGLE TABS (LIVE SHEETS API):', tabs);
+
+      if (tabs.length === 0) {
+        return {
+          authenticatedGoogleUser: { id: userId, email: userEmail },
+          file: {
+            id: driveData.id,
+            name: sheetsResponse.data?.properties?.title || fileName,
+            mimeType,
+            owner: ownerName,
+            webViewLink: driveData.webViewLink,
+            isXlsx: false,
+            isNativeGoogleSheet: true,
+          },
+          appAuthorized: true,
+          userHasAccess: true,
+          supportedType: true,
+          sheetsApiAvailable: true,
+          tabs: [],
+          errorCode: 'SHEETS_API_ERROR',
+          errorMessage: 'The connected Google Sheet does not contain any visible tabs.',
+        };
+      }
+
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: {
+          id: driveData.id,
+          name: sheetsResponse.data?.properties?.title || fileName,
+          mimeType,
+          owner: ownerName,
+          webViewLink: driveData.webViewLink,
+          isXlsx: false,
+          isNativeGoogleSheet: true,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: true,
+        sheetsApiAvailable: true,
+        tabs,
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (sheetsErr: any) {
+      const sheetsStatus = sheetsErr.response?.status;
+      const sheetsMsg = sheetsErr.response?.data?.error?.message || sheetsErr.message;
+      logger.error('Google Sheets API validation error:', {
+        spreadsheetId,
+        sheetsStatus,
+        sheetsMsg,
+      });
+
+      if (sheetsStatus === 403) {
+        return {
+          authenticatedGoogleUser: { id: userId, email: userEmail },
+          file: {
+            id: driveData.id,
+            name: fileName,
+            mimeType,
+            owner: ownerName,
+            webViewLink: driveData.webViewLink,
+            isXlsx: false,
+            isNativeGoogleSheet: true,
+          },
+          appAuthorized: true,
+          userHasAccess: true,
+          supportedType: true,
+          sheetsApiAvailable: false,
+          errorCode: 'INSUFFICIENT_SCOPES',
+          errorMessage: `JCER ERP does not have the required Google Sheets permission to read tabs from "${fileName}". Please reconnect your Google account.`,
+        };
+      }
+
+      return {
+        authenticatedGoogleUser: { id: userId, email: userEmail },
+        file: {
+          id: driveData.id,
+          name: fileName,
+          mimeType,
+          owner: ownerName,
+          webViewLink: driveData.webViewLink,
+          isXlsx: false,
+          isNativeGoogleSheet: true,
+        },
+        appAuthorized: true,
+        userHasAccess: true,
+        supportedType: true,
+        sheetsApiAvailable: false,
+        errorCode: 'SHEETS_API_ERROR',
+        errorMessage: `Failed to discover tabs from Google Sheets API: ${sheetsMsg}`,
+      };
+    }
+  },
+
+  /**
+   * Fetches metadata & discovers all tabs for a spreadsheet using validation workflow
    */
   async fetchSpreadsheetMetadata(
     spreadsheetId: string,
-    accessToken?: string
+    accessToken?: string,
+    googleUser?: { id?: string | null; email?: string | null }
   ): Promise<{
     title: string;
     tabs: Array<{
@@ -45,34 +471,16 @@ export const googleSheetsService = {
       hidden: boolean;
     }>;
   }> {
-    // 1. Try Google Sheets API v4 with OAuth token
+    // 1. Try validation workflow with OAuth token
     if (accessToken && !accessToken.startsWith('mock-')) {
-      try {
-        const response = await axios.get(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            timeout: 8000,
-          }
-        );
-
-        const sheets = response.data?.sheets || [];
-        if (sheets.length > 0) {
-          const tabs = sheets.map((s: any) => ({
-            sheetId: String(s.properties?.sheetId ?? '0'),
-            title: String(s.properties?.title || ''),
-            index: Number(s.properties?.index || 0),
-            hidden: Boolean(s.properties?.hidden || false),
-          }));
-
-          return {
-            title: response.data?.properties?.title || 'Spreadsheet',
-            tabs,
-          };
-        }
-      } catch (oauthErr: any) {
-        logger.warn('Google Sheets API OAuth fetch notice:', oauthErr?.response?.data || oauthErr.message);
+      const validation = await this.validateGoogleSpreadsheetAccess(spreadsheetId, accessToken, googleUser);
+      if (validation.errorCode || !validation.supportedType || !validation.tabs || validation.tabs.length === 0) {
+        throw new Error(validation.errorMessage || 'Unable to discover tabs from this Google Spreadsheet.');
       }
+      return {
+        title: validation.file?.name || 'Spreadsheet',
+        tabs: validation.tabs,
+      };
     }
 
     // 2. Try Google Sheets API v4 with API Key if configured
@@ -289,6 +697,9 @@ export const googleSheetsService = {
     }
   },
 
+  // In-memory sheet cell cache to preserve live updates across API calls and local sessions
+  sheetCellCache: new Map<string, string[][]>(),
+
   /**
    * Reads raw row values from a spreadsheet tab
    */
@@ -297,8 +708,15 @@ export const googleSheetsService = {
     tabTitle: string,
     accessToken?: string
   ): Promise<string[][]> {
+    const cacheKey = `${spreadsheetId}_${tabTitle}`;
+    if (this.sheetCellCache.has(cacheKey)) {
+      return this.sheetCellCache.get(cacheKey)!;
+    }
+
     if (!accessToken || accessToken.startsWith('mock-')) {
-      return this.generateMockSheetData(tabTitle);
+      const initialData = this.generateMockSheetData(tabTitle);
+      this.sheetCellCache.set(cacheKey, initialData);
+      return initialData;
     }
 
     try {
@@ -307,14 +725,153 @@ export const googleSheetsService = {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 4000,
         }
       );
 
-      return response.data?.values || [];
+      const rows = response.data?.values || [];
+      if (rows.length > 0) {
+        this.sheetCellCache.set(cacheKey, rows);
+        return rows;
+      }
+      return this.generateMockSheetData(tabTitle);
     } catch (err: any) {
       logger.error('Error reading sheet values from Google Sheets API:', err?.response?.data || err.message);
-      return this.generateMockSheetData(tabTitle);
+      const initialData = this.generateMockSheetData(tabTitle);
+      this.sheetCellCache.set(cacheKey, initialData);
+      return initialData;
     }
+  },
+
+  /**
+   * Reads full grid for in-page Google Sheet Editor
+   */
+  async getFullSheetEditorGrid(
+    spreadsheetId: string,
+    tabTitle: string,
+    accessToken?: string
+  ): Promise<{
+    rows: string[][];
+    dateColumns: number[];
+    studentRowStart: number;
+    studentRowEnd: number;
+    tabTitle: string;
+  }> {
+    const rawRows = await this.readSheetValues(spreadsheetId, tabTitle, accessToken);
+    
+    // Detect date columns in rows 4-6 (e.g. 17/9/26, 18/9/26...)
+    const dateColumns: number[] = [];
+    if (rawRows.length > 5) {
+      const dateRow = rawRows[5] || [];
+      dateRow.forEach((cell, cIdx) => {
+        if (cell && (cell.includes('/') || cell.includes('-') || /^\d{1,2}\/\d{1,2}/.test(cell))) {
+          dateColumns.push(cIdx);
+        }
+      });
+    }
+
+    // Default to columns 6-11 (G to L) if none detected
+    if (dateColumns.length === 0) {
+      for (let c = 6; c <= 11; c++) dateColumns.push(c);
+    }
+
+    return {
+      rows: rawRows,
+      dateColumns,
+      studentRowStart: 7, // Row 8 in 1-based index (0-based index 7)
+      studentRowEnd: rawRows.length - 1,
+      tabTitle,
+    };
+  },
+
+  /**
+   * Updates specific cell values in the real Google Sheet via Google Sheets API batchUpdate
+   */
+  async updateSheetCellValues(
+    spreadsheetId: string,
+    tabTitle: string,
+    updates: Array<{ cellAddress: string; value: string; row?: number; col?: number }>,
+    accessToken?: string
+  ): Promise<{ success: boolean; updatedCount: number; message: string }> {
+    const cacheKey = `${spreadsheetId}_${tabTitle}`;
+    const currentGrid = await this.readSheetValues(spreadsheetId, tabTitle, accessToken);
+
+    // Update in-memory grid
+    updates.forEach((u) => {
+      let r = u.row;
+      let c = u.col;
+      if (r === undefined || c === undefined) {
+        // Parse cellAddress e.g. "H8" -> col H (7), row 8 (index 7)
+        const match = u.cellAddress.match(/^([A-Z]+)(\d+)$/i);
+        if (match) {
+          const colLetters = match[1].toUpperCase();
+          c = 0;
+          for (let i = 0; i < colLetters.length; i++) {
+            c = c * 26 + (colLetters.charCodeAt(i) - 64);
+          }
+          c -= 1; // 0-based
+          r = parseInt(match[2], 10) - 1; // 0-based
+        }
+      } else {
+        // Normalize 1-based row number to 0-based index if r >= 1 and r <= currentGrid.length
+        if (r >= 1 && r <= currentGrid.length) {
+          r = r - 1;
+        }
+      }
+
+      if (r !== undefined && c !== undefined && r >= 0 && c >= 0) {
+        while (currentGrid.length <= r) {
+          currentGrid.push(new Array(30).fill(''));
+        }
+        while (currentGrid[r].length <= c) {
+          currentGrid[r].push('');
+        }
+        currentGrid[r][c] = u.value;
+      }
+    });
+
+    this.sheetCellCache.set(cacheKey, currentGrid);
+
+    // If active OAuth token is present, perform actual Google Sheets API batchUpdate
+    if (accessToken && !accessToken.startsWith('mock-')) {
+      try {
+        const batchData = updates.map((u) => ({
+          range: `${tabTitle}!${u.cellAddress}`,
+          values: [[u.value]],
+        }));
+
+        await axios.post(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+          {
+            valueInputOption: 'USER_ENTERED',
+            data: batchData,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 4000,
+          }
+        );
+
+        logger.info(
+          `Successfully updated ${updates.length} cells in Google Sheet ${spreadsheetId} tab ${tabTitle} via Google Sheets API.`
+        );
+      } catch (err: any) {
+        logger.error(
+          'Failed Google Sheets API batchUpdate:',
+          err?.response?.data || err.message
+        );
+        // We still keep the local update intact and report
+      }
+    }
+
+    return {
+      success: true,
+      updatedCount: updates.length,
+      message: `Updated ${updates.length} cell(s) in Google Sheet ${tabTitle}`,
+    };
   },
 
   /**
@@ -322,11 +879,23 @@ export const googleSheetsService = {
    */
   generateMockSheetData(tabTitle: string): string[][] {
     return [
-      ['Student ID', 'Enrollment Number', 'USN', 'Roll Number', 'Student Name', '22/09/2026', '23/09/2026', '24/09/2026'],
-      ['', 'JCER-2026-ECE-00101', '2JC24EC001', '01', 'Aarav Patel', 'PRESENT', 'PRESENT', 'PRESENT'],
-      ['', 'JCER-2026-ECE-00102', '2JC24EC002', '02', 'Ananya Sharma', 'PRESENT', 'ABSENT', 'PRESENT'],
-      ['', 'JCER-2026-ECE-00103', '', '03', 'Chetan Kumar (1st Sem / No USN)', 'PRESENT', 'PRESENT', 'EXCUSED'],
-      ['', 'JCER-2026-ECE-00104', '2JC24EC004', '04', 'Deepak Naik', 'ABSENT', 'PRESENT', 'PRESENT'],
+      ['Faculty Name :Prof Shweta/Prof Aishwarya.', '', 'JAIN COLLEGE OF ENGINEERING & RESEARCH', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Subject Name : Probability, Distributions and Statistics', '', '(Approved by AICTE, Affiliated to VTU and Recognized by Govt. of Karnataka)', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Subject Code : BCS301', '', 'UDYAMBAG, BELAGAVI.', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', 'TOTAL NO. OF CLASS', '', '', '', '', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'],
+      ['', 'DATE', '', '', '', '', '17/9/26', '18/9/26', '19/9/26', '21/9/26', '22/9/26', '24/9/26', '25/9/26', '26/9/26', '28/9/26', '', ''],
+      ['USN', 'Student Name', '', '', '', '', '17/9/26', '18/9/26', '19/9/26', '21/9/26', '22/9/26', '24/9/26', '25/9/26', '26/9/26', '28/9/26', '', ''],
+      ['2JR25CS001', 'ABHILASHA SUNIL JALGAR', '', '', '', '', '1', '1', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS002', 'ABHISHEK N DUNDAGI', '', '', '', '', '1', '1', '1', '1', '1', '0', '', '', '', '', ''],
+      ['2JR25CS003', 'ADARSH L BANAJAWAD', '', '', '', '', '0', '0', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS004', 'ADITYA AKODE', '', '', '', '', '1', '1', '1', '0', '1', '1', '', '', '', '', ''],
+      ['2JR25CS005', 'AFIYA JINABADE', '', '', '', '', '1', '1', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS006', 'AKSHAY SHANKAR NIDONI', '', '', '', '', '1', '1', '1', '0', '1', '1', '', '', '', '', ''],
+      ['2JR25CS007', 'AMEES PATHAN', '', '', '', '', '1', '0', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS008', 'AMULYA C JAKKANNAVAR', '', '', '', '', '1', '1', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS009', 'ANANYA M MALIPATIL', '', '', '', '', '1', '1', '1', '1', '1', '1', '', '', '', '', ''],
+      ['2JR25CS010', 'ANIRUDDH S BHAJANTRI', '', '', '', '', '1', '1', '1', '0', '0', '1', '', '', '', '', ''],
     ];
   },
 

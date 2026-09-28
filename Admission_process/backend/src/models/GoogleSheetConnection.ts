@@ -3,7 +3,7 @@ import db from '../config/database';
 import Department from './Department';
 import User from './User';
 
-export type SheetType = 'ATTENDANCE' | 'ACADEMIC_MARKS';
+export type SheetType = 'ATTENDANCE' | 'ACADEMIC_MARKS' | 'BITWISE_MARKS' | string;
 export type ConnectionStatus = 'ACTIVE' | 'DISCONNECTED' | 'ERROR';
 
 class GoogleSheetConnection extends Model {
@@ -60,7 +60,7 @@ GoogleSheetConnection.init(
       defaultValue: 'A',
     },
     sheetType: {
-      type: DataTypes.ENUM('ATTENDANCE', 'ACADEMIC_MARKS'),
+      type: DataTypes.STRING(50),
       allowNull: false,
     },
     googleSpreadsheetId: {

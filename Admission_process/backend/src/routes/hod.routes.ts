@@ -22,6 +22,8 @@ router.get('/department', hodController.getHodDepartment as any);
 // ─── 2. Students Module & Section Allocation ───────────────────────────────────
 router.get('/students', hodController.getHodStudents as any);
 router.get('/students/semesters', hodController.getHodStudentSemesters as any);
+router.get('/students/semesters/:semesterId', hodController.getHodSemesterCohort as any);
+router.get('/semesters/:semesterId/cohort', hodController.getHodSemesterCohort as any);
 router.get('/students/sections', hodController.getHodStudentSections as any);
 router.get('/students/:id', hodController.getHodStudentById as any);
 
@@ -104,6 +106,9 @@ router.get('/sheets/attendance', hodController.getHodSheetsAttendance as any);
 router.get('/sheets/marks', hodController.getHodSheetsMarks as any);
 router.get('/semesters/:semesterId/google-sheets', googleSheetsController.getSemesterGoogleSheets as any);
 router.post('/semesters/:semesterId/google-sheets/connect', googleSheetsController.connectSemesterGoogleSheet as any);
+router.post('/semesters/:semesterId/google-sheets/attendance/batch', googleSheetsController.connectSemesterAttendanceSheetsBatch as any);
+router.post('/semesters/:semesterId/google-sheets/validate', googleSheetsController.validateGoogleSpreadsheet as any);
+router.post('/google-sheets/validate', googleSheetsController.validateGoogleSpreadsheet as any);
 router.get('/semesters/:semesterId/google-sheets/tabs', googleSheetsController.getSemesterGoogleSheetTabs as any);
 router.post('/google-sheets/:connectionId/map-tab', googleSheetsController.mapGoogleSheetTab as any);
 router.post('/google-sheets/:connectionId/refresh', googleSheetsController.refreshGoogleSheet as any);

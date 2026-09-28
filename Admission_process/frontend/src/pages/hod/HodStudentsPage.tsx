@@ -16,10 +16,10 @@ import {
   Clock,
   BookOpen,
   ClipboardList,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, { HodStudentItem } from '../../services/hod.service';
+import usePersistentState from '../../hooks/usePersistentState';
 
 export const HodStudentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -36,13 +36,13 @@ export const HodStudentsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [availableSections, setAvailableSections] = useState<string[]>(['A', 'B', 'C']);
 
-  // Applied Filters State
-  const [search, setSearch] = useState<string>('');
-  const [selectedSemester, setSelectedSemester] = useState<string>(initialSem);
-  const [selectedSection, setSelectedSection] = useState<string>(initialSec);
-  const [academicYear, setAcademicYear] = useState<string>(activeAY);
-  const [status, setStatus] = useState<string>('ALL');
-  const [admissionType, setAdmissionType] = useState<string>('ALL');
+  // Applied Filters State (Persisted across tabs & refreshes)
+  const [search, setSearch] = usePersistentState<string>('hod_students_search', '');
+  const [selectedSemester, setSelectedSemester] = usePersistentState<string>('hod_students_semester', initialSem);
+  const [selectedSection, setSelectedSection] = usePersistentState<string>('hod_students_section', initialSec);
+  const [academicYear, setAcademicYear] = usePersistentState<string>('hod_students_ay', activeAY);
+  const [status, setStatus] = usePersistentState<string>('hod_students_status', 'ALL');
+  const [admissionType, setAdmissionType] = usePersistentState<string>('hod_students_adm_type', 'ALL');
   const [qualification, setQualification] = useState<string>('ALL');
   const [gender, setGender] = useState<string>('ALL');
   const [category, setCategory] = useState<string>('ALL');
@@ -326,14 +326,6 @@ export const HodStudentsPage: React.FC = () => {
           >
             <Layers size={14} className="text-violet-600 dark:text-violet-400" />
             <span>Section Allocations</span>
-          </Link>
-
-          <Link
-            to="/hod/google-sheets/connect"
-            className="px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors shadow-sm flex items-center gap-2"
-          >
-            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
-            <span>Connect Academic Sheet</span>
           </Link>
 
           <button

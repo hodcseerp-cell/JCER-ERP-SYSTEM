@@ -1050,6 +1050,182 @@ export const getHodStudentSemesters = async (req: AuthenticatedRequest, res: Res
 };
 
 /**
+ * GET /api/hod/students/semesters/:semesterId
+ * Scoped strictly to HOD's department and selected semester.
+ * Returns semester metrics, section breakdown, students list, connected Google Sheets, and ERP subjects.
+ */
+export const getHodSemesterCohort = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const departmentId = req.departmentId;
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
+    }
+
+    const semester = parseInt(req.params.semesterId, 10);
+    if (isNaN(semester) || semester < 1 || semester > 8) {
+      return res.status(400).json({ error: 'Valid semester (1-8) is required.' });
+    }
+
+    const academicYear = (req.query.academicYear as string) || '2026-27';
+    const search = req.query.search ? String(req.query.search).trim() : '';
+
+    // 1. Department Details
+    const department = await Department.findByPk(departmentId, {
+      attributes: ['id', 'name', 'code'],
+    });
+
+    // 2. Query all students in this semester & department
+    const { count, rows } = await getHodDepartmentStudents({
+      departmentId,
+      semester,
+      academicYear,
+      search,
+      page: 1,
+      limit: 2000,
+    });
+
+    // Resolve department section UUIDs to clean letters ('A', 'B', etc.)
+    const deptSections = await Section.findAll({
+      where: { departmentId },
+      attributes: ['id', 'name'],
+    });
+    const sectionLookup = new Map<string, string>();
+    deptSections.forEach((sec) => {
+      const clean = sec.name.replace(/^(Section|Sec)\s*/i, '').trim() || sec.name;
+      sectionLookup.set(sec.id, clean);
+      sectionLookup.set(sec.name, clean);
+    });
+
+    // Format students
+    const students = rows.map((s: any, idx: number) => {
+      const enc = s.academicEnrollments?.[0];
+      const rawSec = enc?.sectionId || s.sectionId || s.section;
+      const cleanSec = rawSec ? (sectionLookup.get(rawSec) || rawSec) : null;
+      const userObj = s.user || {};
+      const fullName = `${userObj.firstName || ''} ${userObj.lastName || ''}`.trim() || 'Student';
+
+      return {
+        id: s.id,
+        index: idx + 1,
+        usn: s.usn || null,
+        enrollmentNumber: s.enrollmentNumber || s.usn || null,
+        applicationNumber: s.admission?.applicationNumber || null,
+        name: fullName,
+        email: userObj.email || null,
+        department: department?.code || 'CSE',
+        semester: enc?.semesterId || s.semester,
+        section: cleanSec || '—',
+        rollNumber: enc?.rollNumber || s.rollNumber || null,
+        academicYear: enc?.academicYearId || s.currentAcademicYear || academicYear,
+        status: enc?.status || s.admissionStatus || 'ACTIVE',
+        admissionType: s.admissionType || 'REGULAR',
+      };
+    });
+
+    // Calculate section breakdown
+    const sectionCountMap = new Map<string, number>();
+    students.forEach((st: any) => {
+      const sec = st.section && st.section !== '—' ? st.section : 'Unallocated';
+      sectionCountMap.set(sec, (sectionCountMap.get(sec) || 0) + 1);
+    });
+    const sectionsBreakdown = Array.from(sectionCountMap.entries()).map(([sec, cnt]) => ({
+      section: sec,
+      count: cnt,
+    }));
+    const allocatedSections = Array.from(sectionCountMap.keys()).filter((s) => s !== 'Unallocated');
+
+    // 3. Query Google Sheet Connections for this semester
+    const connections = await GoogleSheetConnection.findAll({
+      where: {
+        departmentId,
+        semester,
+        status: { [Op.ne]: 'DISCONNECTED' },
+      },
+      include: [
+        {
+          model: GoogleSheetTab,
+          as: 'tabs',
+          include: [{ model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'type'] }],
+        },
+        { model: User, as: 'connectedByUser', attributes: ['id', 'firstName', 'lastName', 'email'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const formatConn = (conn: any) =>
+      conn
+        ? {
+            id: conn.id,
+            sheetType: conn.sheetType,
+            section: conn.section || 'A',
+            spreadsheetId: conn.googleSpreadsheetId,
+            spreadsheetUrl: conn.googleSpreadsheetUrl,
+            accountEmail: conn.googleAccountEmail,
+            status: conn.status,
+            connectedAt: conn.connectedAt,
+            lastSyncedAt: conn.lastSyncedAt,
+            connectedBy: conn.connectedByUser,
+            tabs: (conn.tabs || []).map((t: any) => ({
+              id: t.id,
+              sheetId: t.googleSheetId,
+              title: t.sheetTitle,
+              index: t.sheetIndex,
+              sheetType: t.sheetType,
+              subjectId: t.subjectId,
+              subjectCode: t.subjectCode,
+              status: t.status,
+              mappedSubject: t.subject ? { id: t.subject.id, name: t.subject.name, code: t.subject.code, type: t.subject.type } : null,
+            })),
+          }
+        : null;
+
+    const attendanceConn = connections.find((c) => c.sheetType === 'ATTENDANCE') || null;
+    const bitwiseMarksConn = connections.find((c) => c.sheetType === 'BITWISE_MARKS' || c.sheetType === 'ACADEMIC_MARKS') || null;
+
+    // 4. Fetch Department ERP Subjects for this semester
+    const subjects = await Subject.findAll({
+      where: { departmentId, semester },
+      attributes: ['id', 'name', 'code', 'type', 'credits', 'semester'],
+      order: [['code', 'ASC']],
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        semester,
+        department: {
+          id: department?.id,
+          name: department?.name,
+          code: department?.code,
+        },
+        academicYear,
+        summary: {
+          totalStudents: count,
+          activeStudents: students.filter((s: any) => s.status === 'ACTIVE' || s.status === 'ENROLLED' || s.status === 'APPROVED').length,
+          sections: allocatedSections.length > 0 ? allocatedSections.join(', ') : 'None',
+          sectionsList: allocatedSections,
+          sectionsBreakdown,
+        },
+        students,
+        googleSheets: {
+          attendance: formatConn(attendanceConn),
+          attendanceConnections: connections.filter((c) => c.sheetType === 'ATTENDANCE').map(formatConn),
+          bitwiseMarks: formatConn(bitwiseMarksConn),
+        },
+        subjects,
+      },
+    });
+  } catch (error) {
+    logger.error('HOD_GET_SEMESTER_COHORT_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
  * GET /api/hod/students/sections
  * Returns active sections for the authenticated HOD's department.
  * NEVER returns fake sections. If no sections exist, returns empty array.
@@ -1070,13 +1246,22 @@ export const getHodStudentSections = async (req: AuthenticatedRequest, res: Resp
     }
 
     if (academicYear && academicYear !== 'ALL') {
-      where.academicYear = String(academicYear).trim();
+      const startYear = String(academicYear).split(/[-–/]/)[0].trim();
+      where.academicYear = { [Op.iLike]: `%${startYear}%` };
     }
 
-    const sections = await Section.findAll({
+    let sections = await Section.findAll({
       where,
       order: [['semester', 'ASC'], ['name', 'ASC']],
     });
+
+    if ((!sections || sections.length === 0) && where.academicYear) {
+      delete where.academicYear;
+      sections = await Section.findAll({
+        where,
+        order: [['semester', 'ASC'], ['name', 'ASC']],
+      });
+    }
 
     if (!sections || sections.length === 0) {
       return res.json({ success: true, data: [] });
@@ -2292,12 +2477,23 @@ export const getHodFacultyList = async (req: AuthenticatedRequest, res: Response
  * Faculty CANNOT login until Dean/Principal approval.
  */
 export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const isUUID = (val: any): boolean => {
+    if (!val || typeof val !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.trim());
+  };
+
   const t = await sequelize.transaction();
   try {
     const departmentId = req.departmentId;
     if (!departmentId) {
       await t.rollback();
       return res.status(403).json({ error: 'Assigned department not resolved.' });
+    }
+
+    const hodUserId = req.user?.id || (req as any).user?.userId || (req as any).userId;
+    if (!hodUserId) {
+      await t.rollback();
+      return res.status(401).json({ error: 'Authenticated HOD identification required.' });
     }
 
     const {
@@ -2339,6 +2535,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       section: string;
       academicYear: string;
       attendanceAccess: boolean;
+      attendanceSections: string[];
       marksAccess: boolean;
       googleSheetsAccess: boolean;
     }
@@ -2370,7 +2567,20 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
 
         const att = item.permissions?.attendance !== undefined
           ? Boolean(item.permissions.attendance)
-          : (item.attendanceAccess !== undefined ? Boolean(item.attendanceAccess) : true);
+          : (item.attendanceAccess !== undefined ? Boolean(item.attendanceAccess) : false);
+
+        let rawAttSections = item.attendanceSections || item.permissions?.attendanceSections || [];
+        if (!Array.isArray(rawAttSections)) {
+          rawAttSections = typeof rawAttSections === 'string' && rawAttSections.trim() ? [rawAttSections.trim()] : [];
+        }
+        const attSections: string[] = att ? rawAttSections.filter(Boolean) : [];
+
+        if (att && attSections.length === 0) {
+          await t.rollback();
+          return res.status(400).json({
+            error: `Teaching Allocation ${i + 1}: Select at least one section for attendance access.`,
+          });
+        }
 
         const mrk = item.permissions?.marks !== undefined
           ? Boolean(item.permissions.marks)
@@ -2378,7 +2588,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
 
         const gs = item.permissions?.googleSheets !== undefined
           ? Boolean(item.permissions.googleSheets)
-          : (item.googleSheetsAccess !== undefined ? Boolean(item.googleSheetsAccess) : true);
+          : (item.googleSheetsAccess !== undefined ? Boolean(item.googleSheetsAccess) : att);
 
         assignmentsToProcess.push({
           subjectName: sName,
@@ -2388,6 +2598,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
           section: sec,
           academicYear: aYear,
           attendanceAccess: att,
+          attendanceSections: attSections,
           marksAccess: mrk,
           googleSheetsAccess: gs,
         });
@@ -2412,16 +2623,20 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         });
       }
 
+      const legacySec = (section && typeof section === 'string' && section.trim()) ? section.trim() : 'A';
+      const att = attendanceAccess !== undefined ? Boolean(attendanceAccess) : false;
+
       assignmentsToProcess.push({
         subjectName: sName,
         subjectCode: sCode,
         subjectId: legacySubjectId,
         semester: sem,
-        section: (section && typeof section === 'string' && section.trim()) ? section.trim() : 'A',
+        section: legacySec,
         academicYear: defaultAcademicYear,
-        attendanceAccess: attendanceAccess !== undefined ? Boolean(attendanceAccess) : true,
+        attendanceAccess: att,
+        attendanceSections: att ? [legacySec] : [],
         marksAccess: marksAccess !== undefined ? Boolean(marksAccess) : true,
-        googleSheetsAccess: googleSheetsAccess !== undefined ? Boolean(googleSheetsAccess) : true,
+        googleSheetsAccess: googleSheetsAccess !== undefined ? Boolean(googleSheetsAccess) : att,
       });
     }
 
@@ -2472,82 +2687,161 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
     // 5. Create Subjects and FacultyAssignment records for all teaching assignments
     const createdAssignmentsList: any[] = [];
 
-    for (const item of assignmentsToProcess) {
+    for (let i = 0; i < assignmentsToProcess.length; i++) {
+      const item = assignmentsToProcess[i];
       let subject: Subject | null = null;
 
-      if (item.subjectCode && item.subjectName) {
+      if (item.subjectId && isUUID(item.subjectId)) {
+        subject = await Subject.findOne({
+          where: { id: item.subjectId },
+          transaction: t,
+        });
+      }
+
+      if (!subject && item.subjectCode) {
         subject = await Subject.findOne({
           where: { code: item.subjectCode },
           transaction: t,
         });
+      }
 
-        if (subject) {
-          const updates: Partial<{ name: string; semester: number; departmentId: string }> = {};
-          if (subject.name !== item.subjectName) updates.name = item.subjectName;
-          if (item.semester && subject.semester !== Number(item.semester)) updates.semester = Number(item.semester);
-          if (!subject.departmentId) updates.departmentId = departmentId;
-          if (Object.keys(updates).length > 0) {
-            await subject.update(updates, { transaction: t });
-          }
-        } else {
-          subject = await Subject.create(
-            {
-              name: item.subjectName,
-              code: item.subjectCode,
-              semester: Number(item.semester) || 1,
-              departmentId,
-              credits: 4,
-              type: 'Theory',
-              status: 'ACTIVE',
-            },
-            { transaction: t }
-          );
-        }
-      } else if (item.subjectId) {
+      if (!subject && item.subjectCode) {
         subject = await Subject.findOne({
-          where: { id: item.subjectId, departmentId },
+          where: { code: { [Op.iLike]: item.subjectCode } },
           transaction: t,
         });
       }
 
       if (!subject) {
         await t.rollback();
-        return res.status(400).json({ error: `Valid subject required for assignment ${item.subjectCode}.` });
+        return res.status(400).json({
+          error: `Teaching Allocation ${i + 1}: Subject "${item.subjectName} (${item.subjectCode})" does not exist in database. Please configure subjects in Subjects directory first.`,
+        });
       }
 
-      const assignment = await FacultyAssignment.create(
-        {
-          teacherId: teacher.id,
-          userId: newUser.id,
-          departmentId,
-          subjectId: subject.id,
-          semester: Number(item.semester),
-          section: item.section,
-          academicYear: item.academicYear,
-          attendanceAccess: item.attendanceAccess,
-          marksAccess: item.marksAccess,
-          googleSheetsAccess: item.googleSheetsAccess,
-          createdByHODId: req.user?.id || null,
-          status: 'INACTIVE',
-        },
-        { transaction: t }
-      );
+      // Department scope validation
+      if (subject.departmentId && subject.departmentId !== departmentId) {
+        await t.rollback();
+        return res.status(400).json({
+          error: `Teaching Allocation ${i + 1}: Subject "${subject.name} (${subject.code})" belongs to another department and cannot be assigned.`,
+        });
+      }
+
+      // Semester scope validation
+      if (Number(subject.semester) !== Number(item.semester)) {
+        await t.rollback();
+        return res.status(400).json({
+          error: `Teaching Allocation ${i + 1}: Subject "${subject.name} (${subject.code})" belongs to Semester ${subject.semester}, not Semester ${item.semester}.`,
+        });
+      }
+
+      // Validate attendanceSections against department/semester
+      if (item.attendanceAccess && item.attendanceSections.length > 0) {
+        const startYear = (item.academicYear || defaultAcademicYear).split(/[-–/]/)[0].trim();
+        for (const secName of item.attendanceSections) {
+          const cleanLetter = String(secName).replace(/^(SECTION|DIVISION|SEC|DIV)\s*/i, '').trim();
+          const secOrConditions: any[] = [
+            { name: secName },
+            { name: `Section ${cleanLetter}` },
+            { name: cleanLetter },
+            { name: { [Op.iLike]: `%${cleanLetter}%` } },
+          ];
+          if (isUUID(secName)) {
+            secOrConditions.push({ id: secName });
+          }
+
+          const existingSec = await Section.findOne({
+            where: {
+              departmentId,
+              semester: Number(item.semester),
+              academicYear: { [Op.iLike]: `%${startYear}%` },
+              [Op.or]: secOrConditions,
+            },
+            transaction: t,
+          });
+
+          const totalSecsInDb = await Section.count({
+            where: { departmentId, semester: Number(item.semester), status: 'ACTIVE' },
+            transaction: t,
+          });
+
+          if (totalSecsInDb > 0 && !existingSec) {
+            await t.rollback();
+            return res.status(400).json({
+              error: `Teaching Allocation ${i + 1}: Section "${secName}" is invalid for Semester ${item.semester} in your department.`,
+            });
+          }
+        }
+      }
+
+      const teachingSec = item.section || 'Section A';
+      let primaryAssignment: any = null;
+
+      if (item.attendanceAccess && item.attendanceSections.length > 0) {
+        const allSecs = Array.from(new Set([teachingSec, ...item.attendanceSections]));
+        for (const s of allSecs) {
+          const hasAtt = item.attendanceSections.includes(s);
+          const hasMarks = s.toLowerCase() === teachingSec.toLowerCase() ? item.marksAccess : false;
+          const hasGs = hasAtt;
+
+          const createdAssign = await FacultyAssignment.create(
+            {
+              teacherId: teacher.id,
+              userId: newUser.id,
+              departmentId,
+              subjectId: subject.id,
+              semester: Number(item.semester),
+              section: s,
+              academicYear: item.academicYear,
+              attendanceAccess: hasAtt,
+              marksAccess: hasMarks,
+              googleSheetsAccess: hasGs,
+              createdByHODId: hodUserId,
+              status: 'INACTIVE',
+            },
+            { transaction: t }
+          );
+          if (!primaryAssignment || s.toLowerCase() === teachingSec.toLowerCase()) {
+            primaryAssignment = createdAssign;
+          }
+        }
+      } else {
+        primaryAssignment = await FacultyAssignment.create(
+          {
+            teacherId: teacher.id,
+            userId: newUser.id,
+            departmentId,
+            subjectId: subject.id,
+            semester: Number(item.semester),
+            section: teachingSec,
+            academicYear: item.academicYear,
+            attendanceAccess: false,
+            marksAccess: item.marksAccess,
+            googleSheetsAccess: false,
+            createdByHODId: hodUserId,
+            status: 'INACTIVE',
+          },
+          { transaction: t }
+        );
+      }
 
       createdAssignmentsList.push({
-        id: assignment.id,
+        id: primaryAssignment ? primaryAssignment.id : undefined,
         subjectId: subject.id,
         subjectName: subject.name,
         subjectCode: subject.code,
-        semester: assignment.semester,
-        section: assignment.section,
-        academicYear: assignment.academicYear,
-        attendanceAccess: assignment.attendanceAccess,
-        marksAccess: assignment.marksAccess,
-        googleSheetsAccess: assignment.googleSheetsAccess,
+        semester: Number(item.semester),
+        section: teachingSec,
+        academicYear: item.academicYear,
+        attendanceAccess: item.attendanceAccess,
+        attendanceSections: item.attendanceSections,
+        marksAccess: item.marksAccess,
+        googleSheetsAccess: item.attendanceAccess,
         permissions: {
-          attendance: assignment.attendanceAccess,
-          marks: assignment.marksAccess,
-          googleSheets: assignment.googleSheetsAccess,
+          attendance: item.attendanceAccess,
+          attendanceSections: item.attendanceSections,
+          marks: item.marksAccess,
+          googleSheets: item.attendanceAccess,
         },
       });
     }
@@ -2563,7 +2857,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         section: firstAssignment?.section || 'A',
         academicYear: firstAssignment?.academicYear || defaultAcademicYear,
         designation: designation || 'Assistant Professor',
-        createdByHODId: req.user?.id || null,
+        createdByHODId: hodUserId,
         authority: chosenAuthority,
         status: 'PENDING',
         assignmentsData: createdAssignmentsList,
@@ -2571,12 +2865,14 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       { transaction: t }
     );
 
-    // 7. Dispatch in-app notification to the executive authority (Principal or Dean)
+    // 7. Commit database transaction
+    await t.commit();
+
+    // 8. Dispatch notification to authority in safe background block (AFTER COMMIT)
     try {
       const targetRole = chosenAuthority === 'PRINCIPAL' ? 'PRINCIPAL' : 'DEAN';
       const authorityUsers = await User.findAll({
         where: { role: targetRole, status: 'ACTIVE' },
-        transaction: t,
       });
 
       const candidateFullName = `${newUser.firstName} ${newUser.lastName}`.trim();
@@ -2584,30 +2880,23 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       const notifContent = `A new faculty authorization request for ${candidateFullName} (${designation || 'Assistant Professor'}) was submitted. Awaiting ${chosenAuthority === 'PRINCIPAL' ? 'Principal' : 'Dean Academics'} review.`;
 
       for (const authUser of authorityUsers) {
-        await Notification.create(
-          {
-            title: notifTitle,
-            content: notifContent,
-            type: 'INFO',
-            audience: 'SPECIFIC_USER',
-            targetUserId: authUser.id,
-            status: 'PUBLISHED',
-            publishedAt: new Date(),
-          },
-          { transaction: t }
-        );
+        await Notification.create({
+          title: notifTitle,
+          content: notifContent,
+          type: 'INFO',
+          audience: 'SPECIFIC_USER',
+          targetUserId: authUser.id,
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+        }).catch((err) => logger.warn('Notification create skipped:', err.message));
       }
     } catch (notifErr: any) {
       logger.warn('Failed to dispatch notification to authority user:', notifErr.message);
     }
 
-    await t.commit();
-
-    // 8. Safely process Google Sheet Drive permissions if enabled
+    // 9. Safely process Google Sheet Drive permissions if enabled (AFTER COMMIT)
     const targetGoogleEmail = (req.body.googleEmail || newUser.email || '').trim();
     const googleAccessResults: any[] = [];
-
-    // Cache granted permissions within this creation request to prevent duplicate Drive API calls
     const grantedPermissionsMap: Record<string, { permissionId: string | null; status: 'GRANTED' | 'PENDING' | 'FAILED' }> = {};
 
     try {
@@ -2616,6 +2905,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         if (asgn.googleSheetsAccess || asgn.attendanceAccess || asgn.marksAccess) {
           const rawSec = (asgn.section || 'A').toString().trim().toUpperCase();
           const targetSection = rawSec.replace(/^DIVISION\s+/i, '').replace(/^SECTION\s+/i, '').trim();
+          const cleanSecLetter = targetSection.replace(/^(SECTION|DIVISION|SEC|DIV)\s*/i, '').trim();
 
           const connections = await GoogleSheetConnection.findAll({
             where: {
@@ -2625,7 +2915,10 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
               status: 'ACTIVE',
               [Op.or]: [
                 { sheetType: 'ACADEMIC_MARKS' },
+                { sheetType: 'BITWISE_MARKS' },
                 { sheetType: 'ATTENDANCE', section: targetSection },
+                { sheetType: 'ATTENDANCE', section: `Section ${cleanSecLetter}` },
+                { sheetType: 'ATTENDANCE', section: cleanSecLetter },
                 { sheetType: 'ATTENDANCE', section: null },
               ],
             },
@@ -2636,12 +2929,10 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
             let driveStatus: 'GRANTED' | 'PENDING' | 'FAILED' = 'PENDING';
             let failureReason: string | null = null;
 
-            // Check if permission was already granted for this spreadsheet in this batch
             if (grantedPermissionsMap[conn.id]) {
               permissionId = grantedPermissionsMap[conn.id].permissionId;
               driveStatus = grantedPermissionsMap[conn.id].status;
             } else {
-              // Check if already in DB for this faculty
               const existingDbAccess = await FacultyGoogleSheetAccess.findOne({
                 where: {
                   facultyId: newUser.id,
@@ -2681,9 +2972,9 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
               invitationSentAt: new Date(),
               grantedAt: driveStatus === 'GRANTED' ? new Date() : null,
               lastVerifiedAt: new Date(),
-              grantedBy: req.user?.id || null,
+              grantedBy: hodUserId,
               failureReason,
-            });
+            }).catch((err) => logger.warn('FacultyGoogleSheetAccess create skipped:', err.message));
 
             googleAccessResults.push({
               assignmentId: asgn.id,
@@ -2699,7 +2990,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       logger.warn('Non-fatal error creating Google Sheet access for faculty:', gErr.message);
     }
 
-    // 9. Audit log
+    // 10. Audit log (non-blocking)
     await logAudit(req, 'HOD_CREATE_FACULTY_REQUEST', {
       facultyUserId: newUser.id,
       email: newUser.email,
@@ -2709,7 +3000,7 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
       requestId: authRequest.id,
       assignmentsCount: createdAssignmentsList.length,
       googleAccessCount: googleAccessResults.length,
-    });
+    }).catch(() => {});
 
     return res.status(201).json({
       success: true,
@@ -2737,10 +3028,43 @@ export const createFacultyWithAuthorization = async (req: AuthenticatedRequest, 
         },
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     await t.rollback();
-    logger.error('HOD_CREATE_FACULTY_ERROR:', error);
-    return next(error);
+    logger.error('HOD_CREATE_FACULTY_ERROR:', {
+      message: error.message,
+      name: error.name,
+      code: error.original?.code || error.code,
+      detail: error.original?.detail || error.detail,
+      table: error.original?.table || error.table,
+      constraint: error.original?.constraint || error.constraint,
+      stack: error.stack,
+    });
+
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        error: 'A faculty account with this email address already exists.',
+        code: 'DUPLICATE_FACULTY',
+      });
+    }
+
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({
+        error: `Database constraint error: Invalid reference for ${error.table || error.fields?.join(', ') || 'related record'}.`,
+        code: 'FOREIGN_KEY_VIOLATION',
+      });
+    }
+
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        error: error.errors?.[0]?.message || 'Validation error while creating faculty record.',
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
+    return res.status(500).json({
+      error: error.message || 'A database error occurred while creating the faculty account. Please verify the inputs and try again.',
+      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+    });
   }
 };
 
@@ -3305,6 +3629,17 @@ export const assignHodSubject = async (req: AuthenticatedRequest, res: Response,
     const teacher = await Teacher.findOne({ where: { userId: facultyUserId, departmentId } });
     if (!teacher) {
       return res.status(400).json({ error: 'Selected faculty does not belong to your department.' });
+    }
+
+    const subject = await Subject.findByPk(subjectId);
+    if (!subject) {
+      return res.status(400).json({ error: 'Selected subject does not exist in the database.' });
+    }
+    if (subject.departmentId && subject.departmentId !== departmentId) {
+      return res.status(400).json({ error: 'Selected subject belongs to another department.' });
+    }
+    if (Number(subject.semester) !== Number(semester)) {
+      return res.status(400).json({ error: `Subject "${subject.name} (${subject.code})" belongs to Semester ${subject.semester}, not Semester ${semester}.` });
     }
 
     const assignment = await FacultyAssignment.create({

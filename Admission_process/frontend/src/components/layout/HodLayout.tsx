@@ -217,6 +217,10 @@ export const HodLayout: React.FC = () => {
   };
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/hod/students/semesters/')) {
+      const sem = location.pathname.split('/').pop();
+      return `Semester ${sem} Cohort`;
+    }
     if (location.pathname.startsWith('/hod/students/sections/') && location.pathname.endsWith('/allocate')) {
       return 'Allocate Students';
     }

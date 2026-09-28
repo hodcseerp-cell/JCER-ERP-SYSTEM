@@ -302,16 +302,19 @@ export const HodGoogleSheetModal: React.FC<HodGoogleSheetModalProps> = ({
           // Dev / mock connect flow
           await hodService.submitGoogleOAuthCallback({ code: 'mock-auth-code' });
           const updated = await hodService.getGoogleAccountStatus();
+          const isConn = Boolean(updated?.connected || updated?.isConnected) && Boolean(updated?.email);
           setGoogleAccount({
-            connected: Boolean(updated?.connected || updated?.isConnected),
-            isConnected: Boolean(updated?.connected || updated?.isConnected),
-            email: updated?.email || 'yuvarajbtalawar@gmail.com',
-            displayName: updated?.displayName || 'Yuvaraj Talawar',
-            googleAccountId: updated?.googleAccountId || '10982374618293746',
+            connected: isConn,
+            isConnected: isConn,
+            email: updated?.email || null,
+            displayName: updated?.displayName || null,
+            googleAccountId: updated?.googleAccountId || null,
             profilePicture: updated?.profilePicture || null,
-            status: 'CONNECTED',
+            status: isConn ? 'CONNECTED' : 'DISCONNECTED',
           });
-          showSuccess(`Google Account connected: ${updated?.email || 'yuvarajbtalawar@gmail.com'}`);
+          if (isConn && updated?.email) {
+            showSuccess(`Google Account connected: ${updated.email}`);
+          }
         }
       }
     } catch (err: any) {

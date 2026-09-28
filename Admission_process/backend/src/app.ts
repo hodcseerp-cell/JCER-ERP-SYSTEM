@@ -28,6 +28,7 @@ import provisionalRoutes from './routes/provisional.routes';
 import promotionRoutes from './routes/promotion.routes';
 import deanRoutes from './routes/dean.routes';
 import hodRoutes from './routes/hod.routes';
+import facultyRoutes from './routes/faculty.routes';
 import googleRoutes from './routes/google.routes';
 import {
   syncGoogleAttendance,
@@ -308,7 +309,10 @@ v1Router.post('/google-sheets/sync/attendance', (authMiddleware as any), (syncGo
 v1Router.post('/google-sheets/sync/marks', (authMiddleware as any), (syncGoogleMarks as any));
 v1Router.get('/google-sheets/sync-history', (authMiddleware as any), (getGoogleSheetSyncHistory as any));
 
-// Faculty Google Sheets access endpoint
+// Faculty Dashboard routes
+v1Router.use('/faculty', facultyRoutes);
+
+// Faculty Google Sheets access endpoint (legacy alias)
 v1Router.get('/faculty/my-sheets', (authMiddleware as any), (getFacultyMySheets as any));
 
 // Explicit bulletproof routes for Existing Student Onboarding

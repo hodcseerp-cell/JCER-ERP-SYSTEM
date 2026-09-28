@@ -84,7 +84,7 @@ export const HodStudentsSemesterPage: React.FC = () => {
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                 <span className="text-slate-400 text-[11px]">Academic Cohort</span>
                 <Link
-                  to={`/hod/students?semester=${sem}`}
+                  to={`/hod/students/semesters/${sem}`}
                   className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
                 >
                   View Cohort <ArrowUpRight className="w-3.5 h-3.5" />

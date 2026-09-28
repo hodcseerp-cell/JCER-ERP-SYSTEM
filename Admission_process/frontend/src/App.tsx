@@ -54,6 +54,7 @@ import DeanProfilePage from './pages/dean/DeanProfilePage';
 import HodDashboardPage from './pages/hod/HodDashboardPage';
 import HodStudentsPage from './pages/hod/HodStudentsPage';
 import HodStudentsSemesterPage from './pages/hod/HodStudentsSemesterPage';
+import HodSemesterCohortPage from './pages/hod/HodSemesterCohortPage';
 import HodStudentsSectionPage from './pages/hod/HodStudentsSectionPage';
 import HodSectionDetailPage from './pages/hod/HodSectionDetailPage';
 import HodSectionAllocatePage from './pages/hod/HodSectionAllocatePage';
@@ -370,6 +371,7 @@ export const App: React.FC = () => (
               {/* Students & Section Allocations */}
               <Route path="students" element={<HodStudentsPage />} />
               <Route path="students/semesters" element={<HodStudentsSemesterPage />} />
+              <Route path="students/semesters/:semester" element={<HodSemesterCohortPage />} />
               <Route path="students/sections" element={<HodStudentsSectionPage />} />
               <Route path="students/sections/:sectionId" element={<HodSectionDetailPage />} />
               <Route path="students/sections/:sectionId/allocate" element={<HodSectionAllocatePage />} />

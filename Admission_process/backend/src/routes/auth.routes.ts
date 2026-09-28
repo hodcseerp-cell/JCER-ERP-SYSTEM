@@ -1,5 +1,7 @@
 import express from 'express';
+import multer from 'multer';
 import * as authController from '../controllers/auth.controller';
+import * as draftController from '../controllers/sessionDraft.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { authLimiter, refreshLimiter } from '../middleware/rateLimit.middleware';
 
@@ -21,8 +23,6 @@ router.post('/send-forgot-password-otp', authLimiter, authController.sendForgotP
 router.post('/verify-forgot-password-otp', authLimiter, authController.verifyForgotPasswordOtp);
 router.post('/reset-password', authLimiter, authController.resetPassword);
 
-import multer from 'multer';
-
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }
@@ -39,5 +39,10 @@ router.post('/profile-image', authMiddleware, avatarUpload.single('avatar'), aut
 // Email Change Endpoints (Authenticated)
 router.post('/email-change/request', authMiddleware, authLimiter, authController.requestEmailChange);
 router.post('/email-change/verify', authMiddleware, authLimiter, authController.verifyEmailChange);
+
+// Persistent Session & Form Drafts (Redis-backed)
+router.get('/drafts/:key', authMiddleware, draftController.getSessionDraft);
+router.post('/drafts/:key', authMiddleware, draftController.saveSessionDraft);
+router.delete('/drafts/:key', authMiddleware, draftController.deleteSessionDraft);
 
 export default router;
