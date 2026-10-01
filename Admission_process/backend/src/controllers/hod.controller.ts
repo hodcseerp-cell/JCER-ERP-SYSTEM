@@ -28,6 +28,7 @@ import GoogleSheetTab from '../models/GoogleSheetTab';
 import FacultyGoogleSheetAccess from '../models/FacultyGoogleSheetAccess';
 import googleOAuthService from '../services/googleOAuth.service';
 import googleSheetsService from '../services/googleSheets.service';
+import sectionAllocationService, { SectionAllocationService } from '../services/sectionAllocation.service';
 import logger from '../utils/logger.util';
 
 /**
@@ -1238,72 +1239,8 @@ export const getHodStudentSections = async (req: AuthenticatedRequest, res: Resp
     }
 
     const { semester, academicYear } = req.query as any;
-    const where: any = { departmentId, status: 'ACTIVE' };
-
-    if (semester && semester !== 'ALL') {
-      const semNum = Number(semester);
-      if (!isNaN(semNum)) where.semester = semNum;
-    }
-
-    if (academicYear && academicYear !== 'ALL') {
-      const startYear = String(academicYear).split(/[-–/]/)[0].trim();
-      where.academicYear = { [Op.iLike]: `%${startYear}%` };
-    }
-
-    let sections = await Section.findAll({
-      where,
-      order: [['semester', 'ASC'], ['name', 'ASC']],
-    });
-
-    if ((!sections || sections.length === 0) && where.academicYear) {
-      delete where.academicYear;
-      sections = await Section.findAll({
-        where,
-        order: [['semester', 'ASC'], ['name', 'ASC']],
-      });
-    }
-
-    if (!sections || sections.length === 0) {
-      return res.json({ success: true, data: [] });
-    }
-
-    const sectionData = await Promise.all(
-      sections.map(async (sec) => {
-        const studentCount = await StudentAcademicEnrollment.count({
-          where: {
-            departmentId,
-            semesterId: sec.semester,
-            status: 'ACTIVE',
-            [Op.or]: [
-              { sectionId: sec.id },
-              { sectionId: sec.name },
-            ],
-          },
-        });
-        const capacity = sec.capacity || 60;
-        const availableCapacity = Math.max(0, capacity - studentCount);
-        const fillPercentage = capacity > 0 ? Math.min(100, Math.round((studentCount / capacity) * 100)) : 0;
-
-        return {
-          id: sec.id,
-          name: sec.name,
-          semester: sec.semester,
-          academicYear: sec.academicYear,
-          capacity,
-          classroom: sec.classroom || null,
-          description: sec.description || null,
-          status: sec.status,
-          studentCount,
-          maxCapacity: capacity,
-          availableCapacity,
-          fillPercentage,
-          createdAt: sec.createdAt,
-          updatedAt: sec.updatedAt,
-        };
-      })
-    );
-
-    return res.json({ success: true, data: sectionData });
+    const data = await sectionAllocationService.getSections(departmentId, semester, academicYear);
+    return res.json({ success: true, data });
   } catch (error) {
     logger.error('HOD_GET_SECTIONS_ERROR:', error);
     return next(error);
@@ -1329,90 +1266,76 @@ export const createHodSection = async (req: AuthenticatedRequest, res: Response,
       return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
     }
 
-    const { name, semester, academicYear, capacity, classroom, description } = req.body;
-
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return res.status(400).json({ success: false, error: 'Section name is required.' });
-    }
-
-    const semNum = Number(semester);
-    if (!semNum || isNaN(semNum) || semNum < 1 || semNum > 8) {
-      return res.status(400).json({ success: false, error: 'Valid semester number (1-8) is required.' });
-    }
-
-    const capNum = Number(capacity);
-    if (!capNum || isNaN(capNum) || capNum <= 0) {
-      return res.status(400).json({ success: false, error: 'Capacity must be a positive integer.' });
-    }
-
-    const ay = String(academicYear || '2026-27').trim();
-    const cleanName = name.trim();
-
-    // Enforce uniqueness: department + academicYear + semester + name
-    const existing = await Section.findOne({
-      where: {
-        departmentId,
-        semester: semNum,
-        academicYear: ay,
-        name: cleanName,
-        status: 'ACTIVE',
-      },
-    });
-
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        error: `Section "${cleanName}" already exists for Semester ${semNum} (${ay}).`,
-      });
-    }
-
-    const newSection = await Section.create({
-      departmentId,
-      semester: semNum,
-      academicYear: ay,
-      name: cleanName,
-      capacity: capNum,
-      classroom: classroom ? String(classroom).trim() : null,
-      description: description ? String(description).trim() : null,
-      createdBy: req.user?.id || null,
-      status: 'ACTIVE',
-    });
-
-    await logAudit(req, 'Section Created', {
-      actor: req.user?.id,
-      role: req.user?.role,
-      departmentId,
-      sectionId: newSection.id,
-      sectionName: newSection.name,
-      semester: newSection.semester,
-      academicYear: newSection.academicYear,
-      capacity: newSection.capacity,
-      classroom: newSection.classroom,
-      timestamp: new Date().toISOString(),
-    });
-
+    const data = await sectionAllocationService.createSection(departmentId, req.body, req.user);
     return res.status(201).json({
       success: true,
-      data: {
-        id: newSection.id,
-        name: newSection.name,
-        semester: newSection.semester,
-        academicYear: newSection.academicYear,
-        capacity: newSection.capacity,
-        classroom: newSection.classroom,
-        description: newSection.description,
-        status: newSection.status,
-        studentCount: 0,
-        availableCapacity: newSection.capacity,
-        fillPercentage: 0,
-        createdAt: newSection.createdAt,
-      },
-      message: `Section ${cleanName} created successfully.`,
+      data,
+      message: `Section ${data.name} created successfully.`,
     });
   } catch (error) {
     logger.error('HOD_CREATE_SECTION_ERROR:', error);
     return next(error);
   }
+};
+
+/**
+ * Safely resolves a Section for the given HOD department.
+ * Supports exact UUID, prefix UUID matching (if slightly truncated/mistyped), and section name matching ('A', 'Section A').
+ * Protects against PostgreSQL 'invalid input syntax for type uuid' errors.
+ */
+export const findHodSectionByIdOrIdentifier = async (
+  sectionId: string | undefined | null,
+  departmentId: string,
+  options: { transaction?: any; lock?: any } = {}
+): Promise<Section | null> => {
+  if (!sectionId || typeof sectionId !== 'string') return null;
+
+  const raw = sectionId.trim();
+  if (!raw) return null;
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+
+  // 1. Direct UUID lookup
+  if (isUuid) {
+    const sec = await Section.findOne({
+      where: { id: raw, departmentId },
+      ...options,
+    });
+    if (sec) return sec;
+  }
+
+  // 2. Name lookup (e.g. 'A', 'Section A', 'B', etc.)
+  const cleanLetter = raw.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim();
+  const nameConditions: any[] = [
+    { name: raw },
+    { name: `Section ${cleanLetter}` },
+    { name: cleanLetter },
+  ];
+  const byName = await Section.findOne({
+    where: {
+      departmentId,
+      [Op.or]: nameConditions,
+    },
+    ...options,
+  });
+  if (byName) return byName;
+
+  // 3. If raw looks like a hex/uuid fragment (e.g. truncated UUID like 'aa74435-...'),
+  // search in memory among this department's sections to prevent PostgreSQL casting syntax errors.
+  if (/^[0-9a-f-]{5,}$/i.test(raw)) {
+    const deptSections = await Section.findAll({
+      where: { departmentId },
+      ...options,
+    });
+    const prefixClean = raw.toLowerCase().replace(/[^0-9a-f]/g, '');
+    const matched = deptSections.find((s) => {
+      const sClean = s.id.toLowerCase().replace(/[^0-9a-f]/g, '');
+      return sClean.startsWith(prefixClean) || s.id.toLowerCase().startsWith(raw.toLowerCase());
+    });
+    if (matched) return matched;
+  }
+
+  return null;
 };
 
 /**
@@ -1422,49 +1345,12 @@ export const createHodSection = async (req: AuthenticatedRequest, res: Response,
 export const getHodSectionById = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
-    const { sectionId } = req.params;
-
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-    });
-
-    if (!section) {
-      return res.status(404).json({ success: false, error: 'Section not found or unauthorized.' });
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
     }
-
-    const studentCount = await Student.count({
-      where: {
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
-    });
-
-    const capacity = section.capacity || 60;
-    const availableCapacity = Math.max(0, capacity - studentCount);
-    const fillPercentage = capacity > 0 ? Math.min(100, Math.round((studentCount / capacity) * 100)) : 0;
-
-    return res.json({
-      success: true,
-      data: {
-        id: section.id,
-        name: section.name,
-        semester: section.semester,
-        academicYear: section.academicYear,
-        capacity,
-        classroom: section.classroom || null,
-        description: section.description || null,
-        status: section.status,
-        studentCount,
-        availableCapacity,
-        fillPercentage,
-        createdAt: section.createdAt,
-        updatedAt: section.updatedAt,
-      },
-    });
+    const { sectionId } = req.params;
+    const data = await sectionAllocationService.getSectionById(sectionId, departmentId);
+    return res.json({ success: true, data });
   } catch (error) {
     logger.error('HOD_GET_SECTION_BY_ID_ERROR:', error);
     return next(error);
@@ -1478,27 +1364,35 @@ export const getHodSectionById = async (req: AuthenticatedRequest, res: Response
 export const updateHodSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
+    }
     const { sectionId } = req.params;
     const { name, capacity, classroom, description, status } = req.body;
 
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-    });
+    const section = await findHodSectionByIdOrIdentifier(sectionId, departmentId);
 
     if (!section) {
       return res.status(404).json({ success: false, error: 'Section not found or unauthorized.' });
     }
 
-    const currentCount = await Student.count({
-      where: {
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
+    const { rows: allStudentsForCount } = await getHodDepartmentStudents({
+      departmentId,
+      semester: section.semester,
+      limit: 1000,
     });
+
+    const currentCount = allStudentsForCount.filter((s: any) => {
+      const enc = s.academicEnrollments?.[0];
+      const currentSecId = enc?.sectionId || s.sectionId;
+      const currentSecName = enc?.sectionId || s.section;
+      return (
+        currentSecId === section.id ||
+        currentSecName === section.name ||
+        (currentSecName && currentSecName.toUpperCase() === section.name.toUpperCase()) ||
+        currentSecName === section.id
+      );
+    }).length;
 
     if (capacity !== undefined) {
       const capNum = Number(capacity);
@@ -1575,26 +1469,34 @@ export const updateHodSection = async (req: AuthenticatedRequest, res: Response,
 export const deleteHodSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
+    }
     const { sectionId } = req.params;
 
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-    });
+    const section = await findHodSectionByIdOrIdentifier(sectionId, departmentId);
 
     if (!section) {
       return res.status(404).json({ success: false, error: 'Section not found or unauthorized.' });
     }
 
-    const studentCount = await Student.count({
-      where: {
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
+    const { rows: allStudentsForDelete } = await getHodDepartmentStudents({
+      departmentId,
+      semester: section.semester,
+      limit: 1000,
     });
+
+    const studentCount = allStudentsForDelete.filter((s: any) => {
+      const enc = s.academicEnrollments?.[0];
+      const currentSecId = enc?.sectionId || s.sectionId;
+      const currentSecName = enc?.sectionId || s.section;
+      return (
+        currentSecId === section.id ||
+        currentSecName === section.name ||
+        (currentSecName && currentSecName.toUpperCase() === section.name.toUpperCase()) ||
+        currentSecName === section.id
+      );
+    }).length;
 
     if (studentCount > 0) {
       return res.status(400).json({
@@ -1624,109 +1526,112 @@ export const deleteHodSection = async (req: AuthenticatedRequest, res: Response,
 };
 
 /**
+ * Extract clean section code, e.g. "Section A" -> "A", "Sec B" -> "B", "A" -> "A".
+ * Never returns a UUID.
+ */
+export const getCleanSectionCode = (nameOrCode: string | null | undefined): string => {
+  if (!nameOrCode || typeof nameOrCode !== 'string') return '';
+  const trimmed = nameOrCode.trim();
+  // UUIDs are internal IDs and never human-readable section codes
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return '';
+  }
+  return trimmed.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim();
+};
+
+/**
+ * Robustly resolves a student's assigned section against active department sections.
+ * Guarantees that internal UUIDs are NEVER exposed as section names or codes.
+ */
+export const resolveStudentSection = (
+  student: any,
+  siblingSections: Section[]
+): {
+  sectionId: string | null;
+  sectionCode: string; // 'A', 'B', or '—'
+  sectionName: string | null;
+  matchedSection: Section | null;
+  isAllocated: boolean;
+} => {
+  const enc = student.academicEnrollments?.[0];
+  const rawStudentSecId = student.sectionId ? String(student.sectionId).trim() : null;
+  const rawStudentSecName = student.section ? String(student.section).trim() : null;
+  const rawEncSecId = enc?.sectionId ? String(enc.sectionId).trim() : null;
+
+  // 1. Match by Section UUID against active sections
+  for (const candidateId of [rawStudentSecId, rawEncSecId, rawStudentSecName]) {
+    if (candidateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId)) {
+      const found = siblingSections.find((s) => s.id.toLowerCase() === candidateId.toLowerCase());
+      if (found) {
+        const code = getCleanSectionCode(found.name) || found.name;
+        return {
+          sectionId: found.id,
+          sectionCode: code,
+          sectionName: found.name,
+          matchedSection: found,
+          isAllocated: true,
+        };
+      }
+    }
+  }
+
+  // 2. Match by Section Name or Code (e.g. 'Section A', 'A')
+  for (const candidateName of [rawStudentSecName, rawEncSecId, rawStudentSecId]) {
+    if (candidateName && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateName)) {
+      const cleanCandidate = getCleanSectionCode(candidateName).toUpperCase();
+      const found = siblingSections.find((s) => {
+        const sNameClean = s.name.trim().toUpperCase();
+        const sCodeClean = getCleanSectionCode(s.name).toUpperCase();
+        return sNameClean === candidateName.toUpperCase() || (cleanCandidate && sCodeClean === cleanCandidate);
+      });
+      if (found) {
+        const code = getCleanSectionCode(found.name) || found.name;
+        return {
+          sectionId: found.id,
+          sectionCode: code,
+          sectionName: found.name,
+          matchedSection: found,
+          isAllocated: true,
+        };
+      }
+    }
+  }
+
+  // 3. Fallback: if student has a legacy single-letter code not mapped in siblingSections
+  if (rawStudentSecName && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawStudentSecName)) {
+    const code = getCleanSectionCode(rawStudentSecName) || rawStudentSecName;
+    return {
+      sectionId: null,
+      sectionCode: code,
+      sectionName: rawStudentSecName,
+      matchedSection: null,
+      isAllocated: true,
+    };
+  }
+
+  // 4. Truly unallocated
+  return {
+    sectionId: null,
+    sectionCode: '—',
+    sectionName: null,
+    matchedSection: null,
+    isAllocated: false,
+  };
+};
+
+/**
  * GET /api/hod/sections/:sectionId/students
  * List all students allocated to this section
  */
 export const getHodSectionStudents = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
-    const { sectionId } = req.params;
-
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-    });
-
-    if (!section) {
-      return res.status(404).json({ success: false, error: 'Section not found or unauthorized.' });
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
     }
-
-    const students = await Student.findAll({
-      where: {
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status'],
-          required: false,
-        },
-        {
-          model: Admission,
-          as: 'admission',
-          required: false,
-          include: [
-            {
-              model: AdmissionPersonalDetail,
-              as: 'studentpersonaldetails',
-              required: false,
-            },
-          ],
-        },
-      ],
-      order: section.semester === 1
-        ? [
-            sequelize.literal(`CASE WHEN "rollNumber" IS NOT NULL THEN 0 ELSE 1 END`),
-            ['rollNumber', 'ASC'],
-            ['usn', 'ASC'],
-            ['enrollmentNumber', 'ASC'],
-          ]
-        : [
-            sequelize.literal(`CASE WHEN "usn" IS NOT NULL THEN 0 ELSE 1 END`),
-            ['usn', 'ASC'],
-            ['enrollmentNumber', 'ASC'],
-          ],
-    });
-
-    const mapped = students.map((s: any) => {
-      const pd = s.admission?.studentpersonaldetails;
-      const fullName = [
-        pd?.firstName || s.user?.firstName || '',
-        pd?.middleName || '',
-        pd?.lastName || s.user?.lastName || '',
-      ].filter(Boolean).join(' ').trim() || 'Student';
-
-      return {
-        id: s.id,
-        userId: s.userId,
-        usn: s.usn || null,
-        enrollmentNumber: s.enrollmentNumber || null,
-        rollNumber: section.semester === 1 ? (s.rollNumber || null) : null,
-        name: fullName,
-        email: s.user?.email || pd?.email || 'N/A',
-        phone: pd?.phone || s.user?.phone || 'N/A',
-        semester: s.semester,
-        sectionId: s.sectionId || section.id,
-        section: s.section || section.name,
-        admissionType: s.admissionType || s.admission?.admissionType || 'REGULAR',
-        admissionStatus: s.admission?.applicationStatus || s.admissionStatus || 'ACTIVE',
-        gender: s.gender || pd?.gender || null,
-        category: pd?.category || null,
-      };
-    });
-
-    return res.json({
-      success: true,
-      data: {
-        section: {
-          id: section.id,
-          name: section.name,
-          semester: section.semester,
-          academicYear: section.academicYear,
-          capacity: section.capacity,
-          classroom: section.classroom,
-          description: section.description,
-          allocatedCount: mapped.length,
-          availableCapacity: Math.max(0, section.capacity - mapped.length),
-        },
-        students: mapped,
-      },
-    });
+    const { sectionId } = req.params;
+    const data = await sectionAllocationService.getSectionStudents(sectionId, departmentId);
+    return res.json({ success: true, data });
   } catch (error) {
     logger.error('HOD_GET_SECTION_STUDENTS_ERROR:', error);
     return next(error);
@@ -1735,7 +1640,7 @@ export const getHodSectionStudents = async (req: AuthenticatedRequest, res: Resp
 
 /**
  * GET /api/hod/sections/:sectionId/cohort
- * Get all students for the section's semester to support the allocation workspace
+ * Authoritative Cohort Allocation API: strictly segregates unallocated students
  */
 export const getHodSectionCohort = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
@@ -1744,98 +1649,8 @@ export const getHodSectionCohort = async (req: AuthenticatedRequest, res: Respon
       return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
     }
     const { sectionId } = req.params;
-
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-    });
-
-    if (!section) {
-      return res.status(404).json({ success: false, error: 'Section not found or unauthorized.' });
-    }
-
-    // Fetch all active sections for this department & semester
-    const siblingSections = await Section.findAll({
-      where: { departmentId, semester: section.semester, status: 'ACTIVE' },
-      attributes: ['id', 'name', 'capacity'],
-    });
-
-    const { rows: allStudents } = await getHodDepartmentStudents({
-      departmentId,
-      semester: section.semester,
-      limit: 1000,
-    });
-
-    let sectionAllocatedCount = 0;
-    let totalAllocatedInSemester = 0;
-
-    const mappedStudents = allStudents.map((s: any) => {
-      const enc = s.academicEnrollments?.[0];
-      const pd = s.admission?.studentpersonaldetails;
-      const fullName = [
-        pd?.firstName || s.user?.firstName || '',
-        pd?.middleName || '',
-        pd?.lastName || s.user?.lastName || '',
-      ].filter(Boolean).join(' ').trim() || 'Student';
-
-      const currentSecId = enc?.sectionId || s.sectionId;
-      const currentSecName = enc?.sectionId || s.section;
-
-      const isAllocatedToThisSection =
-        currentSecId === section.id || (currentSecName && currentSecName === section.name);
-
-      const hasAnySection = Boolean(currentSecId || currentSecName);
-      if (hasAnySection) totalAllocatedInSemester++;
-      if (isAllocatedToThisSection) sectionAllocatedCount++;
-
-      return {
-        id: s.id,
-        userId: s.userId,
-        usn: s.usn || null,
-        enrollmentNumber: s.enrollmentNumber || null,
-        rollNumber: section.semester === 1 ? (enc?.rollNumber || s.rollNumber || null) : null,
-        name: fullName,
-        email: s.user?.email || pd?.email || 'N/A',
-        admissionType: s.admissionType || s.admission?.admissionType || 'REGULAR',
-        admissionStatus: s.admission?.applicationStatus || s.admissionStatus || 'ACTIVE',
-        gender: s.gender || pd?.gender || null,
-        category: pd?.category || null,
-        currentSectionId: currentSecId || null,
-        currentSection: currentSecName || null,
-        isAllocatedToThisSection,
-        isAllocatedToOtherSection: hasAnySection && !isAllocatedToThisSection,
-        isUnallocated: !hasAnySection,
-      };
-    });
-
-    const totalStudents = mappedStudents.length;
-    const unallocatedStudents = Math.max(0, totalStudents - totalAllocatedInSemester);
-    const remainingCapacity = Math.max(0, (section.capacity || 60) - sectionAllocatedCount);
-
-    return res.json({
-      success: true,
-      data: {
-        section: {
-          id: section.id,
-          name: section.name,
-          semester: section.semester,
-          academicYear: section.academicYear,
-          capacity: section.capacity || 60,
-          classroom: section.classroom || null,
-          allocatedCount: sectionAllocatedCount,
-          remainingCapacity,
-        },
-        siblingSections: siblingSections.map(s => ({ id: s.id, name: s.name, capacity: s.capacity })),
-        stats: {
-          totalStudents,
-          allocatedStudents: totalAllocatedInSemester,
-          unallocatedStudents,
-          sectionCapacity: section.capacity || 60,
-          sectionAllocatedCount,
-          remainingCapacity,
-        },
-        students: mappedStudents,
-      },
-    });
+    const data = await sectionAllocationService.getAvailableStudents(sectionId, departmentId);
+    return res.json({ success: true, data });
   } catch (error) {
     logger.error('HOD_GET_SECTION_COHORT_ERROR:', error);
     return next(error);
@@ -1844,35 +1659,22 @@ export const getHodSectionCohort = async (req: AuthenticatedRequest, res: Respon
 
 /**
  * POST /api/hod/sections/:sectionId/bulk-allocate
- * Transactional student allocation with capacity validation
+ * POST /api/hod/sections/:sectionId/allocate
+ * Transactional student allocation with database-level row locking & strict capacity validation.
  */
 export const bulkAllocateStudentsToSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
-  const transaction = await sequelize.transaction();
   try {
     const departmentId = req.departmentId;
     if (!departmentId) {
-      await transaction.rollback();
       return res.status(403).json({ error: 'Department scope not resolved for HOD account.' });
     }
 
     const { sectionId } = req.params;
     const { studentAllocations, studentIds, rollNumbers } = req.body;
 
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId, status: 'ACTIVE' },
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
-
-    if (!section) {
-      await transaction.rollback();
-      return res.status(404).json({ success: false, error: 'Section not found or inactive.' });
-    }
-
-    // Standardize input allocations: [{ studentId, rollNumber? }]
     let allocationsToProcess: { studentId: string; rollNumber?: string }[] = [];
     if (Array.isArray(studentAllocations) && studentAllocations.length > 0) {
-      allocationsToProcess = studentAllocations.filter(a => a && a.studentId);
+      allocationsToProcess = studentAllocations.filter((a) => a && a.studentId);
     } else if (Array.isArray(studentIds) && studentIds.length > 0) {
       allocationsToProcess = studentIds.map((sid: string) => ({
         studentId: sid,
@@ -1880,147 +1682,14 @@ export const bulkAllocateStudentsToSection = async (req: AuthenticatedRequest, r
       }));
     }
 
-    if (allocationsToProcess.length === 0) {
-      await transaction.rollback();
-      return res.status(400).json({ success: false, error: 'No students provided for allocation.' });
-    }
-
-    // Count current students in this section
-    const currentAllocated = await Student.count({
-      where: {
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
-      transaction,
-    });
-
-    // Check how many of the incoming students are already in this section
-    const targetStudentIds = allocationsToProcess.map(a => a.studentId);
-    const alreadyInThisSection = await Student.count({
-      where: {
-        id: { [Op.in]: targetStudentIds },
-        departmentId,
-        semester: section.semester,
-        [Op.or]: [
-          { sectionId: section.id },
-          { section: section.name },
-        ],
-      },
-      transaction,
-    });
-
-    const netNewAllocations = allocationsToProcess.length - alreadyInThisSection;
-    const capacity = section.capacity || 60;
-    const remaining = Math.max(0, capacity - currentAllocated);
-
-    if (netNewAllocations > remaining) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        error: `Cannot allocate ${netNewAllocations} new students. Section remaining capacity is only ${remaining} (Capacity: ${capacity}, Currently allocated: ${currentAllocated}).`,
-      });
-    }
-
-    // Fetch and validate each student belongs to this department & semester
-    const students = await Student.findAll({
-      where: {
-        id: { [Op.in]: targetStudentIds },
-      },
-      transaction,
-    });
-
-    if (students.length !== targetStudentIds.length) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        error: 'One or more selected students could not be found.',
-      });
-    }
-
-    for (const student of students) {
-      if (student.departmentId !== departmentId) {
-        await transaction.rollback();
-        return res.status(403).json({
-          success: false,
-          error: `Student ${student.usn || student.enrollmentNumber || student.id} does not belong to your department.`,
-        });
-      }
-      if (student.semester !== section.semester) {
-        await transaction.rollback();
-        return res.status(400).json({
-          success: false,
-          error: `Student ${student.usn || student.enrollmentNumber || student.id} is in Semester ${student.semester}, but section is Semester ${section.semester}.`,
-        });
-      }
-    }
-
-    // Update each student inside the transaction
-    const allocationMap = new Map(allocationsToProcess.map(a => [a.studentId, a.rollNumber]));
-    for (const student of students) {
-      const explicitRoll = section.semester === 1 ? allocationMap.get(student.id) : null;
-      const rollToSet = section.semester === 1
-        ? (explicitRoll !== undefined && explicitRoll !== null && String(explicitRoll).trim().length > 0
-            ? String(explicitRoll).trim()
-            : student.rollNumber)
-        : null;
-
-      const updatePayload: any = {
-        sectionId: section.id,
-        section: section.name,
-        rollNumber: rollToSet,
-      };
-      await student.update(updatePayload, { transaction });
-
-      await StudentAcademicEnrollment.update(
-        {
-          sectionId: section.id,
-          rollNumber: rollToSet,
-        },
-        {
-          where: {
-            studentId: student.id,
-            departmentId,
-            status: 'ACTIVE',
-          },
-          transaction,
-        }
-      );
-    }
-
-    await AuditLog.create(
-      {
-        userId: req.user?.id || null,
-        action: 'Bulk Allocation',
-        ipAddress: req.ip || '127.0.0.1',
-        userAgent: req.headers['user-agent'] || 'System',
-        details: {
-          actor: req.user?.id,
-          role: req.user?.role,
-          departmentId,
-          sectionId: section.id,
-          sectionName: section.name,
-          semester: section.semester,
-          academicYear: section.academicYear,
-          allocatedCount: allocationsToProcess.length,
-          studentIds: targetStudentIds,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      { transaction }
+    const result = await sectionAllocationService.allocateStudents(
+      sectionId,
+      departmentId,
+      allocationsToProcess,
+      req.user
     );
-
-    await transaction.commit();
-
-    return res.json({
-      success: true,
-      message: `Successfully allocated ${allocationsToProcess.length} students to ${section.name}.`,
-    });
+    return res.json(result);
   } catch (error) {
-    await transaction.rollback();
     logger.error('HOD_BULK_ALLOCATE_ERROR:', error);
     return next(error);
   }
@@ -2031,138 +1700,25 @@ export const bulkAllocateStudentsToSection = async (req: AuthenticatedRequest, r
  * Move a student from one section to another in the same semester
  */
 export const moveStudentSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
-  const transaction = await sequelize.transaction();
   try {
     const departmentId = req.departmentId;
     if (!departmentId) {
-      await transaction.rollback();
       return res.status(403).json({ error: 'Department scope not resolved.' });
     }
 
     const { sectionId, studentId } = req.params;
     const { targetSectionId, newRollNumber } = req.body;
 
-    if (!targetSectionId) {
-      await transaction.rollback();
-      return res.status(400).json({ success: false, error: 'Target section ID is required.' });
-    }
-
-    const currentSection = await Section.findOne({
-      where: { id: sectionId, departmentId },
-      transaction,
-    });
-
-    const targetSection = await Section.findOne({
-      where: { id: targetSectionId, departmentId, status: 'ACTIVE' },
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
-
-    if (!currentSection || !targetSection) {
-      await transaction.rollback();
-      return res.status(404).json({ success: false, error: 'Current or target section not found.' });
-    }
-
-    if (currentSection.semester !== targetSection.semester) {
-      await transaction.rollback();
-      return res.status(400).json({ success: false, error: 'Target section must be in the same semester.' });
-    }
-
-    // Check target section capacity
-    const targetAllocated = await Student.count({
-      where: {
-        departmentId,
-        semester: targetSection.semester,
-        [Op.or]: [
-          { sectionId: targetSection.id },
-          { section: targetSection.name },
-        ],
-      },
-      transaction,
-    });
-
-    if (targetAllocated >= targetSection.capacity) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        error: `Target section "${targetSection.name}" is already at full capacity (${targetSection.capacity}/${targetSection.capacity}).`,
-      });
-    }
-
-    const student = await Student.findOne({
-      where: { id: studentId, departmentId },
-      transaction,
-    });
-
-    if (!student) {
-      await transaction.rollback();
-      return res.status(404).json({ success: false, error: 'Student not found.' });
-    }
-
-    const oldSectionName = student.section;
-    const oldRoll = student.rollNumber;
-
-    const rollToSet = targetSection.semester === 1
-      ? (newRollNumber ? String(newRollNumber).trim() : student.rollNumber)
-      : null;
-
-    await student.update(
-      {
-        sectionId: targetSection.id,
-        section: targetSection.name,
-        rollNumber: rollToSet,
-      },
-      { transaction }
+    const result = await sectionAllocationService.moveStudent(
+      sectionId,
+      studentId,
+      targetSectionId,
+      departmentId,
+      newRollNumber,
+      req.user
     );
-
-    await StudentAcademicEnrollment.update(
-      {
-        sectionId: targetSection.id,
-        rollNumber: rollToSet,
-      },
-      {
-        where: {
-          studentId: student.id,
-          departmentId,
-          status: 'ACTIVE',
-        },
-        transaction,
-      }
-    );
-
-    await AuditLog.create(
-      {
-        userId: req.user?.id || null,
-        action: 'Student Moved',
-        ipAddress: req.ip || '127.0.0.1',
-        userAgent: req.headers['user-agent'] || 'System',
-        details: {
-          actor: req.user?.id,
-          role: req.user?.role,
-          departmentId,
-          studentId: student.id,
-          fromSectionId: currentSection.id,
-          fromSectionName: oldSectionName,
-          toSectionId: targetSection.id,
-          toSectionName: targetSection.name,
-          semester: targetSection.semester,
-          academicYear: targetSection.academicYear,
-          oldRollNumber: oldRoll,
-          newRollNumber: newRollNumber || oldRoll,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      { transaction }
-    );
-
-    await transaction.commit();
-
-    return res.json({
-      success: true,
-      message: `Student successfully moved to ${targetSection.name}.`,
-    });
+    return res.json(result);
   } catch (error) {
-    await transaction.rollback();
     logger.error('HOD_MOVE_STUDENT_ERROR:', error);
     return next(error);
   }
@@ -2173,94 +1729,49 @@ export const moveStudentSection = async (req: AuthenticatedRequest, res: Respons
  * Remove student from section without hard deleting student account
  */
 export const removeStudentFromSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
-  const transaction = await sequelize.transaction();
   try {
     const departmentId = req.departmentId;
     if (!departmentId) {
-      await transaction.rollback();
       return res.status(403).json({ error: 'Department scope not resolved.' });
     }
 
     const { sectionId, studentId } = req.params;
+    const result = await sectionAllocationService.removeStudent(sectionId, studentId, departmentId, req.user);
+    return res.json(result);
+  } catch (error) {
+    logger.error('HOD_REMOVE_STUDENT_ERROR:', error);
+    return next(error);
+  }
+};
 
-    const section = await Section.findOne({
-      where: { id: sectionId, departmentId },
-      transaction,
-    });
-
-    if (!section) {
-      await transaction.rollback();
-      return res.status(404).json({ success: false, error: 'Section not found.' });
+/**
+ * POST /api/hod/sections/:sectionId/unallocate
+ * Unallocate selected students from a section
+ */
+export const unallocateStudentsFromSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const departmentId = req.departmentId;
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved.' });
     }
 
-    const student = await Student.findOne({
-      where: { id: studentId, departmentId },
-      transaction,
-    });
+    const { sectionId } = req.params;
+    const { studentIds } = req.body;
 
-    if (!student) {
-      await transaction.rollback();
-      return res.status(404).json({ success: false, error: 'Student not found.' });
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No student IDs provided for unallocation.' });
     }
 
-    const prevSectionName = student.section;
-    const prevRoll = student.rollNumber;
-
-    await student.update(
-      {
-        sectionId: null,
-        section: null,
-        rollNumber: null,
-      },
-      { transaction }
-    );
-
-    await StudentAcademicEnrollment.update(
-      {
-        sectionId: null,
-        rollNumber: null,
-      },
-      {
-        where: {
-          studentId: student.id,
-          departmentId,
-          status: 'ACTIVE',
-        },
-        transaction,
-      }
-    );
-
-    await AuditLog.create(
-      {
-        userId: req.user?.id || null,
-        action: 'Student Removed',
-        ipAddress: req.ip || '127.0.0.1',
-        userAgent: req.headers['user-agent'] || 'System',
-        details: {
-          actor: req.user?.id,
-          role: req.user?.role,
-          departmentId,
-          studentId: student.id,
-          fromSectionId: section.id,
-          fromSectionName: prevSectionName,
-          semester: section.semester,
-          academicYear: section.academicYear,
-          previousRollNumber: prevRoll,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      { transaction }
-    );
-
-    await transaction.commit();
+    for (const sid of studentIds) {
+      await sectionAllocationService.removeStudent(sectionId, sid, departmentId, req.user);
+    }
 
     return res.json({
       success: true,
-      message: `Student removed from ${section.name}.`,
+      message: `Successfully unallocated ${studentIds.length} students.`,
     });
   } catch (error) {
-    await transaction.rollback();
-    logger.error('HOD_REMOVE_STUDENT_ERROR:', error);
+    logger.error('HOD_UNALLOCATE_STUDENTS_ERROR:', error);
     return next(error);
   }
 };
@@ -2331,9 +1842,15 @@ export const bulkDistributeStudents = async (req: AuthenticatedRequest, res: Res
         });
       }
 
-      // Fetch and validate students
+      // Fetch and validate students with row locks
       const students = await Student.findAll({
         where: { id: { [Op.in]: studentIds } },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      const allActiveSections = await Section.findAll({
+        where: { departmentId, semester: section.semester, status: 'ACTIVE' },
         transaction,
       });
 
@@ -2345,6 +1862,17 @@ export const bulkDistributeStudents = async (req: AuthenticatedRequest, res: Res
             error: `Student ${st.usn || st.enrollmentNumber || st.id} does not match department/semester of ${section.name}.`,
           });
         }
+
+        const resolved = resolveStudentSection(st, allActiveSections);
+        if (resolved.isAllocated) {
+          await transaction.rollback();
+          const secDisplay = resolved.sectionCode !== '—' ? `Section ${resolved.sectionCode}` : 'another section';
+          return res.status(409).json({
+            success: false,
+            error: `Student ${st.usn || st.enrollmentNumber || st.id} is already allocated to ${secDisplay}. Cannot distribute already allocated students.`,
+          });
+        }
+
         const roll = section.semester === 1 && rollNumbers && rollNumbers[st.id] ? String(rollNumbers[st.id]).trim() : undefined;
         const rollToSet = section.semester === 1 ? (roll || st.rollNumber) : null;
         await st.update(

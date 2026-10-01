@@ -18,6 +18,8 @@ import {
   Layers,
   Building2,
   Calendar,
+  UserMinus,
+  Check,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, {
@@ -26,6 +28,27 @@ import hodService, {
   HodSectionItem,
 } from '../../services/hod.service';
 import usePersistentState from '../../hooks/usePersistentState';
+
+// Helper to safely extract clean section letter/code, guaranteeing UUIDs are never displayed
+const getDisplaySectionCode = (student: HodSectionStudentItem): string => {
+  if (student.isUnallocated) return '—';
+  const sec = student.section as any;
+  if (sec && typeof sec === 'object' && sec.code) {
+    return sec.code;
+  }
+  if (student.currentSectionCode && student.currentSectionCode !== '—') {
+    return student.currentSectionCode;
+  }
+  if (student.currentSection) {
+    const raw = String(student.currentSection).trim();
+    // Detect if raw is an internal UUID
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+      return '—';
+    }
+    return raw.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim() || raw;
+  }
+  return '—';
+};
 
 export const HodSectionAllocatePage: React.FC = () => {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -38,17 +61,28 @@ export const HodSectionAllocatePage: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Filters (persisted across tabs & reloads)
-  const [activeTab, setActiveTab] = usePersistentState<'UNALLOCATED' | 'ALL' | 'OTHER'>(`hod_sec_alloc_tab_${sectionId}`, 'UNALLOCATED');
+  // Active Tab: Strict 3-tab segregation
+  // 1. UNALLOCATED (Default workspace - only unallocated students appear)
+  // 2. THIS_SECTION (Students already placed in this section)
+  // 3. OTHER (Read-only view of students placed in sibling sections)
+  const [activeTab, setActiveTab] = usePersistentState<'UNALLOCATED' | 'THIS_SECTION' | 'OTHER'>(
+    `hod_sec_alloc_tab_${sectionId}`,
+    'UNALLOCATED'
+  );
   const [searchQuery, setSearchQuery] = usePersistentState<string>(`hod_sec_alloc_search_${sectionId}`, '');
 
   // Selected Students: studentId -> rollNumber
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [rollNumberMap, setRollNumberMap] = useState<Record<string, string>>({});
 
-  // Tool Modals (persisted tool inputs)
+  // In-Page Allocation Confirmation Area state (not a popup)
+  const [confirmAllocationOpen, setConfirmAllocationOpen] = useState<boolean>(false);
+
+  // Equal Distribution Tool Modals
   const [equalDistModalOpen, setEqualDistModalOpen] = useState<boolean>(false);
-  const [distPreview, setDistPreview] = useState<Array<{ sectionId: string; sectionName: string; current: number; toAdd: number; final: number; capacity: number }>>([]);
+  const [distPreview, setDistPreview] = useState<
+    Array<{ sectionId: string; sectionName: string; sectionCode: string; current: number; toAdd: number; final: number; capacity: number }>
+  >([]);
   const [rollPrefix, setRollPrefix] = usePersistentState<string>(`hod_sec_alloc_prefix_${sectionId}`, '');
   const [rollStartNumber, setRollStartNumber] = usePersistentState<number>(`hod_sec_alloc_startnum_${sectionId}`, 1);
 
@@ -60,7 +94,7 @@ export const HodSectionAllocatePage: React.FC = () => {
     }
   }, [notification]);
 
-  // Load Cohort
+  // Load Cohort authoritative data from backend
   const loadCohort = async () => {
     if (!sectionId) return;
     setLoading(true);
@@ -69,6 +103,7 @@ export const HodSectionAllocatePage: React.FC = () => {
       setCohortData(data);
       setSelectedStudentIds(new Set());
       setRollNumberMap({});
+      setConfirmAllocationOpen(false);
     } catch (err: any) {
       console.error('Failed to load section cohort:', err);
       setNotification({
@@ -85,18 +120,24 @@ export const HodSectionAllocatePage: React.FC = () => {
   }, [sectionId]);
 
   const section: HodSectionItem | undefined = cohortData?.section;
+  const sectionCode = section?.code || (section?.name ? section.name.replace(/^(Section|Sec)\s*/i, '') : 'A');
   const stats = cohortData?.stats;
   const siblingSections = cohortData?.siblingSections || [];
 
-  // Filter students based on active tab and search query
+  // Filter students strictly based on active tab and search query
   const filteredStudents = useMemo(() => {
     if (!cohortData?.students) return [];
 
     let list = cohortData.students;
 
-    // Tab filter
+    // Strict Tab filtering:
+    // UNALLOCATED: only students where isUnallocated is true
+    // THIS_SECTION: only students where isAllocatedToThisSection is true
+    // OTHER: only students where isAllocatedToOtherSection is true
     if (activeTab === 'UNALLOCATED') {
       list = list.filter((s) => s.isUnallocated);
+    } else if (activeTab === 'THIS_SECTION') {
+      list = list.filter((s) => s.isAllocatedToThisSection);
     } else if (activeTab === 'OTHER') {
       list = list.filter((s) => s.isAllocatedToOtherSection);
     }
@@ -116,27 +157,68 @@ export const HodSectionAllocatePage: React.FC = () => {
     return list;
   }, [cohortData?.students, activeTab, searchQuery]);
 
-  // Toggle selection for a student
+  // Tab Counts for badges
+  const unallocatedCount = useMemo(() => {
+    return cohortData?.students?.filter((s) => s.isUnallocated).length || 0;
+  }, [cohortData?.students]);
+
+  const thisSectionCount = useMemo(() => {
+    return cohortData?.students?.filter((s) => s.isAllocatedToThisSection).length || 0;
+  }, [cohortData?.students]);
+
+  const otherSectionsCount = useMemo(() => {
+    return cohortData?.students?.filter((s) => s.isAllocatedToOtherSection).length || 0;
+  }, [cohortData?.students]);
+
+  const remainingCapacity = stats?.remainingCapacity ?? Math.max(0, (section?.capacity || 15) - thisSectionCount);
+
+  // Toggle selection for a student (Strictly allowed ONLY on UNALLOCATED tab)
   const toggleStudentSelection = (studentId: string) => {
+    if (activeTab !== 'UNALLOCATED') return;
     const next = new Set(selectedStudentIds);
     if (next.has(studentId)) {
       next.delete(studentId);
     } else {
+      if (next.size >= remainingCapacity) {
+        setNotification({
+          type: 'error',
+          message: `Cannot select more than remaining section capacity (${remainingCapacity} seats).`,
+        });
+        return;
+      }
       next.add(studentId);
     }
     setSelectedStudentIds(next);
   };
 
-  // Select all visible students
+  // Select all visible students (Strictly bounded by remaining section capacity)
   const selectAllVisible = () => {
-    const next = new Set(selectedStudentIds);
-    filteredStudents.forEach((s) => next.add(s.id));
+    if (activeTab !== 'UNALLOCATED') return;
+    if (remainingCapacity <= 0) {
+      setNotification({
+        type: 'error',
+        message: 'This section is already at maximum capacity.',
+      });
+      return;
+    }
+    const next = new Set<string>();
+    const eligibleStudents = filteredStudents.filter((s) => s.isUnallocated);
+    const toSelect = eligibleStudents.slice(0, remainingCapacity);
+    toSelect.forEach((s) => next.add(s.id));
     setSelectedStudentIds(next);
+
+    if (eligibleStudents.length > remainingCapacity) {
+      setNotification({
+        type: 'success',
+        message: `Selected ${toSelect.length} students (automatically limited to the ${remainingCapacity} remaining seats).`,
+      });
+    }
   };
 
   // Clear all selection
   const clearSelection = () => {
     setSelectedStudentIds(new Set());
+    setConfirmAllocationOpen(false);
   };
 
   // Update roll number for an individual student
@@ -165,18 +247,24 @@ export const HodSectionAllocatePage: React.FC = () => {
     });
   };
 
-  // Save Allocation to current section
-  const handleSaveAllocation = async () => {
+  // Initiate Allocation: Opens the in-page confirmation area
+  const handleInitiateAllocation = () => {
     if (!section || selectedStudentIds.size === 0) return;
 
-    const remainingCapacity = stats?.remainingCapacity ?? 0;
     if (selectedStudentIds.size > remainingCapacity) {
       setNotification({
         type: 'error',
-        message: `Selection (${selectedStudentIds.size}) exceeds remaining section capacity (${remainingCapacity}).`,
+        message: `Section ${sectionCode} has only ${remainingCapacity} seats remaining. You selected ${selectedStudentIds.size} students.`,
       });
       return;
     }
+
+    setConfirmAllocationOpen(true);
+  };
+
+  // Confirm Allocation: Executes the transactional bulk allocation API
+  const handleConfirmAllocation = async () => {
+    if (!section || selectedStudentIds.size === 0) return;
 
     setSaving(true);
     try {
@@ -189,9 +277,13 @@ export const HodSectionAllocatePage: React.FC = () => {
       const res = await hodService.bulkAllocateStudents(section.id, studentAllocations);
       setNotification({
         type: 'success',
-        message: res.message || `Successfully allocated ${selectedStudentIds.size} students to ${section.name}.`,
+        message: res.message || `Allocation successful. ${selectedStudentIds.size} students assigned to Section ${sectionCode}.`,
       });
-      loadCohort();
+      setSelectedStudentIds(new Set());
+      setRollNumberMap({});
+      setConfirmAllocationOpen(false);
+      // Authoritative refresh from database
+      await loadCohort();
     } catch (err: any) {
       console.error('Allocation failed:', err);
       setNotification({
@@ -203,7 +295,29 @@ export const HodSectionAllocatePage: React.FC = () => {
     }
   };
 
-  // Prepare Equal Distribution Preview
+  // Unallocate student from Section A back to unallocated pool
+  const handleUnallocateStudent = async (studentId: string, studentName: string) => {
+    if (!section) return;
+    setSaving(true);
+    try {
+      await hodService.unallocateStudents(section.id, [studentId]);
+      setNotification({
+        type: 'success',
+        message: `Student "${studentName}" unallocated from Section ${sectionCode}.`,
+      });
+      await loadCohort();
+    } catch (err: any) {
+      console.error('Unallocate failed:', err);
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.error || 'Failed to unallocate student.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Prepare Equal Distribution Preview based exclusively on unallocated students
   const handleOpenEqualDistribution = () => {
     if (!cohortData) return;
 
@@ -216,11 +330,12 @@ export const HodSectionAllocatePage: React.FC = () => {
       return;
     }
 
-    const allSections = siblingSections.length > 0
-      ? siblingSections
-      : section
-      ? [{ id: section.id, name: section.name, capacity: section.capacity }]
-      : [];
+    const allSections: Array<{ id: string; name: string; capacity: number; code?: string }> =
+      siblingSections.length > 0
+        ? (siblingSections as any[])
+        : section
+        ? [{ id: section.id, name: section.name, capacity: section.capacity, code: section.code }]
+        : [];
 
     if (allSections.length === 0) {
       setNotification({
@@ -234,18 +349,22 @@ export const HodSectionAllocatePage: React.FC = () => {
     let remainder = unallocated.length % allSections.length;
 
     const preview = allSections.map((sec, idx) => {
-      // Find current students allocated to sec
-      const current = cohortData.students.filter(
-        (s) => s.currentSectionId === sec.id || s.currentSection === sec.name
-      ).length;
+      const cleanCode = sec.code || sec.name.replace(/^(Section|Sec)\s*/i, '');
+      const current = cohortData.students.filter((s) => {
+        const sSec = s.section as any;
+        const sSecId = sSec && typeof sSec === 'object' ? sSec.id : s.currentSectionId;
+        const sSecCode = sSec && typeof sSec === 'object' ? sSec.code : s.currentSectionCode;
+        return sSecId === sec.id || sSecCode === cleanCode;
+      }).length;
       const toAdd = countPerSection + (idx < remainder ? 1 : 0);
       return {
         sectionId: sec.id,
         sectionName: sec.name,
+        sectionCode: cleanCode,
         current,
         toAdd,
         final: current + toAdd,
-        capacity: sec.capacity || 60,
+        capacity: sec.capacity || 15,
       };
     });
 
@@ -277,7 +396,7 @@ export const HodSectionAllocatePage: React.FC = () => {
         message: `Distributed ${unallocated.length} students across ${distPreview.length} sections.`,
       });
       setEqualDistModalOpen(false);
-      loadCohort();
+      await loadCohort();
     } catch (err: any) {
       console.error('Equal distribution failed:', err);
       setNotification({
@@ -290,7 +409,6 @@ export const HodSectionAllocatePage: React.FC = () => {
   };
 
   const selectedCount = selectedStudentIds.size;
-  const remainingCapacity = stats?.remainingCapacity ?? 0;
   const isOverCapacity = selectedCount > remainingCapacity;
 
   return (
@@ -337,10 +455,10 @@ export const HodSectionAllocatePage: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-black text-neutral-900 dark:text-white tracking-tight">
-                Allocate Students — {section ? section.name : 'Loading...'}
+                Allocate Students — Section {sectionCode}
               </h1>
               <p className="text-xs text-neutral-500 font-medium">
-                Select and assign department students to {section?.name} for Semester {section?.semester}.
+                Department: {deptCode} &nbsp;|&nbsp; Academic Year: {section?.academicYear || '2026-27'} &nbsp;|&nbsp; Semester: {section?.semester || 3}
               </p>
             </div>
           </div>
@@ -373,23 +491,23 @@ export const HodSectionAllocatePage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── KPI STATISTICS SUMMARY CARDS ──────────────────────────────────────── */}
+      {/* ── KPI STATISTICS SUMMARY CARDS (Strictly Consistent Calculations) ────── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
         <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
           <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1">
-            Total Semester
+            Total Students
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-neutral-900 dark:text-white leading-none">
               {stats?.totalStudents ?? 0}
             </span>
-            <span className="text-[10px] font-bold text-neutral-400">students</span>
+            <span className="text-[10px] font-bold text-neutral-400">semester</span>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
           <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-1">
-            Allocated (Any Sec)
+            Allocated
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 leading-none">
@@ -417,7 +535,7 @@ export const HodSectionAllocatePage: React.FC = () => {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-indigo-700 dark:text-indigo-300 leading-none">
-              {stats?.sectionCapacity ?? 60}
+              {stats?.sectionCapacity ?? 15}
             </span>
             <span className="text-[10px] font-bold text-neutral-400">seats</span>
           </div>
@@ -440,40 +558,124 @@ export const HodSectionAllocatePage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── IN-PAGE CONFIRMATION CARD (Requirement 17) ────────────────────────── */}
+      {confirmAllocationOpen && section && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-950 text-white border border-blue-500/30 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-300">
+                Action Confirmation
+              </span>
+              <h3 className="text-lg font-black text-white mt-0.5">
+                Allocate {selectedCount} {selectedCount === 1 ? 'student' : 'students'} to Section {sectionCode}?
+              </h3>
+            </div>
+            <button
+              onClick={() => setConfirmAllocationOpen(false)}
+              className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs bg-black/20 p-3.5 rounded-xl border border-white/10">
+            <div>
+              <span className="text-white/60 block text-[10px] uppercase font-bold">Target Section</span>
+              <span className="text-white font-black text-sm">Section {sectionCode}</span>
+            </div>
+            <div>
+              <span className="text-white/60 block text-[10px] uppercase font-bold">Capacity</span>
+              <span className="text-white font-bold">{stats?.sectionCapacity ?? 15} seats</span>
+            </div>
+            <div>
+              <span className="text-white/60 block text-[10px] uppercase font-bold">Currently Allocated</span>
+              <span className="text-white font-bold">{thisSectionCount} students</span>
+            </div>
+            <div>
+              <span className="text-white/60 block text-[10px] uppercase font-bold">Selected</span>
+              <span className="text-blue-300 font-extrabold">{selectedCount} students</span>
+            </div>
+            <div>
+              <span className="text-white/60 block text-[10px] uppercase font-bold">Remaining After</span>
+              <span className="text-emerald-300 font-extrabold">{Math.max(0, remainingCapacity - selectedCount)} seats</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setConfirmAllocationOpen(false)}
+              className="px-4 py-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 text-xs font-bold transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving || isOverCapacity}
+              onClick={handleConfirmAllocation}
+              className="px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 active:scale-[0.98] text-white text-xs font-black shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Allocating...</span>
+                </>
+              ) : (
+                <>
+                  <Check size={15} />
+                  <span>Confirm Allocation ({selectedCount})</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── TOOLBAR: TABS, SEARCH, AND BULK TOOLS ──────────────────────────────── */}
       <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Tabs */}
+          {/* Strict 3-Tab Segregation (Requirement 11) */}
           <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 self-start">
             <button
-              onClick={() => setActiveTab('UNALLOCATED')}
+              onClick={() => {
+                setActiveTab('UNALLOCATED');
+                clearSelection();
+              }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'UNALLOCATED'
                   ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
             >
-              Unallocated Students ({cohortData?.students.filter((s) => s.isUnallocated).length || 0})
+              Unallocated Students ({unallocatedCount})
             </button>
+
             <button
-              onClick={() => setActiveTab('ALL')}
+              onClick={() => {
+                setActiveTab('THIS_SECTION');
+                clearSelection();
+              }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'ALL'
+                activeTab === 'THIS_SECTION'
                   ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
             >
-              All Students ({cohortData?.students.length || 0})
+              Allocated to Section {sectionCode} ({thisSectionCount})
             </button>
+
             <button
-              onClick={() => setActiveTab('OTHER')}
+              onClick={() => {
+                setActiveTab('OTHER');
+                clearSelection();
+              }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'OTHER'
                   ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
             >
-              Allocated to Other ({cohortData?.students.filter((s) => s.isAllocatedToOtherSection).length || 0})
+              Allocated to Other Sections ({otherSectionsCount})
             </button>
           </div>
 
@@ -490,7 +692,7 @@ export const HodSectionAllocatePage: React.FC = () => {
               </button>
             )}
 
-            {selectedCount > 0 && section?.semester === 1 && (
+            {selectedCount > 0 && section?.semester === 1 && activeTab === 'UNALLOCATED' && (
               <div className="flex items-center gap-1.5">
                 <input
                   type="text"
@@ -539,19 +741,34 @@ export const HodSectionAllocatePage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            <button
-              onClick={selectAllVisible}
-              className="px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-            >
-              Select All Visible ({filteredStudents.length})
-            </button>
-            {selectedCount > 0 && (
-              <button
-                onClick={clearSelection}
-                className="px-3 py-1.5 rounded-lg text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-              >
-                Clear Selection
-              </button>
+            {activeTab === 'UNALLOCATED' && (
+              <>
+                <button
+                  onClick={selectAllVisible}
+                  disabled={remainingCapacity <= 0 || filteredStudents.length === 0}
+                  className="px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-40 transition-colors cursor-pointer"
+                >
+                  {remainingCapacity <= 0
+                    ? 'Section is Full'
+                    : `Select Available (${Math.min(filteredStudents.length, remainingCapacity)} of ${filteredStudents.length})`}
+                </button>
+                {selectedCount > 0 && (
+                  <button
+                    onClick={clearSelection}
+                    className="px-3 py-1.5 rounded-lg text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                )}
+              </>
+            )}
+
+            {activeTab !== 'UNALLOCATED' && (
+              <span className="text-neutral-400 font-semibold text-[11px]">
+                {activeTab === 'THIS_SECTION'
+                  ? `${filteredStudents.length} students currently in Section ${sectionCode}`
+                  : `${filteredStudents.length} students assigned to other sections (Read-only)`}
+              </span>
             )}
           </div>
         </div>
@@ -575,7 +792,9 @@ export const HodSectionAllocatePage: React.FC = () => {
                 ? 'Try modifying your search criteria.'
                 : activeTab === 'UNALLOCATED'
                 ? 'All department students in this semester are already allocated to sections.'
-                : 'No students matching this filter.'}
+                : activeTab === 'THIS_SECTION'
+                ? `No students have been allocated to Section ${sectionCode} yet.`
+                : 'No students are allocated to other sections.'}
             </p>
           </div>
         ) : (
@@ -583,23 +802,30 @@ export const HodSectionAllocatePage: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
                 <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-wider text-white">
+                  {/* Checkbox column only active on UNALLOCATED tab */}
                   <th className="py-3 px-4 w-10 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const allSelected = filteredStudents.every((s) => selectedStudentIds.has(s.id));
-                        if (allSelected) clearSelection();
-                        else selectAllVisible();
-                      }}
-                      className="p-1 text-white/80 hover:text-white"
-                    >
-                      {filteredStudents.length > 0 &&
-                      filteredStudents.every((s) => selectedStudentIds.has(s.id)) ? (
-                        <CheckSquare size={16} className="text-white" />
-                      ) : (
-                        <Square size={16} />
-                      )}
-                    </button>
+                    {activeTab === 'UNALLOCATED' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allSelected =
+                            filteredStudents.length > 0 &&
+                            filteredStudents.every((s) => selectedStudentIds.has(s.id));
+                          if (allSelected) clearSelection();
+                          else selectAllVisible();
+                        }}
+                        className="p-1 text-white/80 hover:text-white"
+                      >
+                        {filteredStudents.length > 0 &&
+                        filteredStudents.every((s) => selectedStudentIds.has(s.id)) ? (
+                          <CheckSquare size={16} className="text-white" />
+                        ) : (
+                          <Square size={16} />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-neutral-500">—</span>
+                    )}
                   </th>
                   <th className="py-3 px-3 w-12 text-center text-white">SL NO</th>
                   {section?.semester === 1 && (
@@ -609,61 +835,77 @@ export const HodSectionAllocatePage: React.FC = () => {
                   <th className="py-3 px-3 text-white">Enrollment Number</th>
                   <th className="py-3 px-4 text-white">Student Name</th>
                   <th className="py-3 px-3 text-white">Admission</th>
-                  <th className="py-3 px-3 text-white">Current Section</th>
+                  <th className="py-3 px-3 text-center text-white">Current Section</th>
                   <th className="py-3 px-3 text-right text-white">Status</th>
+                  {activeTab === 'THIS_SECTION' && (
+                    <th className="py-3 px-3 text-center text-white">Action</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 text-xs">
                 {filteredStudents.map((s, index) => {
                   const isSelected = selectedStudentIds.has(s.id);
-                  const isAllocatedHere = s.isAllocatedToThisSection;
+                  const isUnallocTab = activeTab === 'UNALLOCATED';
+                  const displayCode = getDisplaySectionCode(s);
 
                   return (
                     <tr
                       key={s.id}
-                      onClick={() => toggleStudentSelection(s.id)}
-                      className={`transition-colors cursor-pointer ${
+                      onClick={() => isUnallocTab && toggleStudentSelection(s.id)}
+                      className={`transition-colors ${
+                        isUnallocTab ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/40' : ''
+                      } ${
                         isSelected
                           ? 'bg-blue-50/70 dark:bg-blue-950/30'
-                          : isAllocatedHere
-                          ? 'bg-emerald-50/30 dark:bg-emerald-950/10 hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                          : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
+                          : s.isAllocatedToThisSection
+                          ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
+                          : ''
                       }`}
                     >
                       {/* Checkbox */}
                       <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleStudentSelection(s.id)}
-                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
-                        />
+                        {isUnallocTab ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleStudentSelection(s.id)}
+                            className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-neutral-300 dark:text-neutral-700 text-xs">—</span>
+                        )}
                       </td>
 
-                      {/* SL NO (display-only dynamic counter) */}
+                      {/* SL NO */}
                       <td className="py-3 px-3 text-center font-bold text-neutral-400">
                         {index + 1}
                       </td>
 
-                      {/* Roll Number (editable inline input ONLY for Semester 1) */}
+                      {/* Roll Number (editable inline ONLY for Semester 1 in UNALLOCATED tab) */}
                       {section?.semester === 1 && (
                         <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            placeholder="—"
-                            value={rollNumberMap[s.id] !== undefined ? rollNumberMap[s.id] : s.rollNumber || ''}
-                            onChange={(e) => handleRollNumberChange(s.id, e.target.value)}
-                            className="w-20 px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                          {isUnallocTab ? (
+                            <input
+                              type="text"
+                              placeholder="—"
+                              value={rollNumberMap[s.id] !== undefined ? rollNumberMap[s.id] : s.rollNumber || ''}
+                              onChange={(e) => handleRollNumberChange(s.id, e.target.value)}
+                              className="w-20 px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <span className="font-mono font-bold text-neutral-600 dark:text-neutral-300">
+                              {s.rollNumber || '—'}
+                            </span>
+                          )}
                         </td>
                       )}
 
-                      {/* USN (optional: shows "—" if not assigned yet) */}
+                      {/* USN */}
                       <td className="py-3 px-3 font-mono font-bold text-neutral-800 dark:text-neutral-200">
                         {s.usn || <span className="text-neutral-300 dark:text-neutral-600">—</span>}
                       </td>
 
-                      {/* Enrollment Number (authoritative ERP identifier) */}
+                      {/* Enrollment Number */}
                       <td className="py-3 px-3 font-mono text-[11px] font-bold text-blue-700 dark:text-blue-400">
                         {s.enrollmentNumber || '—'}
                       </td>
@@ -683,20 +925,13 @@ export const HodSectionAllocatePage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Current Section */}
-                      <td className="py-3 px-3">
-                        {s.isAllocatedToThisSection ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle2 size={12} />
-                            <span>This Section ({section?.name})</span>
-                          </span>
-                        ) : s.currentSection ? (
-                          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                            {s.currentSection}
-                          </span>
+                      {/* Current Section (Requirements 13 & 14: Never UUID!) */}
+                      <td className="py-3 px-3 text-center">
+                        {s.isUnallocated ? (
+                          <span className="font-mono text-neutral-400 font-bold">—</span>
                         ) : (
-                          <span className="text-[11px] font-bold text-neutral-400">
-                            Unallocated
+                          <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-md font-mono font-black text-xs bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            {displayCode}
                           </span>
                         )}
                       </td>
@@ -713,6 +948,22 @@ export const HodSectionAllocatePage: React.FC = () => {
                           {s.admissionStatus}
                         </span>
                       </td>
+
+                      {/* Action (Unallocate button when viewing Allocated to This Section) */}
+                      {activeTab === 'THIS_SECTION' && (
+                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleUnallocateStudent(s.id, s.name)}
+                            disabled={saving}
+                            title={`Remove ${s.name} from Section ${sectionCode}`}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                          >
+                            <UserMinus size={13} />
+                            <span>Unallocate</span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -722,11 +973,11 @@ export const HodSectionAllocatePage: React.FC = () => {
         )}
       </div>
 
-      {/* ── BUFFER WHEN ALLOCATION BAR IS VISIBLE ──────────────────────────── */}
+      {/* ── BUFFER WHEN ALLOCATION DOCK IS VISIBLE ──────────────────────────── */}
       {selectedCount > 0 && <div className="h-16 w-full pointer-events-none" aria-hidden="true" />}
 
       {/* ── FLOATING SELECTION & ALLOCATION DOCK ─────────────────────────────── */}
-      {selectedCount > 0 && section && (
+      {selectedCount > 0 && section && activeTab === 'UNALLOCATED' && (
         <div className="fixed bottom-6 left-6 right-6 lg:left-[324px] lg:right-10 z-40 pointer-events-none flex justify-center">
           <div className="pointer-events-auto w-full max-w-4xl bg-neutral-900/95 dark:bg-neutral-950/95 text-white backdrop-blur-xl px-5 sm:px-6 py-3.5 sm:py-4 rounded-2xl shadow-2xl border border-neutral-700/60 ring-1 ring-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-bottom-5 duration-200">
             <div className="flex items-center gap-3.5 min-w-0">
@@ -739,7 +990,7 @@ export const HodSectionAllocatePage: React.FC = () => {
                     {selectedCount} {selectedCount === 1 ? 'student' : 'students'} selected
                   </p>
                   <span className="px-2 py-0.5 rounded-md bg-white/10 text-neutral-200 text-[11px] font-bold">
-                    Target: {section.name}
+                    Target: Section {sectionCode}
                   </span>
                 </div>
                 <p className="text-xs text-neutral-400 mt-0.5">
@@ -770,20 +1021,11 @@ export const HodSectionAllocatePage: React.FC = () => {
               <button
                 type="button"
                 disabled={isOverCapacity || saving}
-                onClick={handleSaveAllocation}
+                onClick={handleInitiateAllocation}
                 className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-blue-600 text-white text-xs font-black shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer shrink-0"
               >
-                {saving ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Allocating...</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={15} />
-                    <span>Allocate to {section.name}</span>
-                  </>
-                )}
+                <UserPlus size={15} />
+                <span>Allocate to Section {sectionCode}</span>
               </button>
             </div>
           </div>
@@ -804,7 +1046,7 @@ export const HodSectionAllocatePage: React.FC = () => {
                     Equal Student Distribution Preview
                   </h3>
                   <p className="text-xs text-neutral-500">
-                    Preview how unallocated students will be divided across active sections.
+                    Preview how {unallocatedCount} unallocated students will be divided across active sections.
                   </p>
                 </div>
               </div>
@@ -831,7 +1073,7 @@ export const HodSectionAllocatePage: React.FC = () => {
                   {distPreview.map((d) => (
                     <tr key={d.sectionId}>
                       <td className="py-2.5 px-3 font-bold text-neutral-900 dark:text-white">
-                        {d.sectionName}
+                        Section {d.sectionCode}
                       </td>
                       <td className="py-2.5 px-3 text-center text-neutral-500">{d.current}</td>
                       <td className="py-2.5 px-3 text-center font-bold text-purple-600 dark:text-purple-400">

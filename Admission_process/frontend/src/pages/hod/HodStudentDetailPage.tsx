@@ -188,13 +188,13 @@ export const HodStudentDetailPage: React.FC = () => {
             {marks && marks.length > 0 ? (
               <div className="overflow-x-auto rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-bold border-b border-slate-200 dark:border-slate-700">
-                    <tr>
-                      <th className="py-2.5 px-3">Assessment</th>
-                      <th className="py-2.5 px-3">Component</th>
-                      <th className="py-2.5 px-3">Scored</th>
-                      <th className="py-2.5 px-3">Max Marks</th>
-                      <th className="py-2.5 px-3 text-right">Percentage</th>
+                  <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase font-extrabold border-b border-neutral-800">
+                    <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
+                      <th className="py-2.5 px-3 text-white">Assessment</th>
+                      <th className="py-2.5 px-3 text-white">Component</th>
+                      <th className="py-2.5 px-3 text-white">Scored</th>
+                      <th className="py-2.5 px-3 text-white">Max Marks</th>
+                      <th className="py-2.5 px-3 text-right text-white">Percentage</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

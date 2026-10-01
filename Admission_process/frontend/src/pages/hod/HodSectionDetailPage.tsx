@@ -33,6 +33,7 @@ export const HodSectionDetailPage: React.FC = () => {
   const [students, setStudents] = useState<HodSectionStudentItem[]>([]);
   const [siblingSections, setSiblingSections] = useState<HodSectionItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [pageError, setPageError] = useState<{ message: string; errorCode?: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -62,24 +63,58 @@ export const HodSectionDetailPage: React.FC = () => {
     }
   }, [notification]);
 
+  const isValidUuid = (id: string | undefined): boolean => {
+    if (!id) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id.trim());
+  };
+
   const loadData = async () => {
-    if (!sectionId) return;
+    if (!sectionId || !isValidUuid(sectionId)) {
+      setPageError({
+        message: 'Invalid section identifier. The URL must contain a valid section UUID.',
+        errorCode: 'INVALID_SECTION_ID',
+      });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setPageError(null);
+
     try {
       const res = await hodService.getSectionStudents(sectionId);
+      if (!res || !res.section) {
+        setPageError({
+          message: 'Section not found.',
+          errorCode: 'SECTION_NOT_FOUND',
+        });
+        return;
+      }
+
       setSection(res.section);
       setStudents(res.students || []);
 
-      // Also fetch sibling sections of the same semester to populate the Move destination dropdown
+      // If backend resolved canonical UUID, update the browser URL smoothly
+      if (res.section?.id && res.section.id !== sectionId) {
+        window.history.replaceState(null, '', `/hod/students/sections/${res.section.id}`);
+      }
+
+      // Fetch sibling sections of same semester for move dropdown
       if (res.section?.semester) {
-        const allSections = await hodService.getSections(res.section.semester, res.section.academicYear);
-        setSiblingSections((allSections || []).filter((s) => s.id !== sectionId));
+        try {
+          const allSections = await hodService.getSections(res.section.semester, res.section.academicYear);
+          setSiblingSections((allSections || []).filter((s) => s.id !== (res.section?.id || sectionId)));
+        } catch (err) {
+          console.warn('Failed to load sibling sections:', err);
+        }
       }
     } catch (err: any) {
       console.error('Failed to load section students:', err);
-      setNotification({
-        type: 'error',
-        message: err.response?.data?.error || 'Failed to load section students.',
+      const backendMsg = err.response?.data?.message || err.response?.data?.error || 'Unable to load section data.';
+      const errorCode = err.response?.data?.errorCode;
+      setPageError({
+        message: backendMsg,
+        errorCode,
       });
     } finally {
       setLoading(false);
@@ -218,7 +253,93 @@ export const HodSectionDetailPage: React.FC = () => {
     }
   };
 
-  const capacity = section?.capacity || 60;
+  // 1. Loading State (Requirement 21: Show proper loading state, do NOT render broken header or 0 values)
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Link
+            to="/hod/students/sections"
+            className="text-xs font-bold text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 inline-flex items-center gap-1 mb-1 transition-colors"
+          >
+            <ChevronLeft size={14} />
+            <span>Back to Section Allocations</span>
+          </Link>
+        </div>
+
+        <div className="rounded-3xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-16 text-center shadow-sm space-y-4">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent" />
+          <h2 className="text-base font-black text-neutral-900 dark:text-white">
+            Loading Section Details...
+          </h2>
+          <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+            Resolving section metadata and enrolled student roster from database...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Error State (Requirement 21: Show clear error message, do NOT render broken UI)
+  if (pageError || !section) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Link
+            to="/hod/students/sections"
+            className="text-xs font-bold text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 inline-flex items-center gap-1 mb-1 transition-colors"
+          >
+            <ChevronLeft size={14} />
+            <span>Back to Section Allocations</span>
+          </Link>
+        </div>
+
+        <div className="rounded-3xl border border-rose-200 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 p-12 text-center max-w-md mx-auto shadow-sm space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+            <AlertCircle size={28} />
+          </div>
+          <div>
+            <h2 className="text-base font-black text-neutral-900 dark:text-white">
+              Unable to Load Section
+            </h2>
+            <p className="text-xs text-rose-700 dark:text-rose-300 font-semibold mt-1">
+              {pageError?.message || 'Section data could not be retrieved.'}
+            </p>
+            {pageError?.errorCode && (
+              <span className="inline-block mt-2 px-2.5 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 font-mono text-[10px] font-bold">
+                {pageError.errorCode}
+              </span>
+            )}
+          </div>
+          <div className="pt-2 flex items-center justify-center gap-3">
+            <Link
+              to="/hod/students/sections"
+              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 text-xs font-bold transition-colors"
+            >
+              Back to Sections
+            </Link>
+            <button
+              onClick={loadData}
+              className="px-4 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw size={13} />
+              <span>Try Again</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Guaranteed Valid Section Data
+  const sectionCode =
+    section.code ||
+    (section.name ? section.name.replace(/^(Section|Sec)\s*/i, '').trim() : 'A');
+  const displaySectionTitle = section.name.startsWith('Section')
+    ? section.name
+    : `Section ${sectionCode}`;
+
+  const capacity = section.capacity || 60;
   const allocated = students.length;
   const available = Math.max(0, capacity - allocated);
   const fillRate = capacity > 0 ? Math.min(100, Math.round((allocated / capacity) * 100)) : 0;
@@ -255,7 +376,7 @@ export const HodSectionDetailPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-100 dark:border-neutral-800">
         <div>
           <Link
-            to={section ? `/hod/students/sections?semester=${section.semester}` : '/hod/students/sections'}
+            to={`/hod/students/sections?semester=${section.semester}`}
             className="text-xs font-bold text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 inline-flex items-center gap-1 mb-1 transition-colors"
           >
             <ChevronLeft size={14} />
@@ -267,10 +388,10 @@ export const HodSectionDetailPage: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-black text-neutral-900 dark:text-white tracking-tight">
-                {section?.name || 'Loading Section...'}
+                Section Student Details — {displaySectionTitle}
               </h1>
               <p className="text-xs text-neutral-500 font-medium">
-                Enrolled students and division roster for Semester {section?.semester} ({section?.academicYear}).
+                Department: {deptCode} &nbsp;|&nbsp; Semester {section.semester} &nbsp;|&nbsp; Academic Year {section.academicYear || '2026-27'}
               </p>
             </div>
           </div>

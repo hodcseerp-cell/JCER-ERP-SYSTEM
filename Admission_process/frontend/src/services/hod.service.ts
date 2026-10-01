@@ -123,6 +123,7 @@ export interface HodStudentItem {
 
 export interface HodSectionItem {
   id: string;
+  code?: string;
   name: string;
   semester: number;
   academicYear: string;
@@ -149,13 +150,18 @@ export interface HodSectionStudentItem {
   phone: string;
   semester: number;
   sectionId?: string | null;
-  section?: string | null;
+  section?: {
+    id: string;
+    code: string;
+    name: string;
+  } | string | null;
+  currentSectionCode?: string;
+  currentSectionId?: string | null;
+  currentSection?: string | null;
   admissionType: string;
   admissionStatus: string;
   gender?: string | null;
   category?: string | null;
-  currentSectionId?: string | null;
-  currentSection?: string | null;
   isAllocatedToThisSection?: boolean;
   isAllocatedToOtherSection?: boolean;
   isUnallocated?: boolean;
@@ -163,7 +169,7 @@ export interface HodSectionStudentItem {
 
 export interface HodSectionCohortData {
   section: HodSectionItem;
-  siblingSections: Array<{ id: string; name: string; capacity: number }>;
+  siblingSections: Array<{ id: string; name: string; capacity: number; code?: string }>;
   stats: {
     totalStudents: number;
     allocatedStudents: number;
@@ -541,6 +547,38 @@ export const hodService = {
     } catch (err: any) {
       if (err.response?.status === 404) {
         const fallback = await API.post(`/hod/sections/${sectionId}/bulk-allocate`, { studentAllocations });
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  allocateStudents: async (
+    sectionId: string,
+    studentIds: string[]
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.post(`/hod/students/sections/${sectionId}/allocate`, { studentIds });
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post(`/hod/sections/${sectionId}/allocate`, { studentIds });
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
+  unallocateStudents: async (
+    sectionId: string,
+    studentIds: string[]
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await API.post(`/hod/students/sections/${sectionId}/unallocate`, { studentIds });
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post(`/hod/sections/${sectionId}/unallocate`, { studentIds });
         return fallback.data;
       }
       throw err;

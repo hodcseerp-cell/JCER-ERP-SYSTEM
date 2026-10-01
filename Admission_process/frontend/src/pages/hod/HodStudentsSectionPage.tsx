@@ -456,8 +456,88 @@ export const HodStudentsSectionPage: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* ── 5. SECTION LIST: EXACT SPECIFICATION ── */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="space-y-6">
+          {/* ── 4. SECTION ALLOCATION OVERVIEW TABLE (Requirement 21) ── */}
+          <div className="rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-black text-neutral-900 dark:text-white uppercase tracking-wider">
+                  Section Allocation Overview
+                </h2>
+                <p className="text-xs text-neutral-500 font-medium">
+                  {deptCode} &nbsp;|&nbsp; Semester {selectedSemester} &nbsp;|&nbsp; Academic Year {activeAY}
+                </p>
+              </div>
+              <span className="text-xs font-bold text-neutral-400">
+                {sections.length} Active {sections.length === 1 ? 'Section' : 'Sections'}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase font-extrabold border-b border-neutral-800">
+                  <tr className="text-[10px] font-black uppercase tracking-wider text-white">
+                    <th className="py-3 px-4 text-white">Section</th>
+                    <th className="py-3 px-4 text-center text-white">Capacity</th>
+                    <th className="py-3 px-4 text-center text-white">Allocated</th>
+                    <th className="py-3 px-4 text-center text-white">Remaining</th>
+                    <th className="py-3 px-4 text-right text-white">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-medium">
+                  {sections.map((sec) => {
+                    const cleanCode = sec.code || sec.name.replace(/^(Section|Sec)\s*/i, '');
+                    const capacity = sec.capacity || 15;
+                    const allocated = sec.studentCount || 0;
+                    const remaining = Math.max(0, capacity - allocated);
+
+                    return (
+                      <tr
+                        key={sec.id}
+                        className="hover:bg-neutral-50 dark:hover:bg-neutral-800/40 transition-colors"
+                      >
+                        <td className="py-3.5 px-4 font-black text-sm text-neutral-900 dark:text-white">
+                          <Link
+                            to={`/hod/students/sections/${sec.id}/allocate`}
+                            className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline font-black"
+                            title={`Allocate Students — Section ${cleanCode}`}
+                          >
+                            <span className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-xs font-black text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                              {cleanCode}
+                            </span>
+                            <span>{sec.name}</span>
+                          </Link>
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-bold text-neutral-700 dark:text-neutral-300">
+                          {capacity}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-black text-emerald-600 dark:text-emerald-400">
+                          {allocated}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-black">
+                          <span className={remaining === 0 ? 'text-rose-600' : 'text-blue-600 dark:text-blue-400'}>
+                            {remaining}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <Link
+                            to={`/hod/students/sections/${sec.id}/allocate`}
+                            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors inline-flex items-center gap-1.5"
+                          >
+                            <UserPlus size={13} />
+                            <span>Allocate Students — Section {cleanCode}</span>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── 5. SECTION LIST: EXACT SPECIFICATION ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {sections.map((sec) => {
             const capacity = sec.capacity || 60;
             const allocated = sec.studentCount || 0;
@@ -587,6 +667,7 @@ export const HodStudentsSectionPage: React.FC = () => {
             );
           })}
         </div>
+      </div>
       )}
 
       {/* ── CREATE SECTION MODAL ──────────────────────────────────────────────── */}

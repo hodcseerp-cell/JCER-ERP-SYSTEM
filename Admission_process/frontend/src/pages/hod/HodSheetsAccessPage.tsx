@@ -236,17 +236,17 @@ export const HodSheetsAccessPage: React.FC = () => {
       <div className="glass-card rounded-3xl border border-white/60 dark:border-slate-800/60 shadow-sm overflow-hidden bg-white/80 dark:bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/90 dark:bg-slate-800/90 text-slate-500 uppercase tracking-wider font-extrabold border-b border-slate-200/60 dark:border-slate-700/60">
-              <tr>
-                <th className="py-3.5 px-4">Faculty</th>
-                <th className="py-3.5 px-4">Google Email</th>
-                <th className="py-3.5 px-4 text-center">Semester</th>
-                <th className="py-3.5 px-4 text-center">Division</th>
-                <th className="py-3.5 px-4">Subject</th>
-                <th className="py-3.5 px-4 text-center">Attendance Sheet</th>
-                <th className="py-3.5 px-4 text-center">Permission</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
+              <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
+                <th className="py-3.5 px-4 text-white">Faculty</th>
+                <th className="py-3.5 px-4 text-white">Google Email</th>
+                <th className="py-3.5 px-4 text-center text-white">Semester</th>
+                <th className="py-3.5 px-4 text-center text-white">Division</th>
+                <th className="py-3.5 px-4 text-white">Subject</th>
+                <th className="py-3.5 px-4 text-center text-white">Attendance Sheet</th>
+                <th className="py-3.5 px-4 text-center text-white">Permission</th>
+                <th className="py-3.5 px-4 text-center text-white">Status</th>
+                <th className="py-3.5 px-4 text-right text-white">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

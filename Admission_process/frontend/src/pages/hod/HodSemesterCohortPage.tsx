@@ -891,16 +891,16 @@ export const HodSemesterCohortPage: React.FC = () => {
         {/* Table View */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200/70 dark:border-slate-800 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                <th className="py-3 px-4 w-12 text-center">#</th>
-                <th className="py-3 px-4">USN / Enrollment No</th>
-                <th className="py-3 px-4">Student Name</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4 text-center">Section</th>
-                <th className="py-3 px-4">Roll Number</th>
-                <th className="py-3 px-4">Academic Year</th>
-                <th className="py-3 px-4 text-center">Status</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
+              <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
+                <th className="py-3.5 px-4 w-12 text-center text-white">#</th>
+                <th className="py-3.5 px-4 text-white">USN / Enrollment No</th>
+                <th className="py-3.5 px-4 text-white">Student Name</th>
+                <th className="py-3.5 px-4 text-white">Department</th>
+                <th className="py-3.5 px-4 text-center text-white">Section</th>
+                <th className="py-3.5 px-4 text-white">Roll Number</th>
+                <th className="py-3.5 px-4 text-white">Academic Year</th>
+                <th className="py-3.5 px-4 text-center text-white">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
