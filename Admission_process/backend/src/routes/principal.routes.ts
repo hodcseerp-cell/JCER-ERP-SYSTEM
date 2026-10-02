@@ -38,7 +38,10 @@ router.get('/staff', principalController.getStaffList);
 router.get('/departments', principalController.getDepartments as any);
 router.get('/academic-years', principalController.getAcademicYears as any);
 
-// Faculty Authorization
+// Faculty Management (Global Directory)
+router.get('/faculty', principalController.getPrincipalFacultyList as any);
+
+// Faculty Authorization (Historical)
 router.get('/faculty/authorizations', principalController.getFacultyAuthorizations as any);
 router.get('/faculty/authorizations/count', principalController.getFacultyAuthorizationCount as any);
 router.get('/faculty-authorizations/notification-count', principalController.getFacultyAuthorizationCount as any);

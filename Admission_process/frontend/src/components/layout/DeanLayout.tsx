@@ -25,6 +25,8 @@ import {
   User,
   Shield,
   FileCheck2,
+  FileSpreadsheet,
+  Archive,
 } from 'lucide-react';
 import deanService from '../../services/dean.service';
 import usePwa from '../../hooks/usePwa';
@@ -127,12 +129,9 @@ export const DeanLayout: React.FC = () => {
       title: 'FACULTY MANAGEMENT',
       items: [
         { name: 'Faculty List', path: '/dean/faculty', icon: Users },
-        {
-          name: 'Faculty Authorization',
-          path: '/dean/faculty/authorizations',
-          icon: ShieldCheck,
-          badge: pendingAuthCount > 0 ? pendingAuthCount : undefined,
-        },
+        { name: 'Create Faculty', path: '/dean/faculty/create', icon: UserPlus },
+        { name: 'Bulk Faculty Import', path: '/dean/faculty/bulk-import', icon: FileSpreadsheet },
+        { name: 'Archived Faculty', path: '/dean/faculty/archived', icon: Archive },
         { name: 'Faculty Assignments', path: '/dean/faculty/assignments', icon: FileCheck2 },
       ],
     },
@@ -153,7 +152,9 @@ export const DeanLayout: React.FC = () => {
     '/dean/hods/assignments': 'Assign HOD to Department',
     '/dean/hods/history': 'HOD Assignment History',
     '/dean/faculty': 'Faculty Directory',
-    '/dean/faculty/authorizations': 'Faculty Creation Authorizations',
+    '/dean/faculty/create': 'Create Faculty',
+    '/dean/faculty/bulk-import': 'Bulk Faculty Import',
+    '/dean/faculty/archived': 'Archived Faculty Directory',
     '/dean/faculty/assignments': 'Academic Faculty Assignments',
   };
 

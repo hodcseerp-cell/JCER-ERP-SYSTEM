@@ -166,6 +166,11 @@ const principalService = {
     const res = await API.get('/principal/academic-years');
     return res.data.data;
   },
+
+  getFacultyList: async (params?: { search?: string; departmentId?: string; status?: string }): Promise<any[]> => {
+    const res = await API.get('/principal/faculty', { params });
+    return res.data.data;
+  },
 };
 
 export default principalService;

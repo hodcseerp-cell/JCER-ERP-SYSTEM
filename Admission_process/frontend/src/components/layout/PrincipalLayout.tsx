@@ -167,6 +167,7 @@ export const PrincipalLayout: React.FC = () => {
     {
       title: 'FACULTY MANAGEMENT',
       items: [
+        { name: 'Faculty List', path: '/principal/faculty', icon: Users },
         {
           name: 'Faculty Authorization',
           path: '/principal/faculty/authorizations',
@@ -181,6 +182,7 @@ export const PrincipalLayout: React.FC = () => {
     '/principal/dashboard': 'Principal Overview',
     '/principal/admissions': 'Admissions Queue',
     '/principal/students': 'Students Directory (Read Only)',
+    '/principal/faculty': 'Global Faculty Directory',
     '/principal/faculty/authorizations': 'Faculty Authorization Queue',
     '/principal/analytics': 'Admission Analytics',
     '/principal/reports': 'Report Generator',

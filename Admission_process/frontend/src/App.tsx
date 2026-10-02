@@ -45,6 +45,9 @@ import HodDetailPage from './pages/dean/hod/HodDetailPage';
 import HodAssignmentPage from './pages/dean/hod/HodAssignmentPage';
 import HodHistoryPage from './pages/dean/hod/HodHistoryPage';
 import FacultyListPage from './pages/dean/faculty/FacultyListPage';
+import DeanCreateFacultyPage from './pages/dean/faculty/DeanCreateFacultyPage';
+import DeanBulkFacultyImportPage from './pages/dean/faculty/DeanBulkFacultyImportPage';
+import DeanArchivedFacultyPage from './pages/dean/faculty/DeanArchivedFacultyPage';
 import FacultyAuthorizationPage from './pages/dean/faculty/FacultyAuthorizationPage';
 import FacultyReviewPage from './pages/dean/faculty/FacultyReviewPage';
 import FacultyAssignmentsPage from './pages/dean/faculty/FacultyAssignmentsPage';
@@ -60,7 +63,6 @@ import HodSectionDetailPage from './pages/hod/HodSectionDetailPage';
 import HodSectionAllocatePage from './pages/hod/HodSectionAllocatePage';
 import HodStudentDetailPage from './pages/hod/HodStudentDetailPage';
 import HodFacultyListPage from './pages/hod/HodFacultyListPage';
-import HodCreateFacultyPage from './pages/hod/HodCreateFacultyPage';
 import HodFacultyManagePage from './pages/hod/HodFacultyManagePage';
 import HodFacultyAssignmentsPage from './pages/hod/HodFacultyAssignmentsPage';
 import HodSubjectsPage from './pages/hod/HodSubjectsPage';
@@ -112,6 +114,7 @@ import AdminSystemSettingsPage from './pages/admin/settings/AdminSystemSettingsP
 import AdminAuditLogsPage from './pages/admin/settings/AdminAuditLogsPage';
 
 import PrincipalDashboardPage from './pages/principal/PrincipalDashboardPage';
+import PrincipalFacultyListPage from './pages/principal/PrincipalFacultyListPage';
 import CollegeAnalyticsPage from './pages/principal/CollegeAnalyticsPage';
 import ReportGenerationPage from './pages/principal/ReportGenerationPage';
 import PrincipalProfilePage from './pages/principal/PrincipalProfilePage';
@@ -332,6 +335,7 @@ export const App: React.FC = () => (
               <Route path="students"               element={<StudentsDashboardPage readOnly={true} />} />
               <Route path="student-export"         element={<StudentExportPage readOnly={true} />} />
               <Route path="students/view/:id"      element={<StudentViewPage />} />
+              <Route path="faculty"                element={<PrincipalFacultyListPage />} />
               <Route path="faculty/authorizations" element={<PrincipalFacultyAuthorizationPage />} />
               <Route path="faculty/authorizations/:id" element={<PrincipalFacultyReviewPage />} />
               <Route path="analytics"              element={<CollegeAnalyticsPage />} />
@@ -357,6 +361,9 @@ export const App: React.FC = () => (
 
               {/* Faculty Management */}
               <Route path="faculty" element={<FacultyListPage />} />
+              <Route path="faculty/create" element={<DeanCreateFacultyPage />} />
+              <Route path="faculty/bulk-import" element={<DeanBulkFacultyImportPage />} />
+              <Route path="faculty/archived" element={<DeanArchivedFacultyPage />} />
               <Route path="faculty/authorizations" element={<FacultyAuthorizationPage />} />
               <Route path="faculty/authorizations/:id" element={<FacultyReviewPage />} />
               <Route path="faculty/assignments" element={<FacultyAssignmentsPage />} />
@@ -381,7 +388,7 @@ export const App: React.FC = () => (
 
               {/* Faculty */}
               <Route path="faculty" element={<HodFacultyListPage />} />
-              <Route path="faculty/create" element={<HodCreateFacultyPage />} />
+              <Route path="faculty/create" element={<Navigate to="/hod/faculty" replace />} />
               <Route path="faculty/assignments" element={<HodFacultyAssignmentsPage />} />
               <Route path="faculty/access" element={<HodFacultyAssignmentsPage />} />
               <Route path="faculty/authorizations" element={<HodFacultyListPage />} />

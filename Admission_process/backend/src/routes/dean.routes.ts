@@ -1,9 +1,15 @@
 import express from 'express';
+import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { authorizeRoles } from '../middleware/rbac.middleware';
 import * as deanController from '../controllers/dean.controller';
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
 
 router.use(authMiddleware as any);
 router.use(authorizeRoles('DEAN', 'SUPER_ADMIN') as any);
@@ -45,14 +51,26 @@ router.get('/hods/:id', deanController.getHodById as any);
 router.post('/hods/assign', deanController.assignHod as any);
 router.delete('/hods/:id', deanController.deleteHod as any);
 
-// ─── Faculty Management & Authorizations ───────────────────────────────────────
+// ─── Faculty Management ────────────────────────────────────────────────────────
 router.get('/faculty', deanController.getFacultyList as any);
+router.post('/faculty', deanController.createFaculty as any);
+router.get('/faculty/template', deanController.downloadBulkFacultyTemplate as any);
+router.post('/faculty/bulk-validate', upload.single('file'), deanController.validateBulkFaculty as any);
+router.post('/faculty/bulk-import', deanController.importBulkFaculty as any);
+router.get('/faculty/archived', deanController.getArchivedFacultyList as any);
+router.get('/faculty/assignments', deanController.getFacultyAssignments as any);
+router.get('/faculty/:id/history', deanController.getFacultyHistoryById as any);
+router.get('/faculty/:id', deanController.getFacultyProfile as any);
+router.post('/faculty/:id/regenerate-password', deanController.regenerateFacultyPassword as any);
+router.post('/faculty/:id/restore', deanController.restoreFaculty as any);
+router.delete('/faculty/:id', deanController.archiveFaculty as any);
+
+// ─── Faculty Authorization Queue (Historical/Review) ───────────────────────────
 router.get('/faculty/authorizations', deanController.getFacultyAuthorizations as any);
 router.get('/faculty/authorizations/count', deanController.getFacultyAuthorizationCount as any);
 router.get('/faculty-authorizations/notification-count', deanController.getFacultyAuthorizationCount as any);
 router.get('/faculty/authorizations/:id', deanController.getFacultyAuthorizationById as any);
 router.post('/faculty/authorizations/:id/approve', deanController.approveFacultyAuthorization as any);
-router.get('/faculty/assignments', deanController.getFacultyAssignments as any);
 
 // ─── HOD Subject Handling Requests ───────────────────────────────────────────
 router.get('/hod-subject-requests', deanController.getHodSubjectRequests as any);
@@ -62,3 +80,4 @@ router.post('/hod-subject-requests/:id/approve', deanController.approveHodSubjec
 router.post('/hod-subject-requests/:id/reject', deanController.rejectHodSubjectRequest as any);
 
 export default router;
+

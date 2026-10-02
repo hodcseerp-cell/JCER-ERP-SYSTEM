@@ -1120,3 +1120,84 @@ export const getAcademicYears = async (
     return next(error);
   }
 };
+
+/**
+ * GET /api/principal/faculty
+ * Global Faculty Directory for Principal view
+ */
+export const getPrincipalFacultyList = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const { search, departmentId, status } = req.query as any;
+
+    const whereUser: any = {};
+    if (search) {
+      whereUser[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+    if (status && status !== 'ALL') {
+      whereUser.status = status;
+    }
+
+    const teachers = await Teacher.findAll({
+      where: departmentId && departmentId !== 'ALL' ? { departmentId } : {},
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status', 'createdAt'],
+          where: whereUser,
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true } });
+    const currentYear = currentYearRecord?.year || '2026-27';
+
+    const formatted = await Promise.all(
+      teachers.map(async (t: any) => {
+        const assignments = await FacultyAssignment.findAll({
+          where: { userId: t.userId, status: 'ACTIVE' },
+          include: [{ model: Subject, as: 'subject', attributes: ['name', 'code'] }],
+        });
+
+        const subjectNames = assignments.map((a: any) => a.subject?.name).filter(Boolean);
+
+        return {
+          id: t.id,
+          userId: t.userId,
+          name: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim(),
+          email: t.user?.email,
+          phone: t.user?.phone,
+          profileImage: t.user?.profileImage,
+          departmentId: t.departmentId,
+          departmentName: t.department?.name,
+          departmentCode: t.department?.code,
+          designation: t.designation,
+          status: t.user?.status || 'ACTIVE',
+          subjects: subjectNames.length > 0 ? subjectNames.join(', ') : 'General Faculty',
+          academicYear: currentYear,
+          joiningDate: t.joiningDate,
+          createdAt: t.createdAt,
+        };
+      })
+    );
+
+    return res.json({ success: true, data: formatted });
+  } catch (error) {
+    return next(error);
+  }
+};
+

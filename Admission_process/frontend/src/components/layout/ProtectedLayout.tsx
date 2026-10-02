@@ -64,7 +64,7 @@ export const ProtectedLayout: React.FC = () => {
 
   return (
     <>
-      {user?.mustChangePassword && role !== 'HOD' && <ForcePasswordChange />}
+      {user?.mustChangePassword && role !== 'HOD' && role !== 'FACULTY' && role !== 'TEACHER' && <ForcePasswordChange />}
       <Outlet />
     </>
   );

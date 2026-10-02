@@ -151,7 +151,6 @@ export const HodLayout: React.FC = () => {
       title: 'FACULTY MANAGEMENT',
       items: [
         { name: 'Faculty List', path: '/hod/faculty', icon: Users },
-        { name: 'Create Faculty', path: '/hod/faculty/create', icon: UserPlus },
         { name: 'Teaching Allocation', path: '/hod/faculty/assignments', icon: ClipboardList },
         { name: 'Faculty Access', path: '/hod/faculty/access', icon: KeyRound, badge: pendingActions > 0 ? pendingActions : undefined },
       ],
@@ -207,7 +206,6 @@ export const HodLayout: React.FC = () => {
       title: 'FACULTY MANAGEMENT',
       items: [
         { name: 'Faculty List', path: '/hod/faculty', icon: Users },
-        { name: 'Create Faculty', path: '/hod/faculty/create', icon: UserPlus },
         { name: 'Teaching Allocation', path: '/hod/faculty/assignments', icon: ClipboardList },
         { name: 'Faculty Access', path: '/hod/faculty/access', icon: KeyRound, badge: pendingActions > 0 ? pendingActions : undefined },
       ],
@@ -250,7 +248,6 @@ export const HodLayout: React.FC = () => {
     '/hod/students/sections': 'Section Allocation',
     '/hod/semester-transition': 'Semester 2 → Semester 3 Transition',
     '/hod/faculty': 'Faculty Management',
-    '/hod/faculty/create': 'Create New Faculty',
     '/hod/faculty/assignments': 'Teaching Allocation',
     '/hod/faculty/access': 'Faculty Access Control',
     '/hod/subjects': 'Department Subjects Directory',

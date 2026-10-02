@@ -6,6 +6,7 @@ import User from '../models/User';
 import Student from '../models/Student';
 import Admission from '../models/Admission';
 import HOD from '../models/HOD';
+import Teacher from '../models/Teacher';
 import Department from '../models/Department';
 import authService from '../services/auth.service';
 import securityEvents from '../services/securityEvents.service';
@@ -48,6 +49,18 @@ const getUserPayload = async (user: User) => {
         code: (hod as any).department.code,
       };
     }
+  } else if (user.role === 'TEACHER') {
+    const teacher = await Teacher.findOne({
+      where: { userId: user.id },
+      include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'code'] }],
+    });
+    if (teacher && (teacher as any).department) {
+      department = {
+        id: (teacher as any).department.id,
+        name: (teacher as any).department.name,
+        code: (teacher as any).department.code,
+      };
+    }
   }
 
   return {
@@ -59,7 +72,7 @@ const getUserPayload = async (user: User) => {
     lastName: user.lastName,
     phone: user.phone,
     profileImage: user.profileImage,
-    mustChangePassword: user.role === 'HOD' ? false : user.mustChangePassword,
+    mustChangePassword: (user.role === 'TEACHER' || (user.role as string) === 'HOD' || (user.role as string) === 'FACULTY') ? false : user.mustChangePassword,
     department,
     system,
   };

@@ -58,7 +58,11 @@ router.delete('/students/sections/:sectionId/students/:studentId/remove', hodCon
 // ─── 3. Faculty Management & Authorization Module ────────────────────────────
 router.get('/departments', hodController.getHodDepartments as any);
 router.get('/faculty', hodController.getHodFacultyList as any);
-router.post('/faculty', hodController.createFacultyWithAuthorization as any);
+router.post('/faculty', (_req, res) => {
+  return res.status(403).json({
+    error: 'Faculty creation by HOD has been discontinued. Faculty members are created globally by the Dean.'
+  });
+});
 router.get('/faculty/assignments', hodController.getHodFacultyAssignments as any);
 router.get('/faculty-assignments', hodController.getHodFacultyAssignments as any);
 router.get('/faculty/:id', hodController.getHodFacultyDetail as any);

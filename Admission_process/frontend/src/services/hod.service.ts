@@ -961,8 +961,17 @@ export const hodService = {
     return res.data;
   },
 
-  getFacultyAssignments: async (facultyId?: string, academicYear?: string): Promise<any[]> => {
-    const res = await API.get('/hod/faculty/assignments', { params: { facultyId, academicYear } });
+  getFacultyAssignments: async (
+    paramsOrFacultyId?: { facultyId?: string; academicYear?: string; semester?: number; branch?: string; departmentId?: string; status?: string } | string,
+    academicYearParam?: string
+  ): Promise<any[]> => {
+    let params: any = {};
+    if (typeof paramsOrFacultyId === 'string') {
+      params = { facultyId: paramsOrFacultyId, academicYear: academicYearParam };
+    } else if (paramsOrFacultyId) {
+      params = paramsOrFacultyId;
+    }
+    const res = await API.get('/hod/faculty/assignments', { params });
     return res.data.data;
   },
 

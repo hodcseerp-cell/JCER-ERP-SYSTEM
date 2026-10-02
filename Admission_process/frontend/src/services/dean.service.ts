@@ -127,11 +127,116 @@ export interface FacultyRecord {
   departmentCode: string;
   designation: string;
   status: string;
+  userStatus?: string;
   subjects: string;
   academicYear: string;
   joiningDate: string;
+  archivedAt?: string | null;
   createdAt: string;
 }
+
+export interface ArchivedFacultyRecord {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  profileImage?: string;
+  departmentId: string;
+  departmentName: string;
+  departmentCode: string;
+  designation: string;
+  status: 'ARCHIVED';
+  joiningDate: string;
+  archivedAt: string;
+  archivedBy: string;
+  archivedByEmail?: string | null;
+  totalAssignments: number;
+  previousSubjects: string;
+  createdAt: string;
+}
+
+export interface FacultyProfileResponse {
+  faculty: {
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+    profileImage?: string | null;
+    designation: string;
+    joiningDate: string;
+    status: string;
+    archivedAt?: string | null;
+    archivedBy?: string | null;
+    coreDepartment: {
+      id: string;
+      name: string;
+      code: string;
+    };
+  };
+  account: {
+    id: string;
+    email: string;
+    status: string;
+    mustChangePassword: boolean;
+  };
+  teachingAssignments: Array<{
+    id: string;
+    academicYear: string;
+    teachingDepartment: string;
+    teachingDepartmentCode: string;
+    semester: number;
+    subject: string;
+    subjectCode: string;
+    section: string;
+    status: string;
+  }>;
+  historicalAssignments: Array<{
+    id: string;
+    academicYear: string;
+    teachingDepartment: string;
+    teachingDepartmentCode: string;
+    semester: number;
+    subject: string;
+    subjectCode: string;
+    section: string;
+    status: string;
+  }>;
+  attendanceHistory: Array<{
+    id: string;
+    date: string;
+    subject: string;
+    subjectCode: string;
+    section: string;
+    semester: number;
+    period: number;
+    present: number;
+    absent: number;
+    totalStudents: number;
+    status: string;
+  }>;
+  marksHistory: Array<{
+    id: string;
+    subject: string;
+    subjectCode: string;
+    section: string;
+    assessment: string;
+    maxMarks: number;
+    academicYear: string;
+    status: string;
+  }>;
+  auditLogs?: Array<{
+    id: string;
+    action: string;
+    createdAt: string;
+    details: any;
+  }>;
+}
+
+export type FacultyHistoricalProfile = FacultyProfileResponse;
 
 export interface FacultyAuthApprovalDetail {
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
@@ -372,6 +477,68 @@ const deanService = {
   getFacultyAssignments: async (params?: { search?: string; departmentId?: string; semester?: number; academicYear?: string; status?: string }): Promise<FacultyAssignmentRecord[]> => {
     const res = await API.get('/dean/faculty/assignments', { params });
     return res.data.data;
+  },
+
+  createFaculty: async (payload: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    designation: string;
+    joiningDate?: string;
+    coreDepartmentId: string;
+  }): Promise<any> => {
+    const res = await API.post('/dean/faculty', payload);
+    return res.data;
+  },
+
+  downloadBulkFacultyTemplate: async (): Promise<Blob> => {
+    const res = await API.get('/dean/faculty/template', {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
+
+  validateBulkFaculty: async (file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await API.post('/dean/faculty/bulk-validate', formData);
+    return res.data;
+  },
+
+  importBulkFaculty: async (records: any[]): Promise<any> => {
+    const res = await API.post('/dean/faculty/bulk-import', { records });
+    return res.data;
+  },
+
+  getArchivedFacultyList: async (params?: { search?: string; departmentId?: string }): Promise<ArchivedFacultyRecord[]> => {
+    const res = await API.get('/dean/faculty/archived', { params });
+    return res.data.data;
+  },
+
+  getFacultyProfile: async (id: string): Promise<FacultyProfileResponse> => {
+    const res = await API.get(`/dean/faculty/${id}`);
+    return res.data.data;
+  },
+
+  getFacultyHistory: async (id: string): Promise<FacultyProfileResponse> => {
+    const res = await API.get(`/dean/faculty/${id}/history`);
+    return res.data.data;
+  },
+
+  regenerateFacultyPassword: async (id: string): Promise<{ facultyName: string; loginEmail: string; temporaryPassword: string }> => {
+    const res = await API.post(`/dean/faculty/${id}/regenerate-password`);
+    return res.data.data;
+  },
+
+  archiveFaculty: async (id: string): Promise<any> => {
+    const res = await API.delete(`/dean/faculty/${id}`);
+    return res.data;
+  },
+
+  restoreFaculty: async (id: string): Promise<any> => {
+    const res = await API.post(`/dean/faculty/${id}/restore`);
+    return res.data;
   },
 
   // HOD Subject Handling Requests

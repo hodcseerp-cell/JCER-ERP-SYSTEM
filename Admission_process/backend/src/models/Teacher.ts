@@ -9,12 +9,16 @@ class Teacher extends Model {
   public departmentId!: string;
   public designation!: string;
   public cycle!: 'P_CYCLE' | 'C_CYCLE' | string | null;
+  public status!: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  public archivedAt!: Date | null;
+  public archivedBy!: string | null;
   public joiningDate!: Date;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
   public user?: User;
   public department?: Department;
+  public archivedByUser?: User;
 }
 
 Teacher.init(
@@ -50,6 +54,25 @@ Teacher.init(
       allowNull: true,
       defaultValue: null,
     },
+    status: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'ACTIVE',
+    },
+    archivedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    },
+    archivedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      defaultValue: null,
+      references: {
+        model: User,
+        key: 'id',
+      },
+    },
     joiningDate: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -65,5 +88,6 @@ Teacher.init(
 
 Teacher.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 Teacher.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
+Teacher.belongsTo(User, { as: 'archivedByUser', foreignKey: 'archivedBy' });
 
 export default Teacher;

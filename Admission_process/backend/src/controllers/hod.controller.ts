@@ -2266,10 +2266,14 @@ export const bulkDistributeStudents = async (req: AuthenticatedRequest, res: Res
 export const getHodFacultyList = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
-    const { branch } = req.query as any;
+    const { branch, coreDepartmentId, departmentId: queryDeptId, search } = req.query as any;
 
-    let targetDepartmentId = departmentId;
-    if (branch && branch !== 'ALL') {
+    let targetCoreDeptId: string | null = null;
+    if (coreDepartmentId && coreDepartmentId !== 'ALL') {
+      targetCoreDeptId = coreDepartmentId;
+    } else if (queryDeptId && queryDeptId !== 'ALL') {
+      targetCoreDeptId = queryDeptId;
+    } else if (branch && branch !== 'ALL') {
       const cleanBranch = String(branch).trim();
       const targetDept = await Department.findOne({
         where: {
@@ -2281,29 +2285,30 @@ export const getHodFacultyList = async (req: AuthenticatedRequest, res: Response
         },
       });
       if (targetDept) {
-        targetDepartmentId = targetDept.id;
+        targetCoreDeptId = targetDept.id;
       }
     }
 
-    const whereClause: any = targetDepartmentId === departmentId && branch && branch !== 'ALL'
-      ? { [Op.or]: [{ departmentId }, { '$user.departmentId$': targetDepartmentId }] }
-      : { departmentId: targetDepartmentId };
+    const hodDept = departmentId ? await Department.findByPk(departmentId) : null;
 
-    const hodDept = await Department.findByPk(departmentId);
+    const whereUser: any = {};
+    if (search) {
+      whereUser[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
 
-    // Fetch teachers belonging to target department OR teaching in current department
+    // Fetch teachers globally (one global directory across all departments)
     const teachers = await Teacher.findAll({
-      where: {
-        [Op.or]: [
-          { departmentId: targetDepartmentId },
-          ...(departmentId ? [{ departmentId }] : []),
-        ],
-      },
+      where: targetCoreDeptId ? { departmentId: targetCoreDeptId } : {},
       include: [
         {
           model: User,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status'],
+          where: whereUser,
         },
         {
           model: Department,
@@ -3010,15 +3015,21 @@ export const deleteFacultyAssignment = async (req: AuthenticatedRequest, res: Re
     const { assignmentId, id } = req.params;
     const targetId = assignmentId || id;
 
-    const assignment = await FacultyAssignment.findOne({
-      where: {
-        id: targetId,
-        departmentId,
-      },
-    });
+    const department = departmentId ? await Department.findByPk(departmentId) : null;
+    const isAppliedScience = Boolean(
+      req.isSemesterHandling ||
+      department?.type === 'SEMESTER_HANDLING' ||
+      department?.code === 'AS'
+    );
+
+    const assignment = await FacultyAssignment.findByPk(targetId);
 
     if (!assignment) {
-      return res.status(404).json({ error: 'Faculty assignment not found in your department scope.' });
+      return res.status(404).json({ error: 'Faculty assignment not found.' });
+    }
+
+    if (!isAppliedScience && assignment.departmentId !== departmentId) {
+      return res.status(403).json({ error: 'Faculty assignment not found in your department scope.' });
     }
 
     await assignment.destroy();
@@ -3233,13 +3244,67 @@ export const toggleFacultyStatus = async (req: AuthenticatedRequest, res: Respon
 export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
+    const department = departmentId ? await Department.findByPk(departmentId) : null;
+    const isAppliedScience = Boolean(
+      req.isSemesterHandling ||
+      department?.type === 'SEMESTER_HANDLING' ||
+      department?.code === 'AS'
+    );
 
     // Optional filters from query params
-    const { semester, academicYear, status: statusFilter } = req.query;
-    const whereClause: any = { departmentId };
-    if (semester && semester !== 'ALL') whereClause.semester = Number(semester);
-    if (academicYear && academicYear !== 'ALL') whereClause.academicYear = academicYear;
-    if (statusFilter && statusFilter !== 'ALL') whereClause.status = statusFilter;
+    const { semester, academicYear, status: statusFilter, facultyId, branch, teachingDepartmentId, departmentId: qDeptId } = req.query;
+
+    const whereClause: any = {};
+
+    // 1. Resolve Department / Teaching Scope
+    if (isAppliedScience) {
+      const targetBranch = (branch as string)?.trim();
+      const targetDeptId = (teachingDepartmentId as string) || (qDeptId as string);
+
+      if (targetDeptId && targetDeptId !== 'ALL') {
+        whereClause.departmentId = targetDeptId;
+      } else if (targetBranch && targetBranch !== 'ALL') {
+        const branchDept = await Department.findOne({
+          where: { code: { [Op.iLike]: targetBranch } },
+        });
+        if (branchDept) {
+          whereClause.departmentId = branchDept.id;
+        }
+      } else {
+        // AS HOD manages Semester 1 & 2 across branches and AS
+        whereClause[Op.or] = [
+          { semester: [1, 2] },
+          { departmentId },
+          { createdByHODId: req.user?.id },
+        ];
+      }
+    } else {
+      const targetDept = (teachingDepartmentId as string) || (qDeptId as string) || departmentId;
+      if (targetDept && targetDept !== 'ALL') {
+        whereClause.departmentId = targetDept;
+      }
+    }
+
+    if (facultyId && facultyId !== 'ALL') {
+      whereClause.userId = facultyId;
+    }
+    if (semester && semester !== 'ALL') {
+      whereClause.semester = Number(semester);
+    }
+    if (academicYear && academicYear !== 'ALL') {
+      const ayStr = String(academicYear).trim();
+      const variations = [
+        ayStr,
+        ayStr.replace(/(\d{4})-(\d{2})$/, (_, y1, y2) => `${y1}-20${y2}`),
+        ayStr.replace(/(\d{4})-20(\d{2})$/, '$1-$2'),
+        ayStr.replace(/–/g, '-'),
+        ayStr.replace(/-/g, '–'),
+      ];
+      whereClause.academicYear = { [Op.in]: Array.from(new Set(variations)) };
+    }
+    if (statusFilter && statusFilter !== 'ALL') {
+      whereClause.status = statusFilter;
+    }
 
     const assignments = await FacultyAssignment.findAll({
       where: whereClause,
@@ -3253,6 +3318,11 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
           model: Subject,
           as: 'subject',
           attributes: ['id', 'name', 'code', 'credits', 'cycle', 'schemeId', 'type'],
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code'],
         },
       ],
       order: [['semester', 'ASC'], ['section', 'ASC']],
@@ -3274,6 +3344,10 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
         credits: a.subject?.credits,
         semester: a.semester,
         section: a.section,
+        branch: a.department?.code || (a.departmentId === departmentId ? department?.code : undefined),
+        departmentId: a.departmentId,
+        departmentName: a.department?.name,
+        departmentCode: a.department?.code,
         academicYear: a.academicYear,
         attendanceAccess: a.attendanceAccess,
         marksAccess: a.marksAccess,

@@ -159,7 +159,11 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
       const [subjectsRes, facultyRes, assignmentsRes] = await Promise.all([
         hodService.getSubjects({ semester: selectedSemester, status: 'ACTIVE' }),
         hodService.getFacultyList(),
-        hodService.getFacultyAssignments(undefined, activeAY),
+        hodService.getFacultyAssignments({
+          semester: selectedSemester,
+          academicYear: activeAY,
+          branch: isAppliedScience ? selectedBranch : undefined,
+        }),
       ]);
 
       setSubjects(subjectsRes || []);
@@ -232,12 +236,15 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     const map: Record<string, HodFacultyAssignmentItem[]> = {};
     assignments.forEach((a) => {
       if (a.status === 'ACTIVE' || !a.status) {
+        if (isAppliedScience && selectedBranch && a.branch && a.branch.toUpperCase() !== selectedBranch.toUpperCase()) {
+          return;
+        }
         if (!map[a.subjectId]) map[a.subjectId] = [];
         map[a.subjectId].push(a);
       }
     });
     return map;
-  }, [assignments]);
+  }, [assignments, isAppliedScience, selectedBranch]);
 
   // Open allocation modal (REQUIREMENT 3: ALL UNCHECKED BY DEFAULT!)
   const handleOpenModal = (subj: HodSubjectItem) => {
@@ -433,17 +440,22 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     }
   };
 
-  // Calculate Statistics Overview
+  // Calculate Statistics Overview with accurate coverage
   const totalSubjectsCount = filteredSubjects.length;
   const { assignedSubjectsCount, partialSubjectsCount, unassignedSubjectsCount } = useMemo(() => {
     let full = 0;
     let partial = 0;
     let unassigned = 0;
 
+    const currentBranchSections = departmentSectionsMap[selectedBranch] || [];
+    const requiredSectionsCount = currentBranchSections.length;
+
     filteredSubjects.forEach((subj) => {
       const allocs = subjectAssignmentsMap[subj.id] || [];
       if (allocs.length === 0) {
         unassigned++;
+      } else if (requiredSectionsCount > 0 && allocs.length < requiredSectionsCount) {
+        partial++;
       } else {
         full++;
       }
@@ -454,7 +466,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
       partialSubjectsCount: partial,
       unassignedSubjectsCount: unassigned,
     };
-  }, [filteredSubjects, subjectAssignmentsMap]);
+  }, [filteredSubjects, subjectAssignmentsMap, departmentSectionsMap, selectedBranch]);
 
   // Selected Core Department Display Name
   const selectedCoreDeptObj = useMemo(() => {
@@ -773,15 +785,20 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
 
                     {/* Coverage Status Badge */}
                     <div className="flex items-center space-x-2 pt-1">
-                      {isAssigned ? (
-                        <span className="inline-flex items-center space-x-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Assigned ({subjectAllocations.length} Section Allocations)</span>
-                        </span>
-                      ) : (
+                      {subjectAllocations.length === 0 ? (
                         <span className="inline-flex items-center space-x-1.5 text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
                           <Clock className="w-3.5 h-3.5" />
                           <span>Unassigned (Needs Faculty)</span>
+                        </span>
+                      ) : (departmentSectionsMap[selectedBranch]?.length > 0 && subjectAllocations.length < departmentSectionsMap[selectedBranch]?.length) ? (
+                        <span className="inline-flex items-center space-x-1.5 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Partially Covered ({subjectAllocations.length}/{departmentSectionsMap[selectedBranch]?.length} Sections)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Assigned ({subjectAllocations.length} Section Allocations)</span>
                         </span>
                       )}
                     </div>

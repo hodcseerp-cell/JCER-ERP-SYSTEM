@@ -16,25 +16,16 @@ async function startServer() {
     // 2. Initialize Redis connection
     await initRedis();
     
-    // Run safe, non-destructive schema synchronization queries on server startup (Production & Development)
-    // Pre-cast: fix audit_logs.details column type before sync tries to alter it.
-    // PostgreSQL cannot automatically cast TEXT -> JSON; we must specify USING.
+    // Safe migration: Add status, archivedAt, and archivedBy to teachers table
     try {
       await sequelize.query(`
-        DO $$
-        BEGIN
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'audit_logs' AND column_name = 'details'
-              AND data_type <> 'json' AND data_type <> 'jsonb'
-          ) THEN
-            ALTER TABLE "audit_logs" ALTER COLUMN "details" TYPE JSON USING "details"::json;
-          END IF;
-        END
-        $$;
+        ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "status" VARCHAR(20) DEFAULT 'ACTIVE';
+        ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP WITH TIME ZONE NULL;
+        ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "archivedBy" UUID NULL;
+        UPDATE "teachers" SET "status" = 'ACTIVE' WHERE "status" IS NULL;
       `);
-    } catch (castErr: any) {
-      console.warn('Pre-cast migration for audit_logs.details skipped:', castErr.message);
+    } catch (teacherErr: any) {
+      console.warn('Teachers archive columns migration skipped:', teacherErr.message);
     }
 
     // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type to DECIMAL(38, 2).
@@ -238,11 +229,29 @@ async function startServer() {
           ) THEN
             ALTER TABLE "admissions" ADD COLUMN "applicationFeeStatus" VARCHAR(50) DEFAULT 'Pending Payment';
           END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'teachers' AND column_name = 'status'
+          ) THEN
+            ALTER TABLE "teachers" ADD COLUMN "status" VARCHAR(20) DEFAULT 'ACTIVE';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'teachers' AND column_name = 'archivedAt'
+          ) THEN
+            ALTER TABLE "teachers" ADD COLUMN "archivedAt" TIMESTAMPTZ NULL;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'teachers' AND column_name = 'archivedBy'
+          ) THEN
+            ALTER TABLE "teachers" ADD COLUMN "archivedBy" UUID NULL;
+          END IF;
         END
         $$;
       `);
     } catch (e: any) {
-      console.warn('Pre-cast migration for system and admission columns skipped:', e.message);
+      console.warn('Pre-cast migration for system, admission, and teachers columns skipped:', e.message);
     }
 
     // Pre-cast: ensure admissions applicationStatus enum has CANCELLATION_REQUESTED and CANCELLED

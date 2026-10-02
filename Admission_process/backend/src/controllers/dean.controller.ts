@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
+import ExcelJS from 'exceljs';
 import sequelize from '../config/database';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import User from '../models/User';
@@ -19,6 +20,10 @@ import FacultyAssignment from '../models/FacultyAssignment';
 import HodSubjectHandlingRequest from '../models/HodSubjectHandlingRequest';
 import Notification from '../models/Notification';
 import SystemConfiguration from '../models/SystemConfiguration';
+import AttendanceSession from '../models/AttendanceSession';
+import AttendanceRecord from '../models/AttendanceRecord';
+import Assessment from '../models/Assessment';
+import StudentMarks from '../models/StudentMarks';
 import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import logger from '../utils/logger.util';
 
@@ -1158,12 +1163,23 @@ export const getFacultyList = async (req: AuthenticatedRequest, res: Response, n
         { email: { [Op.iLike]: `%${search}%` } },
       ];
     }
-    if (status && status !== 'ALL') {
+    if (status && status !== 'ALL' && status !== 'ARCHIVED') {
       whereUser.status = status;
     }
 
+    const whereTeacher: any = {
+      ...(departmentId && departmentId !== 'ALL' ? { departmentId } : {}),
+    };
+
+    if (status === 'ARCHIVED') {
+      whereTeacher.status = 'ARCHIVED';
+    } else {
+      // Exclude archived faculty by default from active directory
+      whereTeacher.status = { [Op.ne]: 'ARCHIVED' };
+    }
+
     const teachers = await Teacher.findAll({
-      where: departmentId && departmentId !== 'ALL' ? { departmentId } : {},
+      where: whereTeacher,
       include: [
         {
           model: User,
@@ -1203,10 +1219,12 @@ export const getFacultyList = async (req: AuthenticatedRequest, res: Response, n
           departmentName: t.department?.name,
           departmentCode: t.department?.code,
           designation: t.designation,
-          status: t.user?.status || 'ACTIVE',
+          status: t.status || t.user?.status || 'ACTIVE',
+          userStatus: t.user?.status,
           subjects: subjectNames.length > 0 ? subjectNames.join(', ') : 'General Faculty',
           academicYear: currentYear,
           joiningDate: t.joiningDate,
+          archivedAt: t.archivedAt,
           createdAt: t.createdAt,
         };
       })
@@ -1850,4 +1868,1130 @@ export const rejectHodSubjectRequest = async (req: AuthenticatedRequest, res: Re
     return next(error);
   }
 };
+
+// ─── 9. Dean Direct Faculty Creation & Bulk Import Module ──────────────────────
+
+/**
+ * POST /api/dean/faculty
+ * Dean creates a single faculty member directly with immediate ACTIVE status.
+ */
+export const createFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { firstName, lastName, email, phone, designation, joiningDate, coreDepartmentId } = req.body;
+
+    if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
+      await t.rollback();
+      return res.status(400).json({ error: 'First name, last name, and official email are required.' });
+    }
+
+    if (!coreDepartmentId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Core Department is required.' });
+    }
+
+    // Resolve Core Department (UUID or code)
+    let coreDept: Department | null = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(coreDepartmentId).trim());
+    if (isUuid) {
+      coreDept = await Department.findByPk(coreDepartmentId, { transaction: t });
+    } else {
+      coreDept = await Department.findOne({
+        where: {
+          [Op.or]: [
+            { code: String(coreDepartmentId).trim().toUpperCase() },
+            { name: { [Op.iLike]: `%${String(coreDepartmentId).trim()}%` } },
+          ],
+        },
+        transaction: t,
+      });
+    }
+
+    if (!coreDept) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Invalid Core Department selected. Please select a valid academic department.' });
+    }
+
+    // Check if email is already taken
+    const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() }, transaction: t });
+    if (existingUser) {
+      await t.rollback();
+      return res.status(400).json({ error: `A faculty or user with email "${email.trim().toLowerCase()}" already exists.` });
+    }
+
+    // Generate secure temporary password
+    const rawTempPassword = `Fac@${Math.floor(100000 + Math.random() * 900000)}`;
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(rawTempPassword, salt);
+
+    // Create User record as ACTIVE with TEACHER role and forced password change on first login
+    const newUser = await User.create(
+      {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.toLowerCase().trim(),
+        phone: phone ? phone.trim() : null,
+        role: 'TEACHER',
+        status: 'ACTIVE',
+        mustChangePassword: false,
+        passwordHash,
+      },
+      { transaction: t }
+    );
+
+    // Create Teacher record linked to Core Department
+    const newTeacher = await Teacher.create(
+      {
+        userId: newUser.id,
+        departmentId: coreDept.id,
+        designation: designation?.trim() || 'Assistant Professor',
+        joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
+      },
+      { transaction: t }
+    );
+
+    await logAudit(req, 'DEAN_CREATE_FACULTY', {
+      teacherId: newTeacher.id,
+      facultyUserId: newUser.id,
+      email: newUser.email,
+      coreDepartmentId: coreDept.id,
+      coreDepartmentCode: coreDept.code,
+      designation: newTeacher.designation,
+    });
+
+    await t.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: 'Faculty created successfully.',
+      data: {
+        teacher: newTeacher,
+        user: {
+          id: newUser.id,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          email: newUser.email,
+          phone: newUser.phone,
+          status: newUser.status,
+        },
+        coreDepartment: {
+          id: coreDept.id,
+          code: coreDept.code,
+          name: coreDept.name,
+        },
+        temporaryCredentials: {
+          email: newUser.email,
+          temporaryPassword: rawTempPassword,
+        },
+      },
+    });
+  } catch (error: any) {
+    await t.rollback();
+    logger.error('DEAN_CREATE_FACULTY_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to create faculty member.' });
+  }
+};
+
+/**
+ * GET /api/dean/faculty/template
+ * Generates an official Excel template for bulk faculty import with dynamic DB department validation dropdown.
+ */
+export const downloadBulkFacultyTemplate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const departments = await Department.findAll({
+      order: [['code', 'ASC']],
+      attributes: ['id', 'code', 'name'],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JCER ERP';
+    workbook.created = new Date();
+
+    // 1. Data Sheet
+    const worksheet = workbook.addWorksheet('Faculty Template');
+
+    worksheet.columns = [
+      { header: 'First Name *', key: 'firstName', width: 18 },
+      { header: 'Last Name *', key: 'lastName', width: 18 },
+      { header: 'Faculty College Email *', key: 'email', width: 32 },
+      { header: 'Phone Number', key: 'phone', width: 18 },
+      { header: 'Academic Designation *', key: 'designation', width: 26 },
+      { header: 'Joining Date (YYYY-MM-DD) *', key: 'joiningDate', width: 26 },
+      { header: 'Core Department *', key: 'coreDepartment', width: 40 },
+    ];
+
+    // Style Header Row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F245C' },
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 26;
+
+    // 2. Reference Sheet for Dropdown Validation
+    const refSheet = workbook.addWorksheet('DepartmentsRef');
+    refSheet.state = 'hidden';
+    refSheet.columns = [{ header: 'DeptOption', key: 'opt', width: 45 }];
+
+    const deptOptions = departments.map((d) => `${d.code} — ${d.name}`);
+    deptOptions.forEach((opt) => {
+      refSheet.addRow({ opt });
+    });
+
+    // Add example rows
+    worksheet.addRow({
+      firstName: 'Ramesh',
+      lastName: 'Kumar',
+      email: 'ramesh.kumar@jcer.edu.in',
+      phone: '9876543210',
+      designation: 'Assistant Professor',
+      joiningDate: '2026-06-01',
+      coreDepartment: deptOptions[0] || 'CSE — Computer Science & Engineering',
+    });
+
+    worksheet.addRow({
+      firstName: 'Sneha',
+      lastName: 'Patil',
+      email: 'sneha.patil@jcer.edu.in',
+      phone: '9876543211',
+      designation: 'Associate Professor',
+      joiningDate: '2026-06-01',
+      coreDepartment: deptOptions[1] || 'AS — Applied Science',
+    });
+
+    // Apply Core Department validation dropdown (Column G / 7)
+    const formulaRef = `DepartmentsRef!$A$2:$A$${deptOptions.length + 1}`;
+    for (let i = 2; i <= 500; i++) {
+      worksheet.getCell(`G${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [formulaRef],
+        showErrorMessage: true,
+        errorTitle: 'Invalid Department',
+        error: 'Please select a valid Core Department from the dropdown list.',
+      };
+    }
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Faculty_Bulk_Import_Template.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    logger.error('DEAN_BULK_TEMPLATE_DOWNLOAD_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * POST /api/dean/faculty/bulk-validate
+ * Parses and validates uploaded faculty Excel file before committing.
+ */
+export const validateBulkFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload an Excel (.xlsx) file.',
+        errors: ['No file was uploaded or file buffer is empty.'],
+      });
+    }
+
+    const departments = await Department.findAll({ attributes: ['id', 'code', 'name'] });
+    const deptMapByCode = new Map<string, Department>();
+    const deptMapByName = new Map<string, Department>();
+    const deptMapById = new Map<string, Department>();
+
+    departments.forEach((d) => {
+      deptMapByCode.set(d.code.trim().toUpperCase(), d);
+      deptMapByName.set(d.name.trim().toLowerCase(), d);
+      deptMapById.set(d.id, d);
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.load(req.file.buffer as any);
+    } catch (parseErr: any) {
+      return res.status(422).json({
+        success: false,
+        message: 'Unable to parse the Excel file. Please ensure it is a valid .xlsx file.',
+        errors: [parseErr?.message || 'Malformed Excel file.'],
+      });
+    }
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({
+        success: false,
+        message: 'No worksheet found in uploaded Excel file.',
+        errors: ['The uploaded workbook contains no worksheets.'],
+      });
+    }
+
+    const existingUsers = await User.findAll({ attributes: ['email'] });
+    const dbEmailSet = new Set(existingUsers.map((u) => u.email.toLowerCase().trim()));
+
+    // Dynamically discover header column indexes from Row 1
+    const headerRow = worksheet.getRow(1);
+    const colMap: { [key: string]: number } = {};
+
+    headerRow.eachCell((cell, colNumber) => {
+      let text = '';
+      if (cell.value !== null && cell.value !== undefined) {
+        if (typeof cell.value === 'object' && 'text' in cell.value) {
+          text = String((cell.value as any).text);
+        } else {
+          text = String(cell.value);
+        }
+      }
+      const normalized = text.replace(/[*()\-–—_]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (normalized.includes('first name') || normalized === 'first') {
+        colMap.firstName = colNumber;
+      } else if (normalized.includes('last name') || normalized === 'last') {
+        colMap.lastName = colNumber;
+      } else if (normalized.includes('email')) {
+        colMap.email = colNumber;
+      } else if (normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('contact')) {
+        colMap.phone = colNumber;
+      } else if (normalized.includes('designation')) {
+        colMap.designation = colNumber;
+      } else if (normalized.includes('joining') || normalized.includes('doj')) {
+        colMap.joiningDate = colNumber;
+      } else if (normalized.includes('department') || normalized.includes('dept')) {
+        colMap.coreDepartment = colNumber;
+      }
+    });
+
+    const getVal = (row: ExcelJS.Row, key: string, fallbackCol: number): string => {
+      const col = colMap[key] || fallbackCol;
+      const cell = row.getCell(col);
+      const c = cell.value;
+      if (c === null || c === undefined) return '';
+      if (c instanceof Date) {
+        if (isNaN(c.getTime())) return '';
+        const year = c.getFullYear();
+        const month = String(c.getMonth() + 1).padStart(2, '0');
+        const day = String(c.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      if (typeof c === 'object') {
+        if ('text' in c && (c as any).text) return String((c as any).text).trim();
+        if ('result' in c && (c as any).result !== undefined) return String((c as any).result).trim();
+        if ('richText' in c && Array.isArray((c as any).richText)) {
+          return (c as any).richText.map((rt: any) => rt.text || '').join('').trim();
+        }
+        return String(c).trim();
+      }
+      return String(c).trim();
+    };
+
+    const seenFileEmails = new Set<string>();
+    const allRows: any[] = [];
+    const validRecords: any[] = [];
+    const invalidRecords: any[] = [];
+
+    // Process rows starting from row 2
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
+
+      const firstName = getVal(row, 'firstName', 1);
+      const lastName = getVal(row, 'lastName', 2);
+      const rawEmail = getVal(row, 'email', 3);
+      const email = rawEmail.toLowerCase();
+      const phone = getVal(row, 'phone', 4);
+      const designation = getVal(row, 'designation', 5);
+      const joiningDateStr = getVal(row, 'joiningDate', 6);
+      const coreDeptRaw = getVal(row, 'coreDepartment', 7);
+
+      // If entire row is blank, skip
+      if (!firstName && !lastName && !rawEmail && !phone && !designation && !joiningDateStr && !coreDeptRaw) {
+        return;
+      }
+
+      const rowErrors: string[] = [];
+
+      // 1. First Name
+      if (!firstName) {
+        rowErrors.push('First Name is required.');
+      }
+
+      // 2. Last Name
+      if (!lastName) {
+        rowErrors.push('Last Name is required.');
+      }
+
+      // 3. Faculty College Email
+      if (!email) {
+        rowErrors.push('Faculty College Email is required.');
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          rowErrors.push('Invalid email address format.');
+        } else if (dbEmailSet.has(email)) {
+          rowErrors.push(`Faculty College Email "${email}" already exists in system database.`);
+        } else if (seenFileEmails.has(email)) {
+          rowErrors.push(`Duplicate email "${email}" repeated inside this Excel sheet.`);
+        }
+      }
+
+      // 4. Academic Designation
+      if (!designation) {
+        rowErrors.push('Academic Designation is required.');
+      }
+
+      // 5. Joining Date
+      let formattedJoiningDate = '';
+      if (!joiningDateStr) {
+        rowErrors.push('Joining Date is required.');
+      } else {
+        const d = new Date(joiningDateStr);
+        if (isNaN(d.getTime())) {
+          rowErrors.push(`Invalid joining date "${joiningDateStr}". Expected format YYYY-MM-DD.`);
+        } else {
+          formattedJoiningDate = d.toISOString().split('T')[0];
+        }
+      }
+
+      // 6. Core Department Resolution
+      let resolvedDept: Department | undefined;
+      if (!coreDeptRaw) {
+        rowErrors.push('Core Department is required.');
+      } else {
+        const cleanCode = coreDeptRaw.split(/[—–-]/)[0].trim().toUpperCase();
+        resolvedDept =
+          deptMapByCode.get(cleanCode) ||
+          deptMapByName.get(coreDeptRaw.trim().toLowerCase()) ||
+          deptMapById.get(coreDeptRaw.trim());
+
+        if (!resolvedDept) {
+          resolvedDept = departments.find(
+            (d) =>
+              d.code.toUpperCase() === cleanCode ||
+              d.code.toUpperCase() === coreDeptRaw.trim().toUpperCase() ||
+              d.name.toLowerCase() === coreDeptRaw.trim().toLowerCase()
+          );
+        }
+
+        if (!resolvedDept) {
+          rowErrors.push(
+            `Invalid Core Department "${coreDeptRaw}". Must be one of: ${departments.map((d) => d.code).join(', ')}.`
+          );
+        }
+      }
+
+      const isValid = rowErrors.length === 0;
+
+      if (email && !seenFileEmails.has(email)) {
+        seenFileEmails.add(email);
+      }
+
+      const rowResult = {
+        rowNumber,
+        firstName,
+        lastName,
+        email,
+        phone: phone || null,
+        designation: designation || 'Assistant Professor',
+        joiningDate: formattedJoiningDate || joiningDateStr,
+        coreDepartment: coreDeptRaw,
+        coreDepartmentInput: coreDeptRaw,
+        coreDepartmentId: resolvedDept?.id,
+        coreDepartmentCode: resolvedDept?.code,
+        coreDepartmentName: resolvedDept?.name,
+        status: isValid ? 'VALID' : 'INVALID',
+        isValid,
+        errors: rowErrors,
+      };
+
+      allRows.push(rowResult);
+
+      if (isValid) {
+        validRecords.push(rowResult);
+      } else {
+        invalidRecords.push(rowResult);
+      }
+    });
+
+    const totalRecords = allRows.length;
+
+    return res.json({
+      success: true,
+      message: 'Validation completed successfully.',
+      summary: {
+        total: totalRecords,
+        valid: validRecords.length,
+        invalid: invalidRecords.length,
+      },
+      rows: allRows,
+      data: {
+        totalRows: totalRecords,
+        validRows: validRecords.length,
+        invalidRows: invalidRecords.length,
+        totalRecords,
+        validCount: validRecords.length,
+        errorCount: invalidRecords.length,
+        departments: departments.map((d) => ({ id: d.id, code: d.code, name: d.name })),
+        summary: {
+          total: totalRecords,
+          valid: validRecords.length,
+          invalid: invalidRecords.length,
+        },
+        rows: allRows,
+        results: allRows,
+        validRecords,
+        errors: invalidRecords,
+      },
+    });
+  } catch (error: any) {
+    logger.error('DEAN_VALIDATE_BULK_FACULTY_ERROR:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to process Excel file.',
+      errors: [error.message || 'Internal server error during Excel processing.'],
+    });
+  }
+};
+
+/**
+ * POST /api/dean/faculty/bulk-import
+ * Commits verified faculty rows inside a database transaction.
+ */
+export const importBulkFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { records } = req.body;
+    if (!Array.isArray(records) || records.length === 0) {
+      await t.rollback();
+      return res.status(400).json({ error: 'No valid faculty records provided for import.' });
+    }
+
+    const imported: any[] = [];
+    const skipped: any[] = [];
+
+    for (const rec of records) {
+      const email = rec.email ? rec.email.toLowerCase().trim() : '';
+      if (!email || !rec.firstName || !rec.lastName || !rec.coreDepartmentId) {
+        skipped.push({ email, reason: 'Missing required fields' });
+        continue;
+      }
+
+      // Check duplicate
+      const existing = await User.findOne({ where: { email }, transaction: t });
+      if (existing) {
+        skipped.push({ email, reason: 'Email already exists' });
+        continue;
+      }
+
+      const rawTempPassword = `Fac@${Math.floor(100000 + Math.random() * 900000)}`;
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(rawTempPassword, salt);
+
+      const newUser = await User.create(
+        {
+          firstName: rec.firstName.trim(),
+          lastName: rec.lastName.trim(),
+          email,
+          phone: rec.phone ? String(rec.phone).trim() : null,
+          role: 'TEACHER',
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          passwordHash,
+        },
+        { transaction: t }
+      );
+
+      const newTeacher = await Teacher.create(
+        {
+          userId: newUser.id,
+          departmentId: rec.coreDepartmentId,
+          designation: rec.designation ? String(rec.designation).trim() : 'Assistant Professor',
+          joiningDate: rec.joiningDate ? new Date(rec.joiningDate) : new Date(),
+        },
+        { transaction: t }
+      );
+
+      imported.push({
+        teacherId: newTeacher.id,
+        userId: newUser.id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        name: `${newUser.firstName} ${newUser.lastName}`,
+        email: newUser.email,
+        temporaryPassword: rawTempPassword,
+        designation: newTeacher.designation,
+        coreDepartmentId: rec.coreDepartmentId,
+        coreDepartmentCode: rec.coreDepartmentCode || '',
+        coreDepartmentName: rec.coreDepartmentName || rec.coreDepartment || '',
+        status: 'ACTIVE',
+      });
+    }
+
+    await logAudit(req, 'DEAN_BULK_IMPORT_FACULTY', {
+      importedCount: imported.length,
+      skippedCount: skipped.length,
+    });
+
+    await t.commit();
+
+    return res.json({
+      success: true,
+      message: `Successfully imported ${imported.length} faculty member(s).`,
+      data: {
+        importedCount: imported.length,
+        skippedCount: skipped.length,
+        imported,
+        skipped,
+      },
+    });
+  } catch (error: any) {
+    await t.rollback();
+    logger.error('DEAN_BULK_IMPORT_FACULTY_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to import faculty members.' });
+  }
+};
+
+/**
+ * DELETE /api/dean/faculty/:id
+ * Soft deletes / archives a faculty member.
+ * - Sets Teacher.status = 'ARCHIVED'
+ * - Sets Teacher.archivedAt = new Date()
+ * - Sets Teacher.archivedBy = req.user.id
+ * - Sets User.status = 'INACTIVE'
+ * - Preserves all academic records (FacultyAssignment, AttendanceSession, AttendanceRecord, StudentMarks) intact.
+ * - Records audit log FACULTY_ARCHIVED.
+ */
+export const archiveFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const teacher = await Teacher.findByPk(id, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'status'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      transaction: t,
+    });
+
+    if (!teacher) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Faculty record not found.' });
+    }
+
+    if (teacher.status === 'ARCHIVED') {
+      await t.rollback();
+      return res.status(400).json({ error: 'Faculty member is already archived.' });
+    }
+
+    const teacherUser = (teacher as any).user;
+    const teacherDept = (teacher as any).department;
+
+    // 1. Update Teacher status to ARCHIVED with metadata
+    await teacher.update(
+      {
+        status: 'ARCHIVED',
+        archivedAt: new Date(),
+        archivedBy: req.user?.id || null,
+      },
+      { transaction: t }
+    );
+
+    // 2. Disable User account for login
+    if (teacher.userId) {
+      const user = await User.findByPk(teacher.userId, { transaction: t });
+      if (user) {
+        await user.update({ status: 'INACTIVE' }, { transaction: t });
+      }
+    }
+
+    // 3. Log Audit
+    await logAudit(req, 'FACULTY_ARCHIVED', {
+      teacherId: teacher.id,
+      userId: teacher.userId,
+      facultyName: `${teacherUser?.firstName || ''} ${teacherUser?.lastName || ''}`.trim(),
+      email: teacherUser?.email,
+      department: teacherDept?.name,
+      departmentCode: teacherDept?.code,
+      archivedBy: req.user?.id,
+      archivedAt: new Date(),
+    });
+
+    await t.commit();
+
+    return res.json({
+      success: true,
+      message: 'Faculty archived successfully.',
+      data: {
+        id: teacher.id,
+        status: 'ARCHIVED',
+      },
+    });
+  } catch (error: any) {
+    await t.rollback();
+    logger.error('DEAN_ARCHIVE_FACULTY_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to archive faculty member.' });
+  }
+};
+
+/**
+ * POST /api/dean/faculty/:id/restore
+ * Restores an archived faculty member back to ACTIVE.
+ * - Sets Teacher.status = 'ACTIVE'
+ * - Clears Teacher.archivedAt and Teacher.archivedBy
+ * - Sets User.status = 'ACTIVE'
+ * - Preserves existing historical assignments
+ * - Logs audit record FACULTY_RESTORED
+ */
+export const restoreFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const teacher = await Teacher.findByPk(id, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'status'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      transaction: t,
+    });
+
+    if (!teacher) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Faculty record not found.' });
+    }
+
+    if (teacher.status !== 'ARCHIVED') {
+      await t.rollback();
+      return res.status(400).json({ error: 'Faculty member is not archived.' });
+    }
+
+    const teacherUser = (teacher as any).user;
+    const teacherDept = (teacher as any).department;
+
+    // 1. Update Teacher status to ACTIVE
+    await teacher.update(
+      {
+        status: 'ACTIVE',
+        archivedAt: null,
+        archivedBy: null,
+      },
+      { transaction: t }
+    );
+
+    // 2. Enable User account
+    if (teacher.userId) {
+      const user = await User.findByPk(teacher.userId, { transaction: t });
+      if (user) {
+        await user.update({ status: 'ACTIVE' }, { transaction: t });
+      }
+    }
+
+    // 3. Log Audit
+    await logAudit(req, 'FACULTY_RESTORED', {
+      teacherId: teacher.id,
+      userId: teacher.userId,
+      facultyName: `${teacherUser?.firstName || ''} ${teacherUser?.lastName || ''}`.trim(),
+      email: teacherUser?.email,
+      department: teacherDept?.name,
+      departmentCode: teacherDept?.code,
+      restoredBy: req.user?.id,
+      restoredAt: new Date(),
+    });
+
+    await t.commit();
+
+    return res.json({
+      success: true,
+      message: 'Faculty restored successfully.',
+      data: {
+        id: teacher.id,
+        status: 'ACTIVE',
+      },
+    });
+  } catch (error: any) {
+    await t.rollback();
+    logger.error('DEAN_RESTORE_FACULTY_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to restore faculty member.' });
+  }
+};
+
+/**
+ * GET /api/dean/faculty/archived
+ * Retrieves all archived faculty with full metadata (archivedAt, archivedByUser, historical assignments summary).
+ */
+export const getArchivedFacultyList = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { search, departmentId } = req.query;
+
+    const whereUser: any = {};
+    if (search) {
+      whereUser[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const teachers = await Teacher.findAll({
+      where: {
+        status: 'ARCHIVED',
+        ...(departmentId && departmentId !== 'ALL' ? { departmentId } : {}),
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status', 'createdAt'],
+          where: whereUser,
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'archivedByUser',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['archivedAt', 'DESC'], ['updatedAt', 'DESC']],
+    });
+
+    const formatted = await Promise.all(
+      teachers.map(async (t: any) => {
+        const assignments = await FacultyAssignment.findAll({
+          where: { userId: t.userId },
+          include: [{ model: Subject, as: 'subject', attributes: ['name', 'code'] }],
+        });
+
+        const subjectNames = Array.from(new Set(assignments.map((a: any) => a.subject?.name).filter(Boolean)));
+        const archivedByName = t.archivedByUser
+          ? `${t.archivedByUser.firstName || ''} ${t.archivedByUser.lastName || ''}`.trim() || t.archivedByUser.email
+          : 'Dean Academics';
+
+        return {
+          id: t.id,
+          userId: t.userId,
+          name: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim(),
+          email: t.user?.email,
+          phone: t.user?.phone,
+          profileImage: t.user?.profileImage,
+          departmentId: t.departmentId,
+          departmentName: t.department?.name,
+          departmentCode: t.department?.code,
+          designation: t.designation,
+          status: 'ARCHIVED',
+          joiningDate: t.joiningDate,
+          archivedAt: t.archivedAt,
+          archivedBy: archivedByName,
+          archivedByEmail: t.archivedByUser?.email || null,
+          totalAssignments: assignments.length,
+          previousSubjects: subjectNames.length > 0 ? subjectNames.join(', ') : 'No historical assignments',
+          createdAt: t.createdAt,
+        };
+      })
+    );
+
+    return res.json({ success: true, data: formatted });
+  } catch (error) {
+    logger.error('DEAN_GET_ARCHIVED_FACULTY_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * GET /api/dean/faculty/:id
+ * Dedicated faculty profile endpoint returning full personal, academic, login, teaching, attendance, and marks details.
+ */
+export const getFacultyProfile = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { id } = req.params;
+
+    const teacher = await Teacher.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status', 'mustChangePassword', 'createdAt'],
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'archivedByUser',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ error: 'Faculty record not found.' });
+    }
+
+    const userId = teacher.userId;
+
+    // 1. Current & Historical Teaching Assignments
+    const assignments = await FacultyAssignment.findAll({
+      where: { userId },
+      include: [
+        { model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'credits', 'type', 'semester'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      order: [['academicYear', 'DESC'], ['semester', 'ASC'], ['createdAt', 'DESC']],
+    });
+
+    const activeAssignments = assignments.filter((a) => a.status === 'ACTIVE');
+    const historicalAssignments = assignments.filter((a) => a.status !== 'ACTIVE');
+
+    const assignmentIds = assignments.map((a) => a.id);
+
+    // 2. Attendance History
+    let attendanceHistory: any[] = [];
+    if (assignmentIds.length > 0) {
+      const sessions = await AttendanceSession.findAll({
+        where: { facultyAssignmentId: { [Op.in]: assignmentIds } },
+        include: [
+          { model: Subject, as: 'subject', attributes: ['name', 'code'] },
+          { model: Department, as: 'department', attributes: ['name', 'code'] },
+        ],
+        order: [['attendanceDate', 'DESC'], ['sessionPeriod', 'ASC']],
+        limit: 50,
+      });
+
+      attendanceHistory = sessions.map((s: any) => ({
+        id: s.id,
+        date: s.attendanceDate,
+        subject: s.subject?.name || 'Subject',
+        subjectCode: s.subject?.code || '',
+        section: s.section,
+        semester: s.semester,
+        period: s.sessionPeriod,
+        present: s.presentCount,
+        absent: s.absentCount,
+        totalStudents: s.totalStudents,
+        status: s.status,
+      }));
+    }
+
+    // 3. Marks / Assessment History
+    let marksHistory: any[] = [];
+    if (assignmentIds.length > 0) {
+      try {
+        const subjectIds = Array.from(new Set(assignments.map((a) => a.subjectId)));
+        const departmentIds = Array.from(new Set(assignments.map((a) => a.departmentId)));
+
+        const assessments = await Assessment.findAll({
+          where: {
+            subjectId: { [Op.in]: subjectIds },
+            departmentId: { [Op.in]: departmentIds },
+          },
+          include: [
+            { model: Subject, as: 'subject', attributes: ['name', 'code'] },
+            { model: Department, as: 'department', attributes: ['name', 'code'] },
+          ],
+          limit: 30,
+        });
+
+        marksHistory = assessments.map((m: any) => ({
+          id: m.id,
+          subject: m.subject?.name || 'N/A',
+          subjectCode: m.subject?.code || '',
+          section: m.section || 'All',
+          assessment: m.name,
+          maxMarks: m.maxMarks,
+          academicYear: m.academicYear,
+          status: m.status,
+        }));
+      } catch (err) {
+        logger.warn('Assessment/Marks history lookup non-fatal error:', err);
+      }
+    }
+
+    // 4. Audit History (Safely queried)
+    let auditLogs: any[] = [];
+    try {
+      auditLogs = await AuditLog.findAll({
+        where: { userId },
+        order: [['createdAt', 'DESC']],
+        limit: 15,
+      });
+    } catch (auditErr) {
+      logger.warn('Audit lookup non-fatal error:', auditErr);
+    }
+
+    const archivedByName = teacher.archivedByUser
+      ? `${teacher.archivedByUser.firstName || ''} ${teacher.archivedByUser.lastName || ''}`.trim() || teacher.archivedByUser.email
+      : null;
+
+    return res.json({
+      success: true,
+      data: {
+        faculty: {
+          id: teacher.id,
+          userId: teacher.userId,
+          firstName: teacher.user?.firstName || '',
+          lastName: teacher.user?.lastName || '',
+          name: `${teacher.user?.firstName || ''} ${teacher.user?.lastName || ''}`.trim(),
+          email: teacher.user?.email || '',
+          phone: teacher.user?.phone || null,
+          profileImage: teacher.user?.profileImage || null,
+          designation: teacher.designation,
+          joiningDate: teacher.joiningDate,
+          status: teacher.status,
+          archivedAt: teacher.archivedAt,
+          archivedBy: archivedByName,
+          coreDepartment: {
+            id: teacher.department?.id || teacher.departmentId,
+            name: teacher.department?.name || 'Department',
+            code: teacher.department?.code || 'N/A',
+          },
+        },
+        account: {
+          id: teacher.user?.id,
+          email: teacher.user?.email || '',
+          status: teacher.user?.status || 'ACTIVE',
+          mustChangePassword: teacher.user?.mustChangePassword || false,
+        },
+        teachingAssignments: assignments.map((a: any) => ({
+          id: a.id,
+          academicYear: a.academicYear,
+          teachingDepartment: a.department?.name || teacher.department?.name || 'Department',
+          teachingDepartmentCode: a.department?.code || teacher.department?.code || '',
+          semester: a.semester,
+          subject: a.subject?.name || 'Subject',
+          subjectCode: a.subject?.code || '',
+          section: a.section,
+          status: a.status,
+        })),
+        historicalAssignments: historicalAssignments.map((a: any) => ({
+          id: a.id,
+          academicYear: a.academicYear,
+          teachingDepartment: a.department?.name || teacher.department?.name || 'Department',
+          teachingDepartmentCode: a.department?.code || teacher.department?.code || '',
+          semester: a.semester,
+          subject: a.subject?.name || 'Subject',
+          subjectCode: a.subject?.code || '',
+          section: a.section,
+          status: a.status,
+        })),
+        attendanceHistory,
+        marksHistory,
+        auditLogs: auditLogs.map((log: any) => ({
+          id: log.id,
+          action: log.action,
+          createdAt: log.createdAt,
+          details: log.details,
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('DEAN_GET_FACULTY_PROFILE_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to load faculty profile.' });
+  }
+};
+
+/**
+ * GET /api/dean/faculty/:id/history
+ * Backward-compatible history endpoint forwarding to getFacultyProfile logic.
+ */
+export const getFacultyHistoryById = getFacultyProfile;
+
+/**
+ * POST /api/dean/faculty/:id/regenerate-password
+ * Securely regenerates a temporary password for an active faculty user account.
+ * - Generates secure random password
+ * - Hashes password using bcrypt
+ * - Updates existing User record only (never creates duplicate users)
+ * - Sets mustChangePassword = true
+ * - Logs audit record FACULTY_PASSWORD_REGENERATED
+ * - Returns temporary password in immediate response only
+ */
+export const regenerateFacultyPassword = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const teacher = await Teacher.findByPk(id, {
+      include: [{ model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'status', 'role'] }],
+      transaction: t,
+    });
+
+    if (!teacher) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Faculty record not found.' });
+    }
+
+    if (teacher.status === 'ARCHIVED') {
+      await t.rollback();
+      return res.status(400).json({ error: 'Password regeneration is unavailable while this faculty account is archived.' });
+    }
+
+    const user = await User.findByPk(teacher.userId, { transaction: t });
+    if (!user) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Linked user account not found.' });
+    }
+
+    // Generate secure temporary password (e.g., Fac#k8NpQ4)
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+    let randomSuffix = '';
+    for (let i = 0; i < 6; i++) {
+      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const newTempPassword = `Fac#${randomSuffix}`;
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newTempPassword, salt);
+
+    // Update existing user record ONLY
+    await user.update(
+      {
+        passwordHash,
+        mustChangePassword: false,
+      },
+      { transaction: t }
+    );
+
+    // Audit log (DO NOT store plain password or hash)
+    await logAudit(req, 'FACULTY_PASSWORD_REGENERATED', {
+      teacherId: teacher.id,
+      facultyUserId: user.id,
+      facultyName: `${user.firstName} ${user.lastName}`.trim(),
+      facultyEmail: user.email,
+      performedBy: req.user?.id,
+      timestamp: new Date(),
+    });
+
+    await t.commit();
+
+    return res.json({
+      success: true,
+      message: 'Temporary password generated successfully.',
+      data: {
+        facultyName: `${user.firstName} ${user.lastName}`.trim(),
+        loginEmail: user.email,
+        temporaryPassword: newTempPassword,
+      },
+    });
+  } catch (error: any) {
+    await t.rollback();
+    logger.error('DEAN_REGENERATE_FACULTY_PASSWORD_ERROR:', error);
+    return res.status(500).json({ error: error.message || 'Failed to regenerate faculty password.' });
+  }
+};
+
+
+
 
