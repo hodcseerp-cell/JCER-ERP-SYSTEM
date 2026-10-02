@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -552,12 +553,10 @@ export const HodSectionDetailPage: React.FC = () => {
               <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase font-extrabold border-b border-neutral-800">
                 <tr className="border-b border-neutral-800 bg-[#111111] dark:bg-neutral-950 text-[10px] font-black uppercase tracking-wider text-white">
                   <th className="py-3 px-4 w-16 text-center text-white">SL NO</th>
-                  {section?.semester === 1 && <th className="py-3 px-3 w-24 text-white">ROLL NO</th>}
-                  <th className="py-3 px-3 text-white">USN</th>
-                  <th className="py-3 px-3 text-white">ENROLLMENT NUMBER</th>
+                  <th className="py-3 px-4 text-white">ENROLLMENT NUMBER</th>
                   <th className="py-3 px-4 text-white">STUDENT NAME</th>
-                  <th className="py-3 px-3 text-white">ADMISSION TYPE</th>
-                  <th className="py-3 px-3 text-white">STATUS</th>
+                  <th className="py-3 px-4 text-white">SEMESTER</th>
+                  <th className="py-3 px-4 text-white">STATUS</th>
                   <th className="py-3 px-4 text-right text-white">ACTIONS</th>
                 </tr>
               </thead>
@@ -569,20 +568,8 @@ export const HodSectionDetailPage: React.FC = () => {
                       {index + 1}
                     </td>
 
-                    {/* Roll Number (Semester 1 only) */}
-                    {section?.semester === 1 && (
-                      <td className="py-3 px-3 font-black text-neutral-900 dark:text-white">
-                        {s.rollNumber || <span className="text-neutral-300 dark:text-neutral-600">—</span>}
-                      </td>
-                    )}
-
-                    {/* USN */}
-                    <td className="py-3 px-3 font-mono font-bold text-neutral-800 dark:text-neutral-200">
-                      {s.usn || <span className="text-neutral-300 dark:text-neutral-600">—</span>}
-                    </td>
-
                     {/* Enrollment Number (authoritative ERP identifier) */}
-                    <td className="py-3 px-3 font-mono text-[11px] font-bold text-blue-700 dark:text-blue-400">
+                    <td className="py-3 px-4 font-mono font-bold text-neutral-800 dark:text-neutral-200">
                       {s.enrollmentNumber || '—'}
                     </td>
 
@@ -594,17 +581,15 @@ export const HodSectionDetailPage: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Admission Type */}
-                    <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-[10px] font-bold">
-                        {s.admissionType}
-                      </span>
+                    {/* Semester */}
+                    <td className="py-3 px-4 font-bold text-neutral-700 dark:text-neutral-300">
+                      {s.semester ? `Sem ${s.semester}` : `Sem ${section?.semester || 1}`}
                     </td>
 
                     {/* Status */}
-                    <td className="py-3 px-3">
+                    <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
-                        {s.admissionStatus}
+                        {s.admissionStatus || 'APPROVED'}
                       </span>
                     </td>
 
@@ -643,135 +628,142 @@ export const HodSectionDetailPage: React.FC = () => {
       </div>
 
       {/* ── MOVE STUDENT MODAL ─────────────────────────────────────────────────── */}
-      {moveModalOpen && targetStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/50 backdrop-blur-xs">
-          <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-black text-neutral-900 dark:text-white">
-                  Move Student
-                </h3>
-                <p className="text-xs text-neutral-500">
-                  Transfer {targetStudent.name} from {section?.name}
-                </p>
-              </div>
-              <button
-                onClick={() => setMoveModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
-                <AlertCircle size={15} className="shrink-0" />
-                <span>{modalError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitMove} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Destination Section <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={targetSectionId}
-                  onChange={(e) => setTargetSectionId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {siblingSections.map((sec) => (
-                    <option key={sec.id} value={sec.id}>
-                      {sec.name} (Capacity: {sec.studentCount || 0}/{sec.capacity})
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[10px] text-neutral-400 mt-1 block">
-                  Only active sections in Semester {section?.semester} can receive this student.
-                </span>
-              </div>
-
-              {section?.semester === 1 && (
+      {moveModalOpen && targetStudent &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                    Roll Number in Destination Section (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 01, 15 (Optional)"
-                    value={newRollNumber}
-                    onChange={(e) => setNewRollNumber(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <h3 className="text-base font-black text-neutral-900 dark:text-white">
+                    Move Student
+                  </h3>
+                  <p className="text-xs text-neutral-500">
+                    Transfer {targetStudent.name} from {section?.name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMoveModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {modalError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{modalError}</span>
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-end gap-2.5">
+              <form onSubmit={handleSubmitMove} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                    Destination Section <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={targetSectionId}
+                    onChange={(e) => setTargetSectionId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {siblingSections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.name} (Capacity: {sec.studentCount || 0}/{sec.capacity})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-neutral-400 mt-1 block">
+                    Only active sections in Semester {section?.semester} can receive this student.
+                  </span>
+                </div>
+
+                {section?.semester === 1 && (
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                      Roll Number in Destination Section (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 01, 15 (Optional)"
+                      value={newRollNumber}
+                      onChange={(e) => setNewRollNumber(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setMoveModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {submitting ? 'Transferring...' : 'Transfer Student'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+
+      {/* ── REMOVE STUDENT CONFIRMATION MODAL ─────────────────────────────────── */}
+      {removeModalOpen && targetStudent &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-sm w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+                <UserMinus size={24} />
+              </div>
+
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-black text-neutral-900 dark:text-white">
+                  Remove from Section?
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Are you sure you want to remove <strong>{targetStudent.name}</strong> from {section?.name}?
+                </p>
+                <p className="text-[11px] text-neutral-400 pt-1">
+                  The student will become unallocated. Their academic enrollment record will NOT be deleted.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setMoveModalOpen(false)}
+                  onClick={() => setRemoveModalOpen(false)}
                   className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  onClick={handleConfirmRemove}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Transferring...' : 'Transfer Student'}
+                  {submitting ? 'Removing...' : 'Confirm Remove'}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── REMOVE STUDENT CONFIRMATION MODAL ─────────────────────────────────── */}
-      {removeModalOpen && targetStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/50 backdrop-blur-xs">
-          <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-sm w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
-              <UserMinus size={24} />
             </div>
+          </div>,
+          document.body
+        )}
 
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-black text-neutral-900 dark:text-white">
-                Remove from Section?
-              </h3>
-              <p className="text-xs text-neutral-500">
-                Are you sure you want to remove <strong>{targetStudent.name}</strong> from {section?.name}?
-              </p>
-              <p className="text-[11px] text-neutral-400 pt-1">
-                The student will become unallocated. Their academic enrollment record will NOT be deleted.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setRemoveModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={handleConfirmRemove}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md transition-colors disabled:opacity-50"
-              >
-                {submitting ? 'Removing...' : 'Confirm Remove'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── EDIT SECTION DETAILS MODAL ────────────────────────────────────────── */}
-      {editModalOpen && section && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/50 backdrop-blur-xs">
+      {editModalOpen && section &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between">
               <div>
@@ -868,7 +860,8 @@ export const HodSectionDetailPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

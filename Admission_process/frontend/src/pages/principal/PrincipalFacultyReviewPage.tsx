@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -128,7 +129,6 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
             section: request.section,
             attendanceAccess: true,
             marksAccess: true,
-            googleSheetsAccess: true,
             status: 'INACTIVE',
           },
         ];
@@ -390,15 +390,6 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
                           >
                             Marks
                           </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-md font-bold ${
-                              assignment.googleSheetsAccess
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/50'
-                                : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'
-                            }`}
-                          >
-                            Sheets
-                          </span>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-center">
@@ -422,8 +413,8 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
       </div>
 
       {/* ── APPROVE MODAL ── */}
-      {showApproveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      {showApproveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
@@ -471,12 +462,13 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── REJECT MODAL ── */}
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      {showRejectModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <XCircle className="w-6 h-6" />
@@ -536,7 +528,8 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

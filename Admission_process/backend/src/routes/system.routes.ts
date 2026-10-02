@@ -7,6 +7,7 @@ import { getBranches } from '../controllers/admission.controller';
 
 const router = Router();
 
+router.get('/academic-years', systemController.getAcademicYears as any);
 router.get('/config', systemController.getConfig as any);
 router.get('/health', systemController.getHealth as any);
 router.get('/db-status', authMiddleware as any, authorizeRoles('SUPER_ADMIN') as any, systemController.dbStatus as any);

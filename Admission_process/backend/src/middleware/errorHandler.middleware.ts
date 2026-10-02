@@ -22,7 +22,7 @@ export const errorHandler = (
 
   if (isSequelizeError) {
     // Structured backend logging for DB / Sequelize errors
-    logger.error('PostgreSQL Database Error in HOD / Section operation:', {
+    logger.error('PostgreSQL Database Error:', {
       correlationId,
       endpoint: req.originalUrl || req.path,
       method: req.method,
@@ -40,11 +40,24 @@ export const errorHandler = (
       stack: err.stack,
     });
 
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      const duplicateField = err.errors?.[0]?.path || 'record';
+      const duplicateMsg = err.errors?.[0]?.message || `A ${duplicateField} with these details already exists.`;
+      res.status(409).json({
+        success: false,
+        errorCode: 'DUPLICATE_RESOURCE',
+        error: duplicateMsg,
+        message: duplicateMsg,
+        referenceId: correlationId,
+      });
+      return;
+    }
+
     errorResponse = {
       success: false,
-      errorCode: 'SECTION_DATABASE_ERROR',
-      error: 'Unable to load section data.',
-      message: 'Unable to load section data.',
+      errorCode: 'DATABASE_ERROR',
+      error: 'Database operation failed. Please try again.',
+      message: 'Database operation failed. Please try again.',
       referenceId: correlationId,
     };
     res.status(500).json(errorResponse);

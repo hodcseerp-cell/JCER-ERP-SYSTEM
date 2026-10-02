@@ -20,14 +20,15 @@ import {
 import { RootState } from '../../store';
 import hodService, { HodStudentItem } from '../../services/hod.service';
 import usePersistentState from '../../hooks/usePersistentState';
+import { useAcademicYear } from '../../context/AcademicYearContext';
 
 export const HodStudentsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { academicYear } = useAcademicYear();
 
   const deptCode = user?.department?.code || 'ECE';
-  const activeAY = '2026-27';
 
   const initialSem = searchParams.get('semester') || 'ALL';
   const initialSec = searchParams.get('section') || 'ALL';
@@ -37,10 +38,13 @@ export const HodStudentsPage: React.FC = () => {
   const [availableSections, setAvailableSections] = useState<string[]>(['A', 'B', 'C']);
 
   // Applied Filters State (Persisted across tabs & refreshes)
+  const isSemesterHandling =
+    user?.department?.type === 'SEMESTER_HANDLING' || user?.department?.code === 'AS';
+
   const [search, setSearch] = usePersistentState<string>('hod_students_search', '');
   const [selectedSemester, setSelectedSemester] = usePersistentState<string>('hod_students_semester', initialSem);
   const [selectedSection, setSelectedSection] = usePersistentState<string>('hod_students_section', initialSec);
-  const [academicYear, setAcademicYear] = usePersistentState<string>('hod_students_ay', activeAY);
+  const [selectedBranch, setSelectedBranch] = usePersistentState<string>('hod_students_branch', 'ALL');
   const [status, setStatus] = usePersistentState<string>('hod_students_status', 'ALL');
   const [admissionType, setAdmissionType] = usePersistentState<string>('hod_students_adm_type', 'ALL');
   const [qualification, setQualification] = useState<string>('ALL');
@@ -49,14 +53,14 @@ export const HodStudentsPage: React.FC = () => {
   const [district, setDistrict] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('date');
-  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
 
   // Pending Filters State (applied when user clicks "Apply Filters")
   const [pendingSearch, setPendingSearch] = useState<string>('');
   const [pendingSemester, setPendingSemester] = useState<string>(initialSem);
   const [pendingSection, setPendingSection] = useState<string>(initialSec);
-  const [pendingAcademicYear, setPendingAcademicYear] = useState<string>(activeAY);
+  const [pendingBranch, setPendingBranch] = useState<string>('ALL');
   const [pendingStatus, setPendingStatus] = useState<string>('ALL');
   const [pendingAdmissionType, setPendingAdmissionType] = useState<string>('ALL');
   const [pendingQualification, setPendingQualification] = useState<string>('ALL');
@@ -65,19 +69,39 @@ export const HodStudentsPage: React.FC = () => {
   const [pendingDistrict, setPendingDistrict] = useState<string>('');
   const [pendingStartDate, setPendingStartDate] = useState<string>('');
   const [pendingEndDate, setPendingEndDate] = useState<string>('');
-  const [pendingSortBy, setPendingSortBy] = useState<string>('date');
-  const [pendingSortOrder, setPendingSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [pendingSortBy, setPendingSortBy] = useState<string>('name');
+  const [pendingSortOrder, setPendingSortOrder] = useState<'ASC' | 'DESC'>('ASC');
 
   // Pagination
   const [page, setPage] = useState<number>(1);
-  const [limit] = useState<number>(10);
+  const initialLimitParam = Number(searchParams.get('limit')) || Number(searchParams.get('pageSize'));
+  const validLimits = [10, 50, 100, 500];
+  const defaultLimit = validLimits.includes(initialLimitParam) ? initialLimitParam : 10;
+  const [limit, setLimit] = usePersistentState<number>('hod_students_limit', defaultLimit);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalStudents, setTotalStudents] = useState<number>(0);
+
+  const handleLimitChange = (newLimit: number) => {
+    const valid = [10, 50, 100, 500].includes(newLimit) ? newLimit : 10;
+    setLimit(valid);
+    setPage(1);
+
+    const newParams = new URLSearchParams(searchParams);
+    if (valid === 10) {
+      newParams.delete('limit');
+      newParams.delete('pageSize');
+    } else {
+      newParams.set('limit', valid.toString());
+    }
+    setSearchParams(newParams, { replace: true });
+  };
 
   // Sync URL query params with state (e.g. from HOD Semester Breakdown "View Cohort")
   useEffect(() => {
     const urlSem = searchParams.get('semester') || 'ALL';
     const urlSec = searchParams.get('section') || 'ALL';
+    const urlBranch = searchParams.get('branch') || 'ALL';
+    const urlLimitStr = searchParams.get('limit') || searchParams.get('pageSize');
     if (urlSem !== selectedSemester) {
       setSelectedSemester(urlSem);
       setPendingSemester(urlSem);
@@ -88,31 +112,69 @@ export const HodStudentsPage: React.FC = () => {
       setPendingSection(urlSec);
       setPage(1);
     }
+    if (urlBranch !== selectedBranch) {
+      setSelectedBranch(urlBranch);
+      setPendingBranch(urlBranch);
+      setPage(1);
+    }
+    if (urlLimitStr) {
+      const urlLimit = Number(urlLimitStr);
+      if ([10, 50, 100, 500].includes(urlLimit) && urlLimit !== limit) {
+        setLimit(urlLimit);
+        setPage(1);
+      }
+    }
   }, [searchParams]);
 
-  // Load available sections dynamically for HOD's department
+  // Load available sections dynamically for HOD's department and selected academic year
   useEffect(() => {
     hodService
-      .getStudentSections()
+      .getStudentSections(selectedSemester === 'ALL' ? undefined : selectedSemester, academicYear)
       .then((secData) => {
         if (Array.isArray(secData) && secData.length > 0) {
           const uniqueNames = Array.from(new Set(secData.map((s) => s.name).filter(Boolean)));
           if (uniqueNames.length > 0) {
             uniqueNames.sort();
             setAvailableSections(uniqueNames);
+          } else {
+            setAvailableSections([]);
           }
+        } else {
+          setAvailableSections([]);
         }
       })
-      .catch((err) => console.warn('Could not load department sections:', err));
-  }, []);
+      .catch((err) => {
+        console.warn('Could not load department sections:', err);
+        setAvailableSections([]);
+      });
+  }, [academicYear, selectedSemester]);
+
+  // Reset section filter if not valid in current academic year
+  useEffect(() => {
+    if (selectedSection !== 'ALL' && availableSections.length > 0) {
+      const cleanSel = formatSectionDisplay(selectedSection);
+      const exists = availableSections.some(
+        (s) => formatSectionDisplay(s) === cleanSel || s === selectedSection
+      );
+      if (!exists) {
+        setSelectedSection('ALL');
+        setPendingSection('ALL');
+      }
+    } else if (selectedSection !== 'ALL' && availableSections.length === 0) {
+      setSelectedSection('ALL');
+      setPendingSection('ALL');
+    }
+  }, [academicYear, availableSections]);
 
   // Fetch student data whenever active filter/page states change
   useEffect(() => {
     fetchStudents();
   }, [
     page,
+    limit,
     selectedSemester,
     selectedSection,
+    selectedBranch,
     academicYear,
     status,
     admissionType,
@@ -146,6 +208,7 @@ export const HodStudentsPage: React.FC = () => {
         limit,
         semester: selectedSemester === 'ALL' ? undefined : selectedSemester,
         section: selectedSection === 'ALL' ? undefined : selectedSection,
+        branch: selectedBranch === 'ALL' ? undefined : selectedBranch,
         status: status === 'ALL' ? undefined : status,
         academicYear: academicYear === 'ALL' ? undefined : academicYear,
         admissionType: admissionType === 'ALL' ? undefined : admissionType,
@@ -200,12 +263,27 @@ export const HodStudentsPage: React.FC = () => {
     setSearchParams(newParams, { replace: true });
   };
 
+  // Quick Filter Branch Selection
+  const handleSelectBranch = (b: string) => {
+    setSelectedBranch(b);
+    setPendingBranch(b);
+    setPage(1);
+
+    const newParams = new URLSearchParams(searchParams);
+    if (b === 'ALL') {
+      newParams.delete('branch');
+    } else {
+      newParams.set('branch', b);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
   // Explicit Search Execution
   const handleExecuteSearch = () => {
     setSearch(pendingSearch.trim());
     setSelectedSemester(pendingSemester);
     setSelectedSection(pendingSection);
-    setAcademicYear(pendingAcademicYear);
+    setSelectedBranch(pendingBranch);
     setStatus(pendingStatus);
     setAdmissionType(pendingAdmissionType);
     setQualification(pendingQualification);
@@ -223,15 +301,17 @@ export const HodStudentsPage: React.FC = () => {
     else newParams.delete('semester');
     if (pendingSection !== 'ALL') newParams.set('section', pendingSection);
     else newParams.delete('section');
+    if (pendingBranch !== 'ALL') newParams.set('branch', pendingBranch);
+    else newParams.delete('branch');
     setSearchParams(newParams, { replace: true });
   };
 
   // Reset Filters
   const handleResetFilters = () => {
     setPendingSearch('');
-    setPendingAcademicYear('ALL');
     setPendingSemester('ALL');
     setPendingSection('ALL');
+    setPendingBranch('ALL');
     setPendingStatus('ALL');
     setPendingAdmissionType('ALL');
     setPendingQualification('ALL');
@@ -240,13 +320,13 @@ export const HodStudentsPage: React.FC = () => {
     setPendingDistrict('');
     setPendingStartDate('');
     setPendingEndDate('');
-    setPendingSortBy('date');
-    setPendingSortOrder('DESC');
+    setPendingSortBy('name');
+    setPendingSortOrder('ASC');
 
     setSearch('');
     setSelectedSemester('ALL');
     setSelectedSection('ALL');
-    setAcademicYear('ALL');
+    setSelectedBranch('ALL');
     setStatus('ALL');
     setAdmissionType('ALL');
     setQualification('ALL');
@@ -255,8 +335,9 @@ export const HodStudentsPage: React.FC = () => {
     setDistrict('');
     setStartDate('');
     setEndDate('');
-    setSortBy('date');
-    setSortOrder('DESC');
+    setSortBy('name');
+    setSortOrder('ASC');
+    setLimit(10);
     setPage(1);
 
     const newParams = new URLSearchParams();
@@ -353,10 +434,10 @@ export const HodStudentsPage: React.FC = () => {
                 : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
             }`}
           >
-            <span className="w-full text-center leading-none">ALL SEM</span>
+            <span className="w-full text-center leading-none">{isSemesterHandling ? 'SEM 1 & 2' : 'ALL SEM'}</span>
           </button>
 
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+          {(isSemesterHandling ? [1, 2] : [1, 2, 3, 4, 5, 6, 7, 8]).map((s) => (
             <button
               key={s}
               onClick={() => handleSelectSemester(s.toString())}
@@ -371,6 +452,30 @@ export const HodStudentsPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* ── Quick Filter by Branch (Applied Science Multi-Branch Scope) ──────── */}
+      {isSemesterHandling && (
+        <div className="space-y-2">
+          <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-450 dark:text-neutral-500">
+            Quick Filter by Actual Branch
+          </label>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth">
+            {['ALL', 'CSE', 'AIML', 'ECE', 'ME', 'CV'].map((b) => (
+              <button
+                key={b}
+                onClick={() => handleSelectBranch(b)}
+                className={`px-3 py-2 rounded-xl border text-center transition-all duration-200 shrink-0 min-w-[85px] h-10 flex items-center justify-center text-xs font-black shadow-sm cursor-pointer ${
+                  selectedBranch === b
+                    ? 'bg-indigo-600 border-indigo-700 text-white'
+                    : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-800 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:scale-[1.01]'
+                }`}
+              >
+                <span className="w-full text-center leading-none">{b === 'ALL' ? 'All Branches' : b}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Quick Filter by Section ─────────────────────────────────────────── */}
       <div className="space-y-2">
@@ -415,78 +520,82 @@ export const HodStudentsPage: React.FC = () => {
 
       {/* ── Search & Advanced Filters Panel (Admin Style) ────────────────────── */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-sm border border-neutral-200/60 dark:border-neutral-800">
-        {/* Search Input Row */}
-        <div className="px-5 py-3.5 flex items-center gap-3 border-b border-neutral-100 dark:border-neutral-800">
-          <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-400 transition-all">
-            <Search className="shrink-0 text-neutral-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search by name, USN, enrollment number, email..."
-              value={pendingSearch}
-              onChange={(e) => setPendingSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleExecuteSearch();
-                }
-              }}
-              className="flex-1 bg-transparent text-sm text-neutral-800 dark:text-white placeholder:text-neutral-400 outline-none font-medium"
-            />
-            {pendingSearch && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingSearch('');
-                  setSearch('');
-                  setPage(1);
+        {/* Search Input Row & Show Students Range Selector */}
+        <div className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div className="flex flex-1 items-center gap-3">
+            <div className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-400 transition-all">
+              <Search className="shrink-0 text-neutral-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search by name, USN, enrollment number, email..."
+                value={pendingSearch}
+                onChange={(e) => setPendingSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleExecuteSearch();
+                  }
                 }}
-                className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors text-xs font-bold cursor-pointer"
-                title="Clear search"
-              >
-                ✕
-              </button>
-            )}
+                className="flex-1 bg-transparent text-sm text-neutral-800 dark:text-white placeholder:text-neutral-400 outline-none font-medium"
+              />
+              {pendingSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingSearch('');
+                    setSearch('');
+                    setPage(1);
+                  }}
+                  className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors text-xs font-bold cursor-pointer"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleExecuteSearch}
+              className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              <Search size={14} />
+              <span>Search</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleExecuteSearch}
-            className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-          >
-            <Search size={14} />
-            <span>Search</span>
-          </button>
+
+          {/* Highlighted Show Students Range Selector */}
+          <div className="shrink-0 flex items-center gap-2.5 self-end md:self-auto pl-0 md:pl-3 md:border-l border-neutral-200 dark:border-neutral-700">
+            <div className="flex items-center gap-2.5 px-3 py-1.5 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl shadow-xs transition-all hover:border-blue-300">
+              <label
+                htmlFor="show-students-range-select"
+                className="text-[11px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
+              >
+                <Users size={14} className="text-blue-600 dark:text-blue-400" />
+                <span>SHOW STUDENTS</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="show-students-range-select"
+                  value={limit}
+                  onChange={(e) => handleLimitChange(Number(e.target.value))}
+                  className="bg-white dark:bg-neutral-900 border border-blue-300 dark:border-blue-700 rounded-lg pl-3 pr-7 py-1 text-xs font-black text-blue-950 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs appearance-none font-mono"
+                >
+                  <option value={10}>1–10</option>
+                  <option value={50}>1–50</option>
+                  <option value={100}>1–100</option>
+                  <option value={500}>1–500</option>
+                </select>
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                  ▼
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Advanced Filters Grid */}
         <div className="px-5 pt-4 pb-5 space-y-4">
-          {/* Row 1: 6 Primary Dropdowns */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-3.5 gap-y-3">
-            {/* Academic Year */}
-            <div className="space-y-1">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
-                Academic Year
-              </label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
-                  <Calendar size={12} />
-                </span>
-                <select
-                  value={pendingAcademicYear}
-                  onChange={(e) => setPendingAcademicYear(e.target.value)}
-                  className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
-                >
-                  <option value="ALL">All Years</option>
-                  {Array.from({ length: 5 }).map((_, i) => {
-                    const y = 2026 + i;
-                    const opt = `${y}-${(y + 1).toString().slice(2)}`;
-                    return (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            </div>
+          {/* Row 1: 5 Primary Dropdowns */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-3.5 gap-y-3">
 
             {/* Semester */}
             <div className="space-y-1">
@@ -723,7 +832,7 @@ export const HodStudentsPage: React.FC = () => {
           <div className="p-20 flex flex-col items-center justify-center gap-4">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-blue-600 border-t-transparent" />
             <p className="text-xs font-black uppercase tracking-widest text-neutral-400">
-              Loading department students...
+              {academicYear ? `Loading students for AY ${academicYear}...` : 'Loading department students...'}
             </p>
           </div>
         ) : students.length === 0 ? (
@@ -735,7 +844,7 @@ export const HodStudentsPage: React.FC = () => {
             <p className="text-xs font-semibold text-neutral-500 max-w-md mx-auto">
               {search || selectedSemester !== 'ALL' || selectedSection !== 'ALL' || status !== 'ALL'
                 ? 'Try adjusting your filters or search terms.'
-                : 'No students are currently enrolled in this department for the selected academic context.'}
+                : `No students found for Academic Year ${academicYear || 'selected'}.`}
             </p>
           </div>
         ) : (
@@ -743,26 +852,42 @@ export const HodStudentsPage: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
                 <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
+                  {isSemesterHandling && <th className="py-4 px-4 text-white text-center w-16">Sl No</th>}
                   <th className="py-4 px-4 text-white">Student</th>
-                  <th className="py-4 px-4 text-white">USN / Enrollment</th>
+                  {isSemesterHandling ? (
+                    <>
+                      <th className="py-4 px-4 text-center text-white">Actual Branch</th>
+                      <th className="py-4 px-4 text-white">USN / App ID</th>
+                    </>
+                  ) : (
+                    <th className="py-4 px-4 text-white">USN / Enrollment</th>
+                  )}
                   <th className="py-4 px-4 text-center text-white">Semester</th>
                   <th className="py-4 px-4 text-center text-white">Section</th>
                   <th className="py-4 px-4 text-center text-white">Attendance %</th>
-                  <th className="py-4 px-4 text-center text-white">Batch</th>
+                  {!isSemesterHandling && <th className="py-4 px-4 text-center text-white">Batch</th>}
                   <th className="py-4 px-4 text-center text-white">Status</th>
                   <th className="py-4 px-4 text-right text-white">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/40 text-xs font-semibold">
-                {students.map((student) => {
+                {students.map((student, idx) => {
                   const displayIdentifier =
                     student.usn || student.enrollmentNumber || student.applicationNumber || '—';
+                  const slNo = student.slNo || idx + 1 + (page - 1) * limit;
 
                   return (
                     <tr
                       key={student.id}
                       className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/20 transition-colors"
                     >
+                      {/* Sl No for Applied Science */}
+                      {isSemesterHandling && (
+                        <td className="py-4 px-4 text-center font-mono font-bold text-neutral-500 dark:text-neutral-400">
+                          {slNo}
+                        </td>
+                      )}
+
                       {/* Student info */}
                       <td className="py-4 px-4">
                         <div>
@@ -772,17 +897,34 @@ export const HodStudentsPage: React.FC = () => {
                           >
                             {student.name}
                           </button>
-    
                         </div>
                       </td>
 
-                      {/* USN / Enrollment */}
+                      {/* Actual Branch for Applied Science */}
+                      {isSemesterHandling && (
+                        <td className="py-4 px-4 text-center whitespace-nowrap">
+                          <span className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] border border-blue-200 dark:border-blue-800">
+                            {student.actualBranch || (student.department?.code === 'CSE-AIML' ? 'AIML' : student.department?.code) || (student.branch === 'CSE-AIML' ? 'AIML' : student.branch) || '—'}
+                          </span>
+                        </td>
+                      )}
+
+                      {/* USN / Enrollment / App ID */}
                       <td className="py-4 px-4 font-mono font-black text-sm text-neutral-900 dark:text-white whitespace-nowrap">
                         <button
                           onClick={() => navigate(`/hod/students/${student.id}`)}
                           className="hover:underline text-left text-sm font-black tracking-wide text-neutral-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400 transition-colors cursor-pointer"
                         >
-                          {displayIdentifier}
+                          {student.usn ? (
+                            <span className="text-neutral-900 dark:text-white">{student.usn}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 font-medium text-xs text-neutral-600 dark:text-neutral-300">
+                              <span>{student.applicationNumber || student.enrollmentNumber || '—'}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 text-[10px] font-bold">
+                                Pre-USN
+                              </span>
+                            </span>
+                          )}
                         </button>
                       </td>
 
@@ -833,10 +975,12 @@ export const HodStudentsPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Batch */}
-                      <td className="py-4 px-4 text-center text-neutral-500 font-semibold whitespace-nowrap">
-                        {student.batchYear || '2026'}
-                      </td>
+                      {/* Batch (for standard HOD) */}
+                      {!isSemesterHandling && (
+                        <td className="py-4 px-4 text-center text-neutral-500 font-semibold whitespace-nowrap">
+                          {student.batchYear || '2026'}
+                        </td>
+                      )}
 
                       {/* Status */}
                       <td className="py-4 px-4 text-center whitespace-nowrap">

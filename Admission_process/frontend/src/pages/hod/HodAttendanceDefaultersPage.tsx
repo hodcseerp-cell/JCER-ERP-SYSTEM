@@ -12,11 +12,13 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import hodService, { HodDefaulterItem } from '../../services/hod.service';
+import { ShowStudentsRangeSelector } from '../../components/common/ShowStudentsRangeSelector';
 
 export const HodAttendanceDefaultersPage: React.FC = () => {
   const [defaulters, setDefaulters] = useState<HodDefaulterItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
+  const [limit, setLimit] = useState<number>(10);
 
   useEffect(() => {
     fetchDefaulters();
@@ -118,7 +120,7 @@ export const HodAttendanceDefaultersPage: React.FC = () => {
       </div>
 
       {/* ── Filter Bar ───────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex items-center justify-between gap-4">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-xs font-bold text-neutral-700 dark:text-neutral-300">
           <span>Filter by Semester:</span>
           <select
@@ -133,9 +135,15 @@ export const HodAttendanceDefaultersPage: React.FC = () => {
           </select>
         </div>
 
-        <span className="text-xs font-extrabold text-rose-600 dark:text-rose-400">
-          Threshold: &lt; 75.0%
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-extrabold text-rose-600 dark:text-rose-400">
+            Threshold: &lt; 75.0%
+          </span>
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => setLimit(newLimit)}
+          />
+        </div>
       </div>
 
       {/* ── Defaulters Table (Admin Style) ───────────────────────────────────── */}
@@ -163,7 +171,7 @@ export const HodAttendanceDefaultersPage: React.FC = () => {
                   </td>
                 </tr>
               ) : defaulters.length > 0 ? (
-                defaulters.map((item) => (
+                defaulters.slice(0, limit).map((item) => (
                   <tr key={item.id} className="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-neutral-900 dark:text-white">
                       {item.name}

@@ -29,13 +29,6 @@ import promotionRoutes from './routes/promotion.routes';
 import deanRoutes from './routes/dean.routes';
 import hodRoutes from './routes/hod.routes';
 import facultyRoutes from './routes/faculty.routes';
-import googleRoutes from './routes/google.routes';
-import {
-  syncGoogleAttendance,
-  syncGoogleMarks,
-  getGoogleSheetSyncHistory,
-  getFacultyMySheets,
-} from './controllers/googleSheets.controller';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -223,6 +216,7 @@ v1Router.get('/documents/view/*', async (req: Request, res: Response, next: Next
 
 // System routes
 v1Router.use('/system', systemRoutes);
+v1Router.get('/academic-years', (systemRoutes as any));
 
 // Branches list (public-ish, used by admission Step 1)
 v1Router.get('/branches', getBranches as any);
@@ -301,19 +295,8 @@ v1Router.use('/dean', deanRoutes);
 // HOD Dashboard routes
 v1Router.use('/hod', hodRoutes);
 
-// Google OAuth & Integration routes
-v1Router.use('/google', googleRoutes);
-
-// Google Sheets synchronization & history endpoints
-v1Router.post('/google-sheets/sync/attendance', (authMiddleware as any), (syncGoogleAttendance as any));
-v1Router.post('/google-sheets/sync/marks', (authMiddleware as any), (syncGoogleMarks as any));
-v1Router.get('/google-sheets/sync-history', (authMiddleware as any), (getGoogleSheetSyncHistory as any));
-
 // Faculty Dashboard routes
 v1Router.use('/faculty', facultyRoutes);
-
-// Faculty Google Sheets access endpoint (legacy alias)
-v1Router.get('/faculty/my-sheets', (authMiddleware as any), (getFacultyMySheets as any));
 
 // Explicit bulletproof routes for Existing Student Onboarding
 const existingOnboardingUpload = multer({ storage: multer.memoryStorage() });

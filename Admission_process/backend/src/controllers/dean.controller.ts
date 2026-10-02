@@ -16,8 +16,10 @@ import Section from '../models/Section';
 import HODAssignmentHistory from '../models/HODAssignmentHistory';
 import FacultyAuthorizationRequest from '../models/FacultyAuthorizationRequest';
 import FacultyAssignment from '../models/FacultyAssignment';
+import HodSubjectHandlingRequest from '../models/HodSubjectHandlingRequest';
 import Notification from '../models/Notification';
 import SystemConfiguration from '../models/SystemConfiguration';
+import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import logger from '../utils/logger.util';
 
 // Helper to record audit log
@@ -1228,7 +1230,15 @@ export const getFacultyAuthorizations = async (req: AuthenticatedRequest, res: R
       where.departmentId = departmentId;
     }
     if (academicYear && academicYear !== 'ALL') {
-      where.academicYear = academicYear;
+      const startYear = String(academicYear).split(/[-–]/)[0].trim();
+      where.academicYear = {
+        [Op.or]: [
+          { [Op.iLike]: `${startYear}-%` },
+          { [Op.iLike]: `${startYear}–%` },
+          { [Op.eq]: academicYear },
+          { [Op.eq]: startYear },
+        ],
+      };
     }
 
     const searchTerm = typeof search === 'string' ? search.trim() : '';
@@ -1261,31 +1271,9 @@ export const getFacultyAuthorizations = async (req: AuthenticatedRequest, res: R
       order: [['createdAt', 'DESC']],
     });
 
-    const formatted = requests.map((item: any) => ({
-      id: item.id,
-      facultyId: item.facultyUserId,
-      facultyName: `${item.faculty?.firstName || ''} ${item.faculty?.lastName || ''}`.trim(),
-      email: item.faculty?.email,
-      phone: item.faculty?.phone,
-      profileImage: item.faculty?.profileImage,
-      departmentId: item.departmentId,
-      departmentName: item.department?.name,
-      departmentCode: item.department?.code,
-      subjectId: item.subjectId,
-      subjectName: item.subject?.name || 'General Assignment',
-      subjectCode: item.subject?.code || 'N/A',
-      semester: item.semester,
-      section: item.section,
-      academicYear: item.academicYear,
-      designation: item.designation,
-      authority: item.authority,
-      status: item.status,
-      rejectionReason: item.rejectionReason,
-      createdBy: item.createdByHOD ? `${item.createdByHOD.firstName} ${item.createdByHOD.lastName}` : 'HOD',
-      createdDate: item.createdAt,
-      decidedBy: item.decidedBy ? `${item.decidedBy.firstName} ${item.decidedBy.lastName}` : null,
-      decidedAt: item.decidedAt,
-    }));
+    const formatted = await Promise.all(
+      requests.map((item: any) => facultyAuthorizationService.formatRequestForQueue(item, 'DEAN'))
+    );
 
     return res.json({ success: true, data: formatted });
   } catch (error: any) {
@@ -1312,6 +1300,8 @@ export const getFacultyAuthorizationById = async (req: AuthenticatedRequest, res
       return res.status(404).json({ error: 'Faculty authorization request not found.' });
     }
 
+    const formatted = await facultyAuthorizationService.formatRequestForQueue(request, 'DEAN');
+
     // Fetch all assignments associated with this faculty user
     const assignments = await FacultyAssignment.findAll({
       where: { userId: request.facultyUserId },
@@ -1320,7 +1310,7 @@ export const getFacultyAuthorizationById = async (req: AuthenticatedRequest, res
     });
 
     const responseData = {
-      ...request.toJSON(),
+      ...formatted,
       assignments: assignments.map((a: any) => ({
         id: a.id,
         subjectId: a.subjectId,
@@ -1333,7 +1323,6 @@ export const getFacultyAuthorizationById = async (req: AuthenticatedRequest, res
         academicYear: a.academicYear,
         attendanceAccess: a.attendanceAccess,
         marksAccess: a.marksAccess,
-        googleSheetsAccess: a.googleSheetsAccess,
         status: a.status,
       })),
     };
@@ -1363,126 +1352,58 @@ export const getFacultyAuthorizationCount = async (req: AuthenticatedRequest, re
 };
 
 export const approveFacultyAuthorization = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
-  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
 
-    const authReq = await FacultyAuthorizationRequest.findByPk(id, { transaction: t });
-    if (!authReq) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Authorization request not found.' });
-    }
-
-    if (authReq.status === 'APPROVED') {
-      await t.rollback();
-      return res.status(400).json({ error: 'This faculty request has already been approved.' });
-    }
-
-    // 1. Update Request Status
-    await authReq.update(
-      {
-        status: 'APPROVED',
-        decidedByUserId: req.user?.id || null,
-        decidedAt: new Date(),
-        rejectionReason: null,
-      },
-      { transaction: t }
-    );
-
-    // 2. Activate Faculty User Account
-    await User.update(
-      { status: 'ACTIVE' },
-      { where: { id: authReq.facultyUserId }, transaction: t }
-    );
-
-    // 3. Ensure Teacher Record exists & is linked
-    let teacher = await Teacher.findOne({
-      where: { userId: authReq.facultyUserId },
-      transaction: t,
-    });
-
-    if (!teacher) {
-      teacher = await Teacher.create(
-        {
-          userId: authReq.facultyUserId,
-          departmentId: authReq.departmentId,
-          designation: authReq.designation || 'Assistant Professor',
-          joiningDate: new Date(),
-        },
-        { transaction: t }
-      );
-    }
-
-    // 4. Activate all FacultyAssignment records for this faculty user
-    await FacultyAssignment.update(
-      { status: 'ACTIVE' },
-      { where: { userId: authReq.facultyUserId }, transaction: t }
-    );
-
-    await t.commit();
-    await logAudit(req, 'APPROVE_FACULTY_AUTHORIZATION', {
+    const result = await facultyAuthorizationService.approveRequest({
       requestId: id,
-      facultyUserId: authReq.facultyUserId,
-      departmentId: authReq.departmentId,
+      expectedAuthority: 'DEAN',
+      approver: {
+        id: req.user!.id,
+        role: req.user!.role,
+        firstName: req.user?.firstName,
+        lastName: req.user?.lastName,
+        email: req.user?.email,
+      },
+      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'System',
     });
 
-    return res.json({
-      success: true,
-      message: 'Faculty authorization approved successfully. Faculty account is now active.',
-    });
-  } catch (error) {
-    await t.rollback();
-    return next(error);
+    return res.json(result);
+  } catch (error: any) {
+    logger.error('Dean approve error:', error);
+    return res.status(400).json({ error: error.message || 'Failed to approve faculty authorization.' });
   }
 };
 
 export const rejectFacultyAuthorization = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
-  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { reason } = req.body;
 
     if (!reason || reason.trim().length === 0) {
-      await t.rollback();
       return res.status(400).json({ error: 'A rejection reason is required.' });
     }
 
-    const authReq = await FacultyAuthorizationRequest.findByPk(id, { transaction: t });
-    if (!authReq) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Authorization request not found.' });
-    }
-
-    await authReq.update(
-      {
-        status: 'REJECTED',
-        rejectionReason: reason.trim(),
-        decidedByUserId: req.user?.id || null,
-        decidedAt: new Date(),
-      },
-      { transaction: t }
-    );
-
-    // Keep user suspended or inactive
-    await User.update(
-      { status: 'INACTIVE' },
-      { where: { id: authReq.facultyUserId }, transaction: t }
-    );
-
-    await t.commit();
-    await logAudit(req, 'REJECT_FACULTY_AUTHORIZATION', {
+    const result = await facultyAuthorizationService.rejectRequest({
       requestId: id,
-      facultyUserId: authReq.facultyUserId,
-      reason: reason.trim(),
+      expectedAuthority: 'DEAN',
+      reason,
+      approver: {
+        id: req.user!.id,
+        role: req.user!.role,
+        firstName: req.user?.firstName,
+        lastName: req.user?.lastName,
+        email: req.user?.email,
+      },
+      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'System',
     });
 
-    return res.json({
-      success: true,
-      message: 'Faculty authorization request rejected.',
-    });
-  } catch (error) {
-    await t.rollback();
-    return next(error);
+    return res.json(result);
+  } catch (error: any) {
+    logger.error('Dean reject error:', error);
+    return res.status(400).json({ error: error.message || 'Failed to reject faculty authorization.' });
   }
 };
 
@@ -1534,7 +1455,6 @@ export const getFacultyAssignments = async (req: AuthenticatedRequest, res: Resp
       academicYear: a.academicYear,
       attendanceAccess: a.attendanceAccess,
       marksAccess: a.marksAccess,
-      googleSheetsAccess: a.googleSheetsAccess,
       status: a.status,
     }));
 
@@ -1543,3 +1463,391 @@ export const getFacultyAssignments = async (req: AuthenticatedRequest, res: Resp
     return next(error);
   }
 };
+
+// ─── 8. HOD Subject Handling Requests Module ───────────────────────────────────
+
+/**
+ * GET /api/dean/hod-subject-requests
+ * Returns all HOD subject handling requests with filters
+ */
+export const getHodSubjectRequests = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { status, semester, departmentId, search, academicYear } = req.query as any;
+
+    const whereClause: any = {};
+    if (status && status !== 'ALL') {
+      whereClause.status = status;
+    }
+    if (semester && semester !== 'ALL') {
+      whereClause.semester = Number(semester);
+    }
+    if (departmentId && departmentId !== 'ALL') {
+      whereClause.departmentId = departmentId;
+    }
+    if (academicYear && academicYear !== 'ALL') {
+      whereClause.academicYear = { [Op.iLike]: `%${academicYear.split(/[-–]/)[0].trim()}%` };
+    }
+
+    const requests = await HodSubjectHandlingRequest.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'hodUser',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage'],
+          where: search
+            ? {
+                [Op.or]: [
+                  { firstName: { [Op.iLike]: `%${search.trim()}%` } },
+                  { lastName: { [Op.iLike]: `%${search.trim()}%` } },
+                  { email: { [Op.iLike]: `%${search.trim()}%` } },
+                ],
+              }
+            : {},
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code', 'type'],
+        },
+        {
+          model: Subject,
+          as: 'subject',
+          attributes: ['id', 'name', 'code', 'credits', 'type', 'semester'],
+        },
+        {
+          model: User,
+          as: 'reviewer',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+        {
+          model: FacultyAssignment,
+          as: 'teachingAssignment',
+          attributes: ['id', 'status', 'section', 'academicYear', 'assignmentType'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const formatted = requests.map((r: any) => ({
+      id: r.id,
+      hodUserId: r.hodUserId,
+      hodName: `${r.hodUser?.firstName || ''} ${r.hodUser?.lastName || ''}`.trim() || 'HOD',
+      email: r.hodUser?.email,
+      phone: r.hodUser?.phone,
+      profileImage: r.hodUser?.profileImage,
+      departmentId: r.departmentId,
+      departmentName: r.department?.name,
+      departmentCode: r.department?.code,
+      semester: r.semester,
+      subjectId: r.subjectId,
+      subjectName: r.subject?.name,
+      subjectCode: r.subject?.code,
+      subjectType: r.subject?.type,
+      credits: r.subject?.credits,
+      academicYear: r.academicYear,
+      reason: r.reason,
+      status: r.status,
+      rejectionReason: r.rejectionReason,
+      reviewedBy: r.reviewedBy,
+      reviewerName: r.reviewer ? `${r.reviewer.firstName || ''} ${r.reviewer.lastName || ''}`.trim() : null,
+      reviewedAt: r.reviewedAt,
+      teachingAssignmentId: r.teachingAssignmentId,
+      teachingAssignment: r.teachingAssignment,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+
+    return res.json({ success: true, data: formatted });
+  } catch (error) {
+    logger.error('DEAN_GET_HOD_SUBJECT_REQUESTS_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * GET /api/dean/hod-subject-requests/count
+ * Returns the count of pending HOD subject handling requests
+ */
+export const getHodSubjectRequestCount = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const pendingCount = await HodSubjectHandlingRequest.count({
+      where: { status: 'PENDING' },
+    });
+    return res.json({ success: true, data: { pendingCount } });
+  } catch (error) {
+    logger.error('DEAN_GET_HOD_SUBJECT_REQUEST_COUNT_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * GET /api/dean/hod-subject-requests/:id
+ * Retrieve a single request by ID
+ */
+export const getHodSubjectRequestById = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const r: any = await HodSubjectHandlingRequest.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'hodUser',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage'],
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code', 'type'],
+        },
+        {
+          model: Subject,
+          as: 'subject',
+          attributes: ['id', 'name', 'code', 'credits', 'type', 'semester'],
+        },
+        {
+          model: User,
+          as: 'reviewer',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+        {
+          model: FacultyAssignment,
+          as: 'teachingAssignment',
+        },
+      ],
+    });
+
+    if (!r) {
+      return res.status(404).json({ error: 'Subject handling request not found.' });
+    }
+
+    const data = {
+      id: r.id,
+      hodUserId: r.hodUserId,
+      hodName: `${r.hodUser?.firstName || ''} ${r.hodUser?.lastName || ''}`.trim() || 'HOD',
+      email: r.hodUser?.email,
+      phone: r.hodUser?.phone,
+      profileImage: r.hodUser?.profileImage,
+      departmentId: r.departmentId,
+      departmentName: r.department?.name,
+      departmentCode: r.department?.code,
+      semester: r.semester,
+      subjectId: r.subjectId,
+      subjectName: r.subject?.name,
+      subjectCode: r.subject?.code,
+      subjectType: r.subject?.type,
+      credits: r.subject?.credits,
+      academicYear: r.academicYear,
+      reason: r.reason,
+      status: r.status,
+      rejectionReason: r.rejectionReason,
+      reviewedBy: r.reviewedBy,
+      reviewerName: r.reviewer ? `${r.reviewer.firstName || ''} ${r.reviewer.lastName || ''}`.trim() : null,
+      reviewedAt: r.reviewedAt,
+      teachingAssignmentId: r.teachingAssignmentId,
+      teachingAssignment: r.teachingAssignment,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    };
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    logger.error('DEAN_GET_HOD_SUBJECT_REQUEST_BY_ID_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * POST /api/dean/hod-subject-requests/:id/approve
+ * Approves an HOD subject handling request and activates teaching assignment
+ */
+export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const request: any = await HodSubjectHandlingRequest.findByPk(id, {
+      include: [
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+        { model: User, as: 'hodUser' },
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!request) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Subject handling request not found.' });
+    }
+
+    if (request.status !== 'PENDING') {
+      await transaction.rollback();
+      return res.status(400).json({ error: `Request has already been ${request.status.toLowerCase()}.` });
+    }
+
+    // 1. Check if teaching assignment already exists
+    let assignment = await FacultyAssignment.findOne({
+      where: {
+        userId: request.hodUserId,
+        subjectId: request.subjectId,
+        semester: request.semester,
+        academicYear: request.academicYear,
+        status: 'ACTIVE',
+      },
+      transaction,
+    });
+
+    if (!assignment) {
+      assignment = await FacultyAssignment.create(
+        {
+          userId: request.hodUserId,
+          departmentId: request.departmentId,
+          subjectId: request.subjectId,
+          semester: request.semester,
+          section: 'A',
+          branch: request.department?.code || null,
+          academicYear: request.academicYear,
+          attendanceAccess: true,
+          marksAccess: true,
+          createdByHODId: null,
+          assignmentType: 'HOD_SUBJECT_HANDLING',
+          status: 'ACTIVE',
+        },
+        { transaction }
+      );
+    } else {
+      assignment.assignmentType = 'HOD_SUBJECT_HANDLING';
+      assignment.status = 'ACTIVE';
+      assignment.attendanceAccess = true;
+      assignment.marksAccess = true;
+      await assignment.save({ transaction });
+    }
+
+    // 2. Update Request record
+    request.status = 'APPROVED';
+    request.reviewedBy = req.user?.id || null;
+    request.reviewedAt = new Date();
+    request.teachingAssignmentId = assignment.id;
+    request.rejectionReason = null;
+    await request.save({ transaction });
+
+    // 3. Send Notification to HOD
+    const subjectName = request.subject?.name || 'Subject';
+    const subjectCode = request.subject?.code ? ` (${request.subject.code})` : '';
+    await Notification.create(
+      {
+        title: 'Subject Handling Request Approved',
+        content: `Your request to handle ${subjectName}${subjectCode} for Semester ${request.semester} has been approved.`,
+        type: 'SUCCESS',
+        audience: 'SPECIFIC_USER',
+        targetUserId: request.hodUserId,
+        status: 'PUBLISHED',
+        approvedByAdminId: req.user?.id || null,
+        publishedAt: new Date(),
+      },
+      { transaction }
+    );
+
+    await logAudit(req, 'APPROVE_HOD_SUBJECT_REQUEST', {
+      requestId: request.id,
+      hodUserId: request.hodUserId,
+      subjectId: request.subjectId,
+      semester: request.semester,
+      assignmentId: assignment.id,
+    });
+
+    await transaction.commit();
+
+    return res.json({
+      success: true,
+      message: `Request to handle ${subjectName} approved successfully. Teaching assignment is now active.`,
+      data: {
+        request,
+        assignment,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    logger.error('DEAN_APPROVE_HOD_SUBJECT_REQUEST_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * POST /api/dean/hod-subject-requests/:id/reject
+ * Rejects an HOD subject handling request with mandatory reason
+ */
+export const rejectHodSubjectRequest = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { rejectionReason } = req.body;
+
+    if (!rejectionReason || !rejectionReason.toString().trim()) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Rejection reason is mandatory when rejecting a request.' });
+    }
+
+    const request: any = await HodSubjectHandlingRequest.findByPk(id, {
+      include: [
+        { model: Subject, as: 'subject' },
+        { model: User, as: 'hodUser' },
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!request) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Subject handling request not found.' });
+    }
+
+    if (request.status !== 'PENDING') {
+      await transaction.rollback();
+      return res.status(400).json({ error: `Request has already been ${request.status.toLowerCase()}.` });
+    }
+
+    request.status = 'REJECTED';
+    request.rejectionReason = rejectionReason.toString().trim();
+    request.reviewedBy = req.user?.id || null;
+    request.reviewedAt = new Date();
+    await request.save({ transaction });
+
+    // Send Notification to HOD
+    const subjectName = request.subject?.name || 'Subject';
+    const subjectCode = request.subject?.code ? ` (${request.subject.code})` : '';
+    await Notification.create(
+      {
+        title: 'Subject Handling Request Rejected',
+        content: `Your request to handle ${subjectName}${subjectCode} has been rejected. Reason: ${rejectionReason.toString().trim()}`,
+        type: 'WARNING',
+        audience: 'SPECIFIC_USER',
+        targetUserId: request.hodUserId,
+        status: 'PUBLISHED',
+        approvedByAdminId: req.user?.id || null,
+        publishedAt: new Date(),
+      },
+      { transaction }
+    );
+
+    await logAudit(req, 'REJECT_HOD_SUBJECT_REQUEST', {
+      requestId: request.id,
+      hodUserId: request.hodUserId,
+      subjectId: request.subjectId,
+      reason: rejectionReason,
+    });
+
+    await transaction.commit();
+
+    return res.json({
+      success: true,
+      message: `Request for ${subjectName} rejected.`,
+      data: request,
+    });
+  } catch (error) {
+    await transaction.rollback();
+    logger.error('DEAN_REJECT_HOD_SUBJECT_REQUEST_ERROR:', error);
+    return next(error);
+  }
+};
+

@@ -13,10 +13,12 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import hodService, { HodPerformanceItem } from '../../services/hod.service';
+import { ShowStudentsRangeSelector } from '../../components/common/ShowStudentsRangeSelector';
 
 export const HodStudentPerformancePage: React.FC = () => {
   const [performanceData, setPerformanceData] = useState<HodPerformanceItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [limit, setLimit] = useState<number>(10);
   const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -130,6 +132,11 @@ export const HodStudentPerformancePage: React.FC = () => {
             <option value="B">Section B</option>
             <option value="C">Section C</option>
           </select>
+
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => setLimit(newLimit)}
+          />
         </div>
       </div>
 
@@ -174,7 +181,7 @@ export const HodStudentPerformancePage: React.FC = () => {
                   </td>
                 </tr>
               ) : filteredAndSorted.length > 0 ? (
-                filteredAndSorted.map((item) => (
+                filteredAndSorted.slice(0, limit).map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
                       {item.name}

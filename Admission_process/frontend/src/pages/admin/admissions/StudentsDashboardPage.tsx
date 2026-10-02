@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, Filter, ChevronLeft, ChevronRight, Eye, CheckCircle2, Clock, XCircle, FileText, 
@@ -10,6 +11,7 @@ import API from '../../../services/api';
 import admissionService, { AdmissionApplication } from '../../../services/admission.service';
 import { downloadAdmissionPDF } from '../../admission/src/utils/pdfGenerator';
 import { generateStudentReport, ExportFilterMetadata } from '../../../utils/studentExportGenerator';
+import { ShowStudentsRangeSelector } from '../../../components/common/ShowStudentsRangeSelector';
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-neutral-800 dark:text-neutral-400 dark:border-neutral-700',
@@ -78,6 +80,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   
   // Pagination & Filtering state
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -218,7 +221,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
     try {
       const res = await admissionService.listApplications({
         page,
-        limit: 10,
+        limit,
         status: status === 'ALL' ? undefined : status,
         branchId: branchId === 'ALL' ? undefined : branchId,
         semester: semester === 'ALL' ? undefined : semester,
@@ -275,7 +278,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   useEffect(() => {
     fetchStudentsList();
   }, [
-    page, status, branchId, semester, admissionType, qualification, gender, category, 
+    page, limit, status, branchId, semester, admissionType, qualification, gender, category, 
     district, startDate, endDate, sortBy, sortOrder, search, academicYear
   ]);
 
@@ -621,6 +624,13 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             <Search size={14} />
             Search
           </button>
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+          />
         </div>
 
         {showFilters && (
@@ -1070,8 +1080,8 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
       </div>
 
       {/* Export Modal */}
-      {exportModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {exportModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-md p-6 space-y-5 animate-in fade-in duration-200 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-extrabold uppercase tracking-wider text-neutral-900 dark:text-white">Export Student Database</h3>
@@ -1202,12 +1212,13 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit Student Modal */}
-      {editModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {editModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-extrabold uppercase tracking-wider text-neutral-900 dark:text-white">Modify Student Application</h3>
@@ -1283,12 +1294,13 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Direct Cancel Admission Modal (Two-Step Workflow) */}
-      {cancelDirectModalOpen && selectedStudent && (
-        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      {cancelDirectModalOpen && selectedStudent && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in duration-200">
             
             {cancelDirectStep === 1 ? (
@@ -1484,12 +1496,13 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             )}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Cancelled Modal */}
-      {deleteModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {deleteModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
               <h3 className="text-base font-black text-rose-600 dark:text-rose-400 uppercase tracking-wide flex items-center gap-2">
@@ -1552,7 +1565,8 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

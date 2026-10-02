@@ -14,10 +14,18 @@ class FacultyAuthorizationRequest extends Model {
   public academicYear!: string;
   public designation!: string;
   public createdByHODId!: string;
-  public authority!: 'DEAN' | 'PRINCIPAL';
-  public status!: 'PENDING' | 'APPROVED' | 'REJECTED';
+  public authority!: 'DEAN' | 'PRINCIPAL' | 'DEAN_ACADEMICS' | string;
+  public sequence!: number;
+  public status!: 'PENDING' | 'APPROVED' | 'REJECTED' | 'LOCKED' | string;
+  public overallStatus!: 'PENDING_APPROVAL' | 'AUTHORIZED' | 'REJECTED' | string;
+  public firstApprovedByUserId!: string | null;
+  public firstApprovedByName!: string | null;
+  public firstApprovedRole!: string | null;
+  public firstApprovedAt!: Date | null;
   public rejectionReason!: string | null;
   public decidedByUserId!: string | null;
+  public decidedByName!: string | null;
+  public decidedByRole!: string | null;
   public decidedAt!: Date | null;
   public assignmentsData!: any[] | null;
   public readonly createdAt!: Date;
@@ -57,17 +65,18 @@ FacultyAuthorizationRequest.init(
     },
     semester: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       defaultValue: 1,
     },
     section: {
       type: DataTypes.STRING(20),
-      allowNull: false,
+      allowNull: true,
       defaultValue: 'A',
     },
     academicYear: {
       type: DataTypes.STRING(20),
-      allowNull: false,
+      allowNull: true,
+      defaultValue: '2026-27',
     },
     designation: {
       type: DataTypes.STRING(50),
@@ -83,14 +92,44 @@ FacultyAuthorizationRequest.init(
       },
     },
     authority: {
-      type: DataTypes.ENUM('DEAN', 'PRINCIPAL'),
+      type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: 'DEAN',
     },
+    sequence: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
     status: {
-      type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'),
+      type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: 'PENDING',
+    },
+    overallStatus: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      defaultValue: 'PENDING_APPROVAL',
+    },
+    firstApprovedByUserId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+    },
+    firstApprovedByName: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    firstApprovedRole: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    firstApprovedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     rejectionReason: {
       type: DataTypes.TEXT,
@@ -103,6 +142,14 @@ FacultyAuthorizationRequest.init(
         model: 'users',
         key: 'id',
       },
+    },
+    decidedByName: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    decidedByRole: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
     },
     decidedAt: {
       type: DataTypes.DATE,
@@ -121,7 +168,9 @@ FacultyAuthorizationRequest.init(
       { fields: ['facultyUserId'] },
       { fields: ['departmentId'] },
       { fields: ['status'] },
+      { fields: ['overallStatus'] },
       { fields: ['authority'] },
+      { fields: ['sequence'] },
       { fields: ['academicYear'] },
     ],
   }

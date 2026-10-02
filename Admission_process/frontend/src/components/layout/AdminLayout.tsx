@@ -43,6 +43,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import admissionService from '../../services/admission.service';
+import AcademicYearSelector from '../common/AcademicYearSelector';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 
@@ -585,6 +586,9 @@ export const AdminLayout: React.FC = () => {
 
           {/* Right Controls */}
           <div className="flex items-center space-x-2.5 flex-shrink-0">
+            {/* Global Academic Year Selector */}
+            <AcademicYearSelector />
+
             <button 
               onClick={() => setShowSearch(true)}
               className="w-9 h-9 rounded-full flex items-center justify-center header-dark-btn shadow-sm hover:scale-[1.05] active:scale-[0.95] cursor-pointer"

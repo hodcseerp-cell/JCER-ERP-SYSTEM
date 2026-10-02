@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import { AdmissionApplication, AdmissionListResult } from '../../services/admission.service';
@@ -8,6 +9,7 @@ import {
   CheckCheck, AlertCircle, X, Loader2, Info
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { ShowStudentsRangeSelector } from '../../components/common/ShowStudentsRangeSelector';
 
 interface PrincipalAdmissionQueuePageProps {
   defaultStatus?: string;
@@ -54,6 +56,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
 
   // Filters & Pagination
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState<string>(defaultStatus);
   const [branchId, setBranchId] = useState('ALL');
   const [admissionType, setAdmissionType] = useState('ALL');
@@ -92,7 +95,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
     try {
       const query = new URLSearchParams();
       query.set('page', String(page));
-      query.set('limit', '10');
+      query.set('limit', String(limit));
       if (status) query.set('status', status);
       if (branchId !== 'ALL') query.set('branchId', branchId);
       if (admissionType !== 'ALL') query.set('admissionType', admissionType);
@@ -129,7 +132,7 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
   useEffect(() => {
     fetchApplications();
     // eslint-disable-next-line
-  }, [page, status, branchId, admissionType, qualification, academicYear, startDate, endDate, search, sortBy, sortOrder]);
+  }, [page, limit, status, branchId, admissionType, qualification, academicYear, startDate, endDate, search, sortBy, sortOrder]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -407,10 +410,17 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
           </div>
           <button
             type="submit"
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shrink-0"
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shrink-0 cursor-pointer"
           >
             Search
           </button>
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+          />
         </form>
 
         <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
@@ -653,8 +663,8 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
       </div>
 
       {/* ═══ CONFIRMATION DIALOG MODAL ═══ */}
-      {confirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+      {confirmModalOpen && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-slate-200 dark:border-neutral-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scale-up">
             <div className="flex items-start justify-between">
               <div className="size-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -717,12 +727,13 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══ SUMMARY / RESULTS MODAL ═══ */}
-      {summaryData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+      {summaryData && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-slate-200 dark:border-neutral-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scale-up">
             <div className="flex items-start justify-between">
               <div className="size-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -774,7 +785,8 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -12,6 +12,8 @@ declare module './auth.middleware' {
     departmentId?: string;
     department?: any;
     hod?: any;
+    isSemesterHandling?: boolean;
+    handlingSemesters?: number[] | null;
   }
 }
 
@@ -47,9 +49,12 @@ export const resolveHodDepartmentScope = async (
         });
       }
 
+      const dept = (hod as any).department;
       req.hod = hod;
       req.departmentId = hod.departmentId;
-      req.department = (hod as any).department;
+      req.department = dept;
+      req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
+      req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
       return next();
     }
 
@@ -66,18 +71,23 @@ export const resolveHodDepartmentScope = async (
 
       req.departmentId = dept?.id;
       req.department = dept;
+      req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
+      req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
       return next();
     }
 
-    // For TEACHER and FACULTY connecting personal Google accounts or viewing resources
+    // For TEACHER and FACULTY viewing department resources
     if (role === 'TEACHER' || role === 'FACULTY') {
       const teacher = await Teacher.findOne({
         where: { userId },
         include: [{ model: Department, as: 'department' }],
       });
       if (teacher && (teacher as any).department) {
+        const dept = (teacher as any).department;
         req.departmentId = teacher.departmentId;
-        req.department = (teacher as any).department;
+        req.department = dept;
+        req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
+        req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
         return next();
       }
       const assignment = await FacultyAssignment.findOne({
@@ -85,13 +95,18 @@ export const resolveHodDepartmentScope = async (
         include: [{ model: Department, as: 'department' }],
       });
       if (assignment && (assignment as any).department) {
+        const dept = (assignment as any).department;
         req.departmentId = assignment.departmentId;
-        req.department = (assignment as any).department;
+        req.department = dept;
+        req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
+        req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
         return next();
       }
       const dept = (await Department.findOne({ where: { code: 'CSE' } })) || (await Department.findOne());
       req.departmentId = dept?.id;
       req.department = dept;
+      req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
+      req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
       return next();
     }
 

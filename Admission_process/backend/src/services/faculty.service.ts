@@ -1,35 +1,162 @@
 import { Op } from 'sequelize';
+import db from '../config/database';
 import FacultyAssignment from '../models/FacultyAssignment';
 import Subject from '../models/Subject';
 import Department from '../models/Department';
 import User from '../models/User';
 import Student from '../models/Student';
+import Section from '../models/Section';
 import Teacher from '../models/Teacher';
 import AttendanceRecord from '../models/AttendanceRecord';
-import GoogleSheetConnection from '../models/GoogleSheetConnection';
-import GoogleSheetTab from '../models/GoogleSheetTab';
-import FacultyGoogleSheetAccess from '../models/FacultyGoogleSheetAccess';
-import GoogleOAuthToken from '../models/GoogleOAuthToken';
-import GoogleSheetSyncLog from '../models/GoogleSheetSyncLog';
+import AttendanceSession from '../models/AttendanceSession';
+import AuditLog from '../models/AuditLog';
 import Assessment from '../models/Assessment';
 import AssessmentComponent from '../models/AssessmentComponent';
 import StudentMarks from '../models/StudentMarks';
-import AuditLog from '../models/AuditLog';
-import googleOAuthService from './googleOAuth.service';
-import { googleSheetsService } from './googleSheets.service';
+import AcademicYear from '../models/AcademicYear';
 import logger from '../utils/logger.util';
 
-// Helper to normalize section names ('Section A', 'Division A', 'A' -> 'A')
+// Helper to normalize section names ('Section A', 'Section  D', 'Division A', 'A' -> 'A')
 export const normalizeSection = (sec?: string | null): string => {
   if (!sec) return 'A';
-  const clean = sec.trim().toUpperCase();
-  if (clean.startsWith('DIVISION ')) return clean.replace('DIVISION ', '').trim();
-  if (clean.startsWith('SECTION ')) return clean.replace('SECTION ', '').trim();
-  return clean;
+  return sec.replace(/^(Section|Sec|Division|Div)\s+/i, '').trim().toUpperCase();
 };
 
 // Attendance threshold percentage for eligibility
 const ATTENDANCE_THRESHOLD = 75.0;
+
+// Helper to get academic year variants for flexible DB matching ('2026-27', '2026-2027', '2026–27')
+export const getAcademicYearVariants = (ay?: string | null): string[] => {
+  if (!ay || ay === 'ALL') return [];
+  const clean = ay.trim().replace(/\u2013|\u2014/g, '-');
+  
+  const variants = new Set<string>([ay, clean]);
+  
+  // Format: "YYYY-YY" e.g. "2026-27"
+  const match2 = clean.match(/^(\d{4})-(\d{2})$/);
+  if (match2) {
+    const startYear = match2[1];
+    const endCentury = startYear.slice(0, 2);
+    const fullEndYear = `${endCentury}${match2[2]}`;
+    variants.add(`${startYear}-${fullEndYear}`);
+    variants.add(`${startYear}\u2013${match2[2]}`);
+    variants.add(`${startYear}\u2013${fullEndYear}`);
+  }
+  
+  // Format: "YYYY-YYYY" e.g. "2026-2027"
+  const match4 = clean.match(/^(\d{4})-(\d{4})$/);
+  if (match4) {
+    const startYear = match4[1];
+    const endShort = match4[2].slice(2);
+    variants.add(`${startYear}-${endShort}`);
+    variants.add(`${startYear}\u2013${match4[2]}`);
+    variants.add(`${startYear}\u2013${endShort}`);
+  }
+
+  return Array.from(variants);
+};
+
+/**
+ * Resolves the authoritative Section model record for a FacultyAssignment.
+ * Matches by explicit sectionId or by department/branch + semester + normalized section code.
+ */
+export const resolveSectionForAssignment = async (assignment: any): Promise<Section | null> => {
+  if (!assignment) return null;
+
+  // 1. Explicit sectionId if present on assignment
+  if (assignment.sectionId) {
+    const sec = await Section.findByPk(assignment.sectionId);
+    if (sec) return sec;
+  }
+
+  const cleanSec = normalizeSection(assignment.section);
+  const rawSec = (assignment.section || '').trim().toUpperCase();
+
+  const deptCode = assignment.department?.code;
+  const branchCodes: string[] = [];
+  if (deptCode) {
+    branchCodes.push(deptCode);
+    if (deptCode === 'CSE-AIML') branchCodes.push('AIML');
+    branchCodes.push(`CSE-${deptCode}`);
+  }
+  if (assignment.branch && assignment.branch !== 'ALL') {
+    branchCodes.push(assignment.branch);
+  }
+
+  const candidateSections = await Section.findAll({
+    where: {
+      semester: assignment.semester,
+      [Op.or]: [
+        { departmentId: assignment.departmentId },
+        ...(branchCodes.length > 0 ? [{ branch: { [Op.in]: branchCodes } }] : []),
+      ],
+    },
+  });
+
+  const matched = candidateSections.find((sec) => {
+    const sCode = normalizeSection(sec.name);
+    return sCode === cleanSec || sec.name.trim().toUpperCase() === rawSec;
+  });
+
+  return matched || null;
+};
+
+/**
+ * Queries all students authoritatively allocated to a section for a FacultyAssignment.
+ */
+export const getEnrolledStudentsForAssignment = async (assignment: any, matchedSection?: Section | null) => {
+  const sec = matchedSection !== undefined ? matchedSection : await resolveSectionForAssignment(assignment);
+  const cleanSec = normalizeSection(assignment.section);
+  const rawSec = (assignment.section || '').trim();
+
+  const isSemHandling = assignment.department?.type === 'SEMESTER_HANDLING' || assignment.department?.code === 'AS';
+
+  let targetDeptId = assignment.departmentId;
+  if (isSemHandling && assignment.branch && assignment.branch !== 'ALL') {
+    const branchDept = await Department.findOne({ where: { code: assignment.branch } });
+    if (branchDept) targetDeptId = branchDept.id;
+  }
+
+  const orConditions: any[] = [];
+  if (sec) {
+    orConditions.push({ sectionId: sec.id });
+    orConditions.push({ section: sec.name });
+  }
+  if (cleanSec) {
+    orConditions.push({ section: cleanSec });
+    orConditions.push({ section: `Section ${cleanSec}` });
+    orConditions.push({ section: `Section  ${cleanSec}` });
+  }
+  if (rawSec && !orConditions.some((c: any) => c.section === rawSec)) {
+    orConditions.push({ section: rawSec });
+  }
+
+  const students = await Student.findAll({
+    where: {
+      departmentId: targetDeptId,
+      semester: assignment.semester,
+      section: { [Op.ne]: null as any },
+      [Op.or]: orConditions,
+    },
+    include: [
+      { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] },
+      { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+    ],
+    order: [['usn', 'ASC'], ['enrollmentNumber', 'ASC']],
+  });
+
+  // Ensure uniqueness by student ID
+  const seenIds = new Set<string>();
+  const uniqueStudents: typeof students = [];
+  for (const s of students) {
+    if (!seenIds.has(s.id)) {
+      seenIds.add(s.id);
+      uniqueStudents.push(s);
+    }
+  }
+
+  return { students: uniqueStudents, matchedSection: sec };
+};
 
 export const facultyService = {
   /**
@@ -66,52 +193,39 @@ export const facultyService = {
   },
 
   /**
-   * Retrieves Google OAuth status for this specific faculty user
+   * Retrieves all active assignments belonging to this faculty user
    */
-  async getFacultyGoogleOAuthStatus(userId: string) {
-    const token = await GoogleOAuthToken.findOne({
-      where: { userId, status: 'ACTIVE' },
-      order: [['createdAt', 'DESC']],
-    });
+  async getFacultyAssignments(userId: string, academicYear?: string) {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
 
-    if (!token) {
-      return {
-        connected: false,
-        isConnected: false,
-        status: 'NOT_CONNECTED',
-        email: null,
-        displayName: null,
-        profilePicture: null,
-      };
+    const whereClause: any = {
+      [Op.or]: [
+        { userId },
+        ...(teacherId ? [{ teacherId }] : []),
+      ],
+      status: 'ACTIVE',
+    };
+
+    if (academicYear && academicYear !== 'ALL') {
+      let resolvedYear = academicYear;
+      if (/^[0-9a-fA-F-]{36}$/.test(academicYear)) {
+        const ayRecord = await AcademicYear.findByPk(academicYear);
+        if (ayRecord?.year) {
+          resolvedYear = ayRecord.year;
+        }
+      }
+      const ayVariants = getAcademicYearVariants(resolvedYear);
+      if (ayVariants.length > 0) {
+        whereClause.academicYear = { [Op.in]: ayVariants };
+      }
     }
 
-    return {
-      connected: true,
-      isConnected: true,
-      status: token.status,
-      email: token.googleAccountEmail || token.userEmail,
-      displayName: token.displayName || null,
-      profilePicture: token.profilePicture || null,
-      lastUsedAt: token.lastUsedAt,
-    };
-  },
-
-  /**
-   * Retrieves all active assignments belonging to this faculty user
-   * Hydrates with mapped section Google Sheets, exact tab titles (e.g. CS301), and student counts
-   */
-  async getFacultyAssignments(userId: string) {
     const assignments = await FacultyAssignment.findAll({
-      where: { userId, status: 'ACTIVE' },
+      where: whereClause,
       include: [
         { model: Subject, as: 'subject' },
         { model: Department, as: 'department' },
-        {
-          model: FacultyGoogleSheetAccess,
-          as: 'googleSheetAccesses',
-          required: false,
-          include: [{ model: GoogleSheetConnection, as: 'googleSheetConnection' }],
-        },
       ],
       order: [['semester', 'ASC'], ['createdAt', 'ASC']],
     });
@@ -120,90 +234,21 @@ export const facultyService = {
       assignments.map(async (a: any) => {
         const normSec = normalizeSection(a.section);
 
-        // 1. Resolve Attendance Google Sheet Connection & Tab for this semester + section
-        const attendanceConn = await GoogleSheetConnection.findOne({
+        // Count real enrolled students strictly allocated to this section (REQUIREMENT 13 & 39)
+        const { students, matchedSection } = await getEnrolledStudentsForAssignment(a);
+        const studentCount = students.length;
+
+        // Check if attendance has been submitted/locked today for this assignment
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todaySessionCount = await AttendanceSession.count({
           where: {
-            departmentId: a.departmentId,
-            semester: a.semester,
-            sheetType: 'ATTENDANCE',
-            status: 'ACTIVE',
-            [Op.or]: [
-              { section: normSec },
-              { section: a.section },
-              { section: `Section ${normSec}` },
-              { section: `Division ${normSec}` },
-              { section: { [Op.iLike]: `%${normSec}%` } },
-            ],
-          },
-          include: [
-            {
-              model: GoogleSheetTab,
-              as: 'tabs',
-              where: {
-                [Op.or]: [
-                  { subjectId: a.subjectId },
-                  { subjectCode: a.subject?.code },
-                  { sheetTitle: { [Op.iLike]: `%${a.subject?.code?.replace(/^[A-Z]+/, '') || ''}%` } },
-                ],
-              },
-              required: false,
-            },
-          ],
-        });
-
-        // Find exact mapped tab
-        let attTab = (attendanceConn?.tabs || []).find(
-          (t: any) => t.subjectId === a.subjectId || t.subjectCode === a.subject?.code
-        );
-        if (!attTab && attendanceConn?.tabs?.length) {
-          attTab = attendanceConn.tabs[0];
-        }
-
-        // 2. Resolve Marks Google Sheet Connection & Tab for this semester
-        const marksConn = await GoogleSheetConnection.findOne({
-          where: {
-            departmentId: a.departmentId,
-            semester: a.semester,
-            sheetType: { [Op.in]: ['ACADEMIC_MARKS', 'BITWISE_MARKS'] },
-            status: 'ACTIVE',
-          },
-          include: [
-            {
-              model: GoogleSheetTab,
-              as: 'tabs',
-              where: {
-                [Op.or]: [
-                  { subjectId: a.subjectId },
-                  { subjectCode: a.subject?.code },
-                ],
-              },
-              required: false,
-            },
-          ],
-        });
-
-        let marksTab = (marksConn?.tabs || []).find(
-          (t: any) => t.subjectId === a.subjectId || t.subjectCode === a.subject?.code
-        );
-        if (!marksTab && marksConn?.tabs?.length) {
-          marksTab = marksConn.tabs[0];
-        }
-
-        // 3. Count real enrolled students in this department, semester, and section
-        const studentCount = await Student.count({
-          where: {
-            departmentId: a.departmentId,
-            semester: a.semester,
-            [Op.or]: [
-              { section: normSec },
-              { section: a.section },
-              { section: `Section ${normSec}` },
-              { section: null },
-            ],
+            facultyAssignmentId: a.id,
+            attendanceDate: todayStr,
+            status: { [Op.in]: ['SUBMITTED', 'LOCKED'] },
           },
         });
 
-        // 4. Calculate attendance percentage for this assignment
+        // Calculate attendance percentage for this assignment
         const totalAttendanceRecords = await AttendanceRecord.count({
           where: { facultyAssignmentId: a.id },
         });
@@ -216,66 +261,28 @@ export const facultyService = {
             ? Number(((presentRecords / totalAttendanceRecords) * 100).toFixed(1))
             : null;
 
-        // Build exact GID deep links
-        const attendanceDeepLink =
-          attendanceConn && attTab?.googleSheetId
-            ? `https://docs.google.com/spreadsheets/d/${attendanceConn.googleSpreadsheetId}/edit#gid=${attTab.googleSheetId}`
-            : attendanceConn?.googleSpreadsheetUrl || null;
-
-        const marksDeepLink =
-          marksConn && marksTab?.googleSheetId
-            ? `https://docs.google.com/spreadsheets/d/${marksConn.googleSpreadsheetId}/edit#gid=${marksTab.googleSheetId}`
-            : marksConn?.googleSpreadsheetUrl || null;
-
-        // Permission status from FacultyGoogleSheetAccess
-        const accesses = a.googleSheetAccesses || [];
-        const attAccessRecord = accesses.find(
-          (acc: any) => acc.googleSheetConnection?.sheetType === 'ATTENDANCE'
-        );
-        const marksAccessRecord = accesses.find(
-          (acc: any) =>
-            acc.googleSheetConnection?.sheetType === 'ACADEMIC_MARKS' ||
-            acc.googleSheetConnection?.sheetType === 'BITWISE_MARKS'
-        );
-
         return {
           id: a.id,
           subjectId: a.subject?.id || a.subjectId,
           subjectName: a.subject?.name || 'Assigned Subject',
           subjectCode: a.subject?.code || 'SUB001',
+          cycle: a.subject?.cycle || null,
+          schemeId: a.subject?.schemeId || null,
           credits: a.subject?.credits || 4,
           type: a.subject?.type || 'THEORY',
           semester: a.semester,
-          section: a.section || 'Section A',
+          section: matchedSection?.name || (a.section ? `Section ${normSec}` : 'Section A'),
+          sectionId: matchedSection?.id || (a as any).sectionId || null,
           normalizedSection: normSec,
           academicYear: a.academicYear || '2026-27',
           departmentId: a.departmentId,
           departmentCode: a.department?.code || 'CSE',
-          attendanceAccess: a.attendanceAccess,
-          marksAccess: a.marksAccess,
+          attendanceAccess: a.attendanceAccess !== false,
+          marksAccess: a.marksAccess !== false,
           totalStudents: studentCount,
           attendancePercentage: attendancePct,
+          completedToday: todaySessionCount > 0,
           status: a.status,
-          attendanceSheet: {
-            connected: Boolean(attendanceConn),
-            connectionId: attendanceConn?.id || null,
-            spreadsheetId: attendanceConn?.googleSpreadsheetId || null,
-            spreadsheetUrl: attendanceConn?.googleSpreadsheetUrl || null,
-            tabTitle: attTab?.sheetTitle || null, // e.g. "CS301"
-            tabGid: attTab?.googleSheetId || null,
-            deepLinkUrl: attendanceDeepLink,
-            status: attAccessRecord?.status || (attendanceConn ? 'GRANTED' : 'NOT_CONFIGURED'),
-          },
-          marksSheet: {
-            connected: Boolean(marksConn),
-            connectionId: marksConn?.id || null,
-            spreadsheetId: marksConn?.googleSpreadsheetId || null,
-            spreadsheetUrl: marksConn?.googleSpreadsheetUrl || null,
-            tabTitle: marksTab?.sheetTitle || null, // e.g. "MAT"
-            tabGid: marksTab?.googleSheetId || null,
-            deepLinkUrl: marksDeepLink,
-            status: marksAccessRecord?.status || (marksConn ? 'GRANTED' : 'NOT_CONFIGURED'),
-          },
         };
       })
     );
@@ -286,66 +293,30 @@ export const facultyService = {
   /**
    * Retrieves dashboard overview statistics for the faculty workspace
    */
-  async getFacultyDashboard(userId: string) {
+  async getFacultyDashboard(userId: string, academicYear?: string) {
     const profile = await this.getFacultyProfile(userId);
-    const googleAccount = await this.getFacultyGoogleOAuthStatus(userId);
-    const assignments = await this.getFacultyAssignments(userId);
+    const assignments = await this.getFacultyAssignments(userId, academicYear);
 
     const attendanceCourses = assignments.filter((a) => a.attendanceAccess);
     const marksCourses = assignments.filter((a) => a.marksAccess);
 
-    // Count pending/disconnected sheets
-    const pendingSyncs = assignments.filter(
-      (a) =>
-        (a.attendanceAccess && !a.attendanceSheet.connected) ||
-        (a.marksAccess && !a.marksSheet.connected)
-    ).length;
-
-    // Recent sync logs for this faculty's assignments
-    const assignmentIds = assignments.map((a) => a.id);
-    const recentLogs = await GoogleSheetSyncLog.findAll({
-      where: {
-        facultyAssignmentId: { [Op.in]: assignmentIds },
-      },
-      include: [
-        { model: GoogleSheetConnection, as: 'connection', attributes: ['semester', 'section', 'sheetType'] },
-        { model: GoogleSheetTab, as: 'tab', attributes: ['sheetTitle', 'subjectCode'] },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: 6,
-    });
-
     return {
       profile,
-      googleAccount,
       stats: {
         totalAssignments: assignments.length,
         attendanceCoursesCount: attendanceCourses.length,
         marksCoursesCount: marksCourses.length,
-        pendingSyncsCount: pendingSyncs,
       },
       assignments,
-      recentSyncs: recentLogs.map((l: any) => ({
-        id: l.id,
-        syncType: l.syncType,
-        tabTitle: l.tab?.sheetTitle || 'Tab',
-        subjectCode: l.tab?.subjectCode || '',
-        status: l.status,
-        recordsProcessed: l.recordsProcessed,
-        recordsCreated: l.recordsCreated,
-        errorCount: l.errorCount,
-        startedAt: l.startedAt,
-        completedAt: l.completedAt,
-      })),
     };
   },
 
   /**
    * Returns attendance-authorized courses list for the faculty attendance page
    */
-  async getFacultyAttendanceList(userId: string, semesterFilter?: string) {
-    const assignments = await this.getFacultyAssignments(userId);
-    let filtered = assignments.filter((a) => a.attendanceAccess);
+  async getFacultyAttendanceList(userId: string, semesterFilter?: string, academicYearFilter?: string) {
+    const assignments = await this.getFacultyAssignments(userId, academicYearFilter);
+    let filtered = assignments.filter((a) => a.attendanceAccess !== false);
 
     if (semesterFilter && semesterFilter !== 'ALL') {
       const sem = parseInt(semesterFilter, 10);
@@ -361,13 +332,18 @@ export const facultyService = {
    * Retrieves full attendance workspace details for a specific assignment
    */
   async getFacultyAttendanceWorkspace(userId: string, assignmentId: string) {
-    // 1. Strict Ownership & Permission Validation
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    // 1. Strict Ownership & Permission Validation (REQUIREMENT 34)
     const assignment = await FacultyAssignment.findOne({
       where: {
         id: assignmentId,
-        userId,
+        [Op.or]: [
+          { userId },
+          ...(teacherId ? [{ teacherId }] : []),
+        ],
         status: 'ACTIVE',
-        attendanceAccess: true,
       },
       include: [
         { model: Subject, as: 'subject' },
@@ -379,76 +355,70 @@ export const facultyService = {
       throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
     }
 
-    const normSec = normalizeSection(assignment.section);
+    const { students, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
 
-    // 2. Fetch connected Attendance Google Sheet and mapped Tab
-    const connection = await GoogleSheetConnection.findOne({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        sheetType: 'ATTENDANCE',
-        status: 'ACTIVE',
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: { [Op.iLike]: `%${normSec}%` } },
-        ],
-      },
-      include: [
-        {
-          model: GoogleSheetTab,
-          as: 'tabs',
-          where: {
-            [Op.or]: [
-              { subjectId: assignment.subjectId },
-              { subjectCode: (assignment as any).subject?.code },
-            ],
-          },
-          required: false,
-        },
-      ],
+    // 3. Fetch all attendance sessions for this assignment (REQUIREMENT 2 & 21)
+    const sessions = await AttendanceSession.findAll({
+      where: { facultyAssignmentId: assignment.id },
+      order: [['attendanceDate', 'DESC'], ['sessionPeriod', 'DESC']],
     });
 
-    let tab = (connection?.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection?.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    // 3. Fetch all enrolled students in this cohort
-    const students = await Student.findAll({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: null },
-        ],
-      },
-      include: [{ model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] }],
-      order: [['usn', 'ASC'], ['enrollmentNumber', 'ASC']],
-    });
-
-    // 4. Fetch all attendance records for this assignment
+    // Fetch all attendance records for this assignment
     const attendanceRecords = await AttendanceRecord.findAll({
-      where: {
-        facultyAssignmentId: assignment.id,
-      },
-      order: [['date', 'ASC']],
+      where: { facultyAssignmentId: assignment.id },
+      order: [['date', 'ASC'], ['sessionPeriod', 'ASC']],
     });
 
     // Get unique conducted dates
     const dateSet = new Set<string>();
-    attendanceRecords.forEach((r) => {
-      const dStr = r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date);
+    sessions.forEach((s) => {
+      const dStr = typeof s.attendanceDate === 'string' ? s.attendanceDate : String(s.attendanceDate);
       dateSet.add(dStr);
     });
+    // Fallback for legacy records without AttendanceSession
+    attendanceRecords.forEach((r) => {
+      const dStr = (r.date as any) instanceof Date ? (r.date as any).toISOString().split('T')[0] : String(r.date);
+      dateSet.add(dStr);
+    });
+
     const conductedDates = Array.from(dateSet).sort();
-    const totalClasses = conductedDates.length;
+    const totalClasses = sessions.length > 0 ? sessions.length : conductedDates.length;
+
+    // Recorded sessions aggregation from AttendanceSession model with fallback
+    const recordedSessions = sessions.map((s) => {
+      const sDateStr = typeof s.attendanceDate === 'string' ? s.attendanceDate : String(s.attendanceDate);
+      const sessionRecs = attendanceRecords.filter((r) => {
+        const rDateStr = (r.date as any) instanceof Date ? (r.date as any).toISOString().split('T')[0] : String(r.date);
+        return (
+          r.attendanceSessionId === s.id ||
+          (rDateStr === sDateStr && (r.sessionPeriod || 1) === (s.sessionPeriod || 1))
+        );
+      });
+
+      const absentStudentIds = new Set(sessionRecs.filter((r) => r.status === 'ABSENT').map((r) => r.studentId));
+      const absentStudents = students
+        .filter((st: any) => absentStudentIds.has(st.id))
+        .map((st: any) => ({
+          id: st.id,
+          usn: st.usn || st.enrollmentNumber || 'N/A',
+          studentName: st.user ? `${st.user.firstName || ''} ${st.user.lastName || ''}`.trim() : 'Student',
+        }));
+
+      return {
+        id: s.id,
+        date: sDateStr,
+        sessionPeriod: s.sessionPeriod,
+        status: s.status,
+        totalConducted: s.totalStudents || sessionRecs.length,
+        presentCount: s.presentCount,
+        absentCount: s.absentCount,
+        percentage: s.totalStudents > 0 ? Number(((s.presentCount / s.totalStudents) * 100).toFixed(1)) : 100.0,
+        absentStudents,
+      };
+    });
+
+    // Previous Class logic (REQUIREMENT 21)
+    const previousClass = recordedSessions.length > 0 ? recordedSessions[0] : null;
 
     // Student-wise metrics aggregation
     const studentRoster = students.map((s: any) => {
@@ -457,16 +427,16 @@ export const facultyService = {
       const absentCount = sRecords.filter((r) => r.status === 'ABSENT').length;
       const excusedCount = sRecords.filter((r) => r.status === 'EXCUSED').length;
 
-      const studentConducted = totalClasses > 0 ? totalClasses : sRecords.length;
+      const studentConducted = totalClasses;
       const percentage =
         studentConducted > 0 ? Number(((presentCount / studentConducted) * 100).toFixed(1)) : 100.0;
 
       const isShortage = totalClasses > 0 && percentage < ATTENDANCE_THRESHOLD;
 
-      // Map session details
+      // Map session details by date
       const sessionMap: { [date: string]: 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'UNRECORDED' } = {};
       conductedDates.forEach((d) => {
-        const rec = sRecords.find((r) => (r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date)) === d);
+        const rec = sRecords.find((r) => ((r.date as any) instanceof Date ? (r.date as any).toISOString().split('T')[0] : String(r.date)) === d);
         sessionMap[d] = rec ? rec.status : 'UNRECORDED';
       });
 
@@ -478,7 +448,7 @@ export const facultyService = {
         rollNumber: s.rollNumber || '',
         studentName: s.user ? `${s.user.firstName || ''} ${s.user.lastName || ''}`.trim() : 'Student',
         email: s.user?.email || '',
-        section: s.section || assignment.section,
+        section: s.section || matchedSection?.name || (assignment.section ? `Section ${normalizeSection(assignment.section)}` : 'Section A'),
         classesConducted: studentConducted,
         presentCount,
         absentCount,
@@ -498,13 +468,6 @@ export const facultyService = {
     const overallPercentage =
       totalSlots > 0 ? Number(((totalPresentSum / totalSlots) * 100).toFixed(1)) : 100.0;
 
-    const googleAccount = await this.getFacultyGoogleOAuthStatus(userId);
-
-    const deepLinkUrl =
-      connection && tab?.googleSheetId
-        ? `https://docs.google.com/spreadsheets/d/${connection.googleSpreadsheetId}/edit#gid=${tab.googleSheetId}`
-        : connection?.googleSpreadsheetUrl || null;
-
     return {
       assignment: {
         id: assignment.id,
@@ -512,20 +475,10 @@ export const facultyService = {
         subjectName: (assignment as any).subject?.name || 'Assigned Course',
         subjectCode: (assignment as any).subject?.code || 'SUB001',
         semester: assignment.semester,
-        section: assignment.section,
+        section: matchedSection?.name || (assignment.section ? `Section ${normalizeSection(assignment.section)}` : 'Section A'),
+        sectionId: matchedSection?.id || (assignment as any).sectionId || null,
         academicYear: assignment.academicYear,
         departmentCode: (assignment as any).department?.code || 'CSE',
-      },
-      googleSheet: {
-        connected: Boolean(connection),
-        connectionId: connection?.id || null,
-        spreadsheetId: connection?.googleSpreadsheetId || null,
-        spreadsheetUrl: connection?.googleSpreadsheetUrl || null,
-        tabTitle: tab?.sheetTitle || null, // e.g. "CS301"
-        tabGid: tab?.googleSheetId || null,
-        deepLinkUrl,
-        accountEmail: googleAccount.email,
-        googleConnected: googleAccount.connected,
       },
       metrics: {
         totalClassesConducted: totalClasses,
@@ -536,92 +489,17 @@ export const facultyService = {
         threshold: ATTENDANCE_THRESHOLD,
       },
       conductedDates,
+      recordedSessions,
+      previousClass,
       students: studentRoster,
     };
   },
 
   /**
-   * Synchronizes attendance from the authorized Google Sheet tab into ERP database
-   */
-  async syncFacultyAttendance(
-    userId: string,
-    assignmentId: string,
-    overrideValues?: string[][]
-  ) {
-    // Strict assignment validation
-    const assignment = await FacultyAssignment.findOne({
-      where: { id: assignmentId, userId, status: 'ACTIVE', attendanceAccess: true },
-      include: [{ model: Subject, as: 'subject' }, { model: Department, as: 'department' }],
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized: You do not have permission to sync attendance for this assignment.');
-    }
-
-    const normSec = normalizeSection(assignment.section);
-
-    // Find active connection
-    const connection = await GoogleSheetConnection.findOne({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        sheetType: 'ATTENDANCE',
-        status: 'ACTIVE',
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: { [Op.iLike]: `%${normSec}%` } },
-        ],
-      },
-      include: [{ model: GoogleSheetTab, as: 'tabs' }],
-    });
-
-    if (!connection) {
-      throw new Error(
-        `No active Attendance spreadsheet is connected for Semester ${assignment.semester} Section ${assignment.section}. Contact your HOD.`
-      );
-    }
-
-    // Find mapped tab (e.g. CS301 for BCS301)
-    let tab = (connection.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    if (!tab) {
-      throw new Error(
-        `Google Sheet Tab for ${(assignment as any).subject?.name} (${(assignment as any).subject?.code}) is not mapped.`
-      );
-    }
-
-    // Read sheet values using faculty's token or fallback
-    const facultyToken = await GoogleOAuthToken.findOne({
-      where: { userId, status: 'ACTIVE' },
-    });
-    const accessToken = facultyToken?.encryptedAccessToken || undefined;
-
-    const result = await googleSheetsService.syncAttendanceTab({
-      connectionId: connection.id,
-      tabId: tab.id,
-      tabGid: tab.googleSheetId,
-      tabTitle: tab.sheetTitle,
-      facultyUserId: userId,
-      departmentId: assignment.departmentId,
-      authenticatedUserId: userId,
-      overrideValues,
-    });
-
-    return result;
-  },
-
-  /**
    * Returns bitwise marks authorized courses list
    */
-  async getFacultyMarksList(userId: string, semesterFilter?: string) {
-    const assignments = await this.getFacultyAssignments(userId);
+  async getFacultyMarksList(userId: string, semesterFilter?: string, academicYearFilter?: string) {
+    const assignments = await this.getFacultyAssignments(userId, academicYearFilter);
     let filtered = assignments.filter((a) => a.marksAccess);
 
     if (semesterFilter && semesterFilter !== 'ALL') {
@@ -632,6 +510,179 @@ export const facultyService = {
     }
 
     return filtered;
+  },
+
+  /**
+   * Records or updates attendance session for an assigned cohort
+   */
+  async saveFacultyAttendance(
+    userId: string,
+    assignmentId: string,
+    payload: {
+      date: string;
+      sessionPeriod?: number;
+      records: Array<{ studentId: string; status: 'PRESENT' | 'ABSENT' | 'EXCUSED' }>;
+    }
+  ) {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    // 1. Strict ownership & authorization check (REQUIREMENT 8 & 34)
+    const assignment = await FacultyAssignment.findOne({
+      where: {
+        id: assignmentId,
+        [Op.or]: [
+          { userId },
+          ...(teacherId ? [{ teacherId }] : []),
+        ],
+        status: 'ACTIVE',
+        attendanceAccess: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
+    }
+
+    const sessionDate = payload.date || new Date().toISOString().split('T')[0];
+    const sessionPeriod = payload.sessionPeriod || 1;
+
+    // 2. Future date check (REQUIREMENT 23)
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (sessionDate > todayStr) {
+      throw new Error('Future attendance is not allowed. Selected date exceeds current date.');
+    }
+
+    // 3. Verify section roster isolation (REQUIREMENT 9 & 11)
+    const { students: validStudents, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
+
+    const validStudentIds = new Set(validStudents.map((s) => s.id));
+    for (const rec of payload.records) {
+      if (!validStudentIds.has(rec.studentId)) {
+        throw new Error(`Student ${rec.studentId} does not belong to this section.`);
+      }
+    }
+
+    // 4. Transactional Attendance Save (REQUIREMENT 7, 13, 35)
+    const transaction = await db.transaction();
+    try {
+      // Check existing session & session status
+      let session = await AttendanceSession.findOne({
+        where: {
+          facultyAssignmentId: assignment.id,
+          attendanceDate: sessionDate,
+          sessionPeriod,
+        },
+        transaction,
+      });
+
+      if (session && session.status === 'LOCKED') {
+        throw new Error('Attendance session is locked and cannot be edited directly.');
+      }
+
+      const totalStudents = payload.records.length;
+      const presentCount = payload.records.filter((r) => r.status === 'PRESENT').length;
+      const absentCount = payload.records.filter((r) => r.status === 'ABSENT').length;
+
+      if (!session) {
+        session = await AttendanceSession.create(
+          {
+            facultyAssignmentId: assignment.id,
+            departmentId: assignment.departmentId,
+            subjectId: assignment.subjectId,
+            sectionId: matchedSection?.id || (assignment as any).sectionId || null,
+            section: matchedSection?.name || assignment.section || 'A',
+            semester: assignment.semester,
+            academicYear: assignment.academicYear,
+            attendanceDate: sessionDate,
+            sessionPeriod,
+            status: 'SUBMITTED',
+            totalStudents,
+            presentCount,
+            absentCount,
+            submittedAt: new Date(),
+            submittedById: userId,
+          },
+          { transaction }
+        );
+      } else {
+        session.totalStudents = totalStudents;
+        session.presentCount = presentCount;
+        session.absentCount = absentCount;
+        session.status = 'SUBMITTED';
+        session.submittedAt = new Date();
+        session.submittedById = userId;
+        if (matchedSection?.id) {
+          session.sectionId = matchedSection.id;
+        }
+        if (matchedSection?.name) {
+          session.section = matchedSection.name;
+        }
+        await session.save({ transaction });
+      }
+
+      // Upsert AttendanceRecord rows
+      for (const item of payload.records) {
+        if (!item.studentId || !item.status) continue;
+
+        const [record, created] = await AttendanceRecord.findOrCreate({
+          where: {
+            studentId: item.studentId,
+            facultyAssignmentId: assignment.id,
+            date: sessionDate as any,
+            sessionPeriod,
+          },
+          defaults: {
+            attendanceSessionId: session.id,
+            studentId: item.studentId,
+            facultyAssignmentId: assignment.id,
+            departmentId: assignment.departmentId,
+            subjectId: assignment.subjectId,
+            semester: assignment.semester,
+            section: matchedSection?.name || assignment.section,
+            academicYear: assignment.academicYear,
+            date: sessionDate as any,
+            sessionPeriod,
+            status: item.status,
+          },
+          transaction,
+        });
+
+        if (!created) {
+          record.attendanceSessionId = session.id;
+          record.status = item.status;
+          await record.save({ transaction });
+        }
+      }
+
+      // Record audit log (REQUIREMENT 20)
+      await AuditLog.create(
+        {
+          userId,
+          action: 'ATTENDANCE_SESSION_SAVED',
+          details: {
+            sessionDate,
+            sessionPeriod,
+            assignmentId: assignment.id,
+            totalStudents,
+            presentCount,
+            absentCount,
+          },
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+      logger.info(
+        `Attendance session saved by faculty ${userId} for assignment ${assignmentId} on ${sessionDate} (P${sessionPeriod})`
+      );
+    } catch (err: any) {
+      await transaction.rollback();
+      logger.error('SAVE_FACULTY_ATTENDANCE_TRANSACTION_ERROR:', err);
+      throw err;
+    }
+
+    return this.getFacultyAttendanceWorkspace(userId, assignmentId);
   },
 
   /**
@@ -655,64 +706,86 @@ export const facultyService = {
       throw new Error('Unauthorized or inactive marks assignment. Access denied.');
     }
 
-    const marksConn = await GoogleSheetConnection.findOne({
+    const { students, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
+
+    // Ensure Assessment & AssessmentComponents exist for this subject/cohort
+    const [assessment] = await Assessment.findOrCreate({
       where: {
+        subjectId: assignment.subjectId,
         departmentId: assignment.departmentId,
         semester: assignment.semester,
-        sheetType: { [Op.in]: ['ACADEMIC_MARKS', 'BITWISE_MARKS'] },
+        academicYear: assignment.academicYear || '2026-27',
+      },
+      defaults: {
+        subjectId: assignment.subjectId,
+        departmentId: assignment.departmentId,
+        semester: assignment.semester,
+        section: assignment.section,
+        academicYear: assignment.academicYear || '2026-27',
+        name: 'Continuous Internal Evaluation (CIE)',
+        maxMarks: 50.0,
         status: 'ACTIVE',
       },
-      include: [
-        {
-          model: GoogleSheetTab,
-          as: 'tabs',
-          where: {
-            [Op.or]: [
-              { subjectId: assignment.subjectId },
-              { subjectCode: (assignment as any).subject?.code },
-            ],
-          },
-          required: false,
-        },
-      ],
     });
 
-    let tab = (marksConn?.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && marksConn?.tabs?.length) {
-      tab = marksConn.tabs[0];
-    }
-
-    const normSec = normalizeSection(assignment.section);
-    const students = await Student.findAll({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: null },
-        ],
+    // Components: IA-1, IA-2, Assignment
+    const [compIa1] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'IA-1' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'IA-1',
+        componentType: 'THEORY',
+        maxMarks: 20.0,
+        sequence: 1,
       },
-      include: [{ model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] }],
-      order: [['usn', 'ASC'], ['enrollmentNumber', 'ASC']],
     });
 
-    // Default assessment components
+    const [compIa2] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'IA-2' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'IA-2',
+        componentType: 'THEORY',
+        maxMarks: 20.0,
+        sequence: 2,
+      },
+    });
+
+    const [compAssign] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'Assignment' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'Assignment',
+        componentType: 'ASSIGNMENT',
+        maxMarks: 10.0,
+        sequence: 3,
+      },
+    });
+
+    // Fetch existing student marks
+    const studentIds = students.map((s) => s.id);
+    const existingMarks = await StudentMarks.findAll({
+      where: {
+        assessmentId: assessment.id,
+        studentId: { [Op.in]: studentIds },
+      },
+    });
+
+    const marksMap: { [studentId: string]: { ia1: number; ia2: number; assignment: number } } = {};
+    existingMarks.forEach((m) => {
+      if (!marksMap[m.studentId]) {
+        marksMap[m.studentId] = { ia1: 0, ia2: 0, assignment: 0 };
+      }
+      if (m.componentId === compIa1.id) marksMap[m.studentId].ia1 = Number(m.marks);
+      if (m.componentId === compIa2.id) marksMap[m.studentId].ia2 = Number(m.marks);
+      if (m.componentId === compAssign.id) marksMap[m.studentId].assignment = Number(m.marks);
+    });
+
     const evaluations = [
       { name: 'Internal Assessment 1 (IA-1)', maxMarks: 20, weightage: '20%' },
       { name: 'Internal Assessment 2 (IA-2)', maxMarks: 20, weightage: '20%' },
       { name: 'Continuous Assignment / Quiz', maxMarks: 10, weightage: '10%' },
     ];
-
-    const deepLinkUrl =
-      marksConn && tab?.googleSheetId
-        ? `https://docs.google.com/spreadsheets/d/${marksConn.googleSpreadsheetId}/edit#gid=${tab.googleSheetId}`
-        : marksConn?.googleSpreadsheetUrl || null;
-
-    const googleAccount = await this.getFacultyGoogleOAuthStatus(userId);
 
     return {
       assignment: {
@@ -725,102 +798,181 @@ export const facultyService = {
         academicYear: assignment.academicYear,
         departmentCode: (assignment as any).department?.code || 'CSE',
       },
-      googleSheet: {
-        connected: Boolean(marksConn),
-        connectionId: marksConn?.id || null,
-        spreadsheetId: marksConn?.googleSpreadsheetId || null,
-        spreadsheetUrl: marksConn?.googleSpreadsheetUrl || null,
-        tabTitle: tab?.sheetTitle || null, // e.g. "MAT"
-        tabGid: tab?.googleSheetId || null,
-        deepLinkUrl,
-        accountEmail: googleAccount.email,
-      },
       evaluations,
-      students: students.map((s: any) => ({
-        id: s.id,
-        usn: s.usn || s.enrollmentNumber || 'N/A',
-        enrollmentNumber: s.enrollmentNumber || '',
-        studentName: s.user ? `${s.user.firstName || ''} ${s.user.lastName || ''}`.trim() : 'Student',
-        ia1: 0,
-        ia2: 0,
-        assignment: 0,
-        totalCie: 0,
-      })),
+      students: students.map((s: any) => {
+        const sMarks = marksMap[s.id] || { ia1: 0, ia2: 0, assignment: 0 };
+        const totalCie = Number((sMarks.ia1 + sMarks.ia2 + sMarks.assignment).toFixed(1));
+        return {
+          id: s.id,
+          usn: s.usn || s.enrollmentNumber || 'N/A',
+          enrollmentNumber: s.enrollmentNumber || '',
+          studentName: s.user ? `${s.user.firstName || ''} ${s.user.lastName || ''}`.trim() : 'Student',
+          ia1: sMarks.ia1,
+          ia2: sMarks.ia2,
+          assignment: sMarks.assignment,
+          totalCie,
+        };
+      }),
     };
   },
 
   /**
-   * Synchronizes bitwise marks tab from Google Sheet into ERP
+   * Saves continuous assessment / marks for students
    */
-  async syncFacultyMarks(
+  async saveFacultyMarks(
     userId: string,
     assignmentId: string,
-    assessmentName?: string,
-    overrideValues?: string[][]
+    payload: {
+      marks: Array<{
+        studentId: string;
+        ia1?: number;
+        ia2?: number;
+        assignment?: number;
+      }>;
+    }
   ) {
     const assignment = await FacultyAssignment.findOne({
-      where: { id: assignmentId, userId, status: 'ACTIVE', marksAccess: true },
-      include: [{ model: Subject, as: 'subject' }, { model: Department, as: 'department' }],
+      where: {
+        id: assignmentId,
+        userId,
+        status: 'ACTIVE',
+        marksAccess: true,
+      },
     });
 
     if (!assignment) {
-      throw new Error('Unauthorized: You do not have permission to sync marks for this assignment.');
+      throw new Error('Unauthorized or inactive marks assignment. Access denied.');
     }
 
-    const connection = await GoogleSheetConnection.findOne({
+    const [assessment] = await Assessment.findOrCreate({
       where: {
+        subjectId: assignment.subjectId,
         departmentId: assignment.departmentId,
         semester: assignment.semester,
-        sheetType: { [Op.in]: ['ACADEMIC_MARKS', 'BITWISE_MARKS'] },
+        academicYear: assignment.academicYear || '2026-27',
+      },
+      defaults: {
+        subjectId: assignment.subjectId,
+        departmentId: assignment.departmentId,
+        semester: assignment.semester,
+        section: assignment.section,
+        academicYear: assignment.academicYear || '2026-27',
+        name: 'Continuous Internal Evaluation (CIE)',
+        maxMarks: 50.0,
         status: 'ACTIVE',
       },
-      include: [{ model: GoogleSheetTab, as: 'tabs' }],
     });
 
-    if (!connection) {
-      throw new Error(
-        `No active Bitwise Marks spreadsheet is connected for Semester ${assignment.semester}. Contact your HOD.`
-      );
-    }
-
-    let tab = (connection.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    if (!tab) {
-      throw new Error(
-        `Google Sheet Tab for ${(assignment as any).subject?.name} (${(assignment as any).subject?.code}) is not mapped.`
-      );
-    }
-
-    // Tab protection check: ensure FINAL MARKS is never synced as a subject
-    if (tab.sheetTitle.toUpperCase().includes('FINAL MARKS')) {
-      throw new Error('Tab "FINAL MARKS" is a master summary tab and cannot be synced directly.');
-    }
-
-    const result = await googleSheetsService.syncMarksTab({
-      connectionId: connection.id,
-      tabId: tab.id,
-      tabGid: tab.googleSheetId,
-      tabTitle: tab.sheetTitle,
-      facultyUserId: userId,
-      departmentId: assignment.departmentId,
-      authenticatedUserId: userId,
-      assessmentName: assessmentName || 'Internal Assessment 1',
-      overrideValues,
+    const [compIa1] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'IA-1' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'IA-1',
+        componentType: 'THEORY',
+        maxMarks: 20.0,
+        sequence: 1,
+      },
     });
 
-    return result;
+    const [compIa2] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'IA-2' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'IA-2',
+        componentType: 'THEORY',
+        maxMarks: 20.0,
+        sequence: 2,
+      },
+    });
+
+    const [compAssign] = await AssessmentComponent.findOrCreate({
+      where: { assessmentId: assessment.id, name: 'Assignment' },
+      defaults: {
+        assessmentId: assessment.id,
+        name: 'Assignment',
+        componentType: 'ASSIGNMENT',
+        maxMarks: 10.0,
+        sequence: 3,
+      },
+    });
+
+    // Upsert student marks for each component
+    for (const row of payload.marks) {
+      if (!row.studentId) continue;
+
+      if (row.ia1 !== undefined) {
+        const val = Math.min(20, Math.max(0, Number(row.ia1) || 0));
+        const [mRecord, created] = await StudentMarks.findOrCreate({
+          where: {
+            assessmentId: assessment.id,
+            componentId: compIa1.id,
+            studentId: row.studentId,
+          },
+          defaults: {
+            assessmentId: assessment.id,
+            componentId: compIa1.id,
+            studentId: row.studentId,
+            marks: val,
+          },
+        });
+        if (!created && Number(mRecord.marks) !== val) {
+          mRecord.marks = val;
+          await mRecord.save();
+        }
+      }
+
+      if (row.ia2 !== undefined) {
+        const val = Math.min(20, Math.max(0, Number(row.ia2) || 0));
+        const [mRecord, created] = await StudentMarks.findOrCreate({
+          where: {
+            assessmentId: assessment.id,
+            componentId: compIa2.id,
+            studentId: row.studentId,
+          },
+          defaults: {
+            assessmentId: assessment.id,
+            componentId: compIa2.id,
+            studentId: row.studentId,
+            marks: val,
+          },
+        });
+        if (!created && Number(mRecord.marks) !== val) {
+          mRecord.marks = val;
+          await mRecord.save();
+        }
+      }
+
+      if (row.assignment !== undefined) {
+        const val = Math.min(10, Math.max(0, Number(row.assignment) || 0));
+        const [mRecord, created] = await StudentMarks.findOrCreate({
+          where: {
+            assessmentId: assessment.id,
+            componentId: compAssign.id,
+            studentId: row.studentId,
+          },
+          defaults: {
+            assessmentId: assessment.id,
+            componentId: compAssign.id,
+            studentId: row.studentId,
+            marks: val,
+          },
+        });
+        if (!created && Number(mRecord.marks) !== val) {
+          mRecord.marks = val;
+          await mRecord.save();
+        }
+      }
+    }
+
+    logger.info(`Marks updated by faculty ${userId} for assignment ${assignmentId}`);
+    return this.getFacultyMarksWorkspace(userId, assignmentId);
   },
 
   /**
    * Aggregates assignment-scoped analytics strictly for the authenticated faculty
    */
-  async getFacultyAnalytics(userId: string) {
-    const assignments = await this.getFacultyAssignments(userId);
+  async getFacultyAnalytics(userId: string, academicYear?: string) {
+    const assignments = await this.getFacultyAssignments(userId, academicYear);
     const assignmentIds = assignments.map((a) => a.id);
 
     // Subject attendance breakdown
@@ -890,481 +1042,6 @@ export const facultyService = {
       defaulters,
       defaultersCount: defaulters.length,
       termStatus: 'AY 2026-27 Active Term',
-    };
-  },
-
-  /**
-   * Retrieves full in-app Google Sheet view data for an attendance assignment
-   */
-  async getFacultyAttendanceSheetView(userId: string, assignmentId: string) {
-    // 1. Strict Assignment Validation
-    const assignment = await FacultyAssignment.findOne({
-      where: { id: assignmentId, userId, status: 'ACTIVE', attendanceAccess: true },
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: Department, as: 'department' },
-      ],
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
-    }
-
-    const normSec = normalizeSection(assignment.section);
-
-    // 2. Resolve section-specific Attendance Connection
-    const connection = await GoogleSheetConnection.findOne({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        sheetType: 'ATTENDANCE',
-        status: 'ACTIVE',
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: { [Op.iLike]: `%${normSec}%` } },
-        ],
-      },
-      include: [{ model: GoogleSheetTab, as: 'tabs' }],
-    });
-
-    if (!connection) {
-      throw new Error(
-        `No active Attendance spreadsheet is connected for Semester ${assignment.semester} Section ${assignment.section}. Contact your HOD.`
-      );
-    }
-
-    // 3. Resolve exact Google Tab (e.g. CS301 for BCS301)
-    let tab = (connection.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    if (!tab) {
-      throw new Error(
-        `Google Sheet Tab for ${(assignment as any).subject?.name} (${(assignment as any).subject?.code}) is not mapped.`
-      );
-    }
-
-    const user = await User.findByPk(userId);
-    const facultyAccess = await FacultyGoogleSheetAccess.findOne({
-      where: {
-        facultyId: userId,
-        googleSheetConnectionId: connection.id,
-      },
-    });
-
-    const googleAccount = await this.getFacultyGoogleOAuthStatus(userId);
-    const deepLinkUrl = `https://docs.google.com/spreadsheets/d/${connection.googleSpreadsheetId}/edit#gid=${tab.googleSheetId}`;
-    const embedUrl = `https://docs.google.com/spreadsheets/d/${connection.googleSpreadsheetId}/edit?gid=${tab.googleSheetId}`;
-
-    const targetGoogleEmail = facultyAccess?.googleEmail || user?.email || '';
-    const isGranted = facultyAccess?.status === 'GRANTED';
-    const isWriter = (facultyAccess?.accessRole || 'writer') === 'writer';
-
-    let accessStatus:
-      | 'EDITOR_VERIFIED'
-      | 'PENDING_BROWSER_AUTH'
-      | 'VIEWER_ACCESS'
-      | 'ACCOUNT_MISMATCH'
-      | 'ACCESS_PENDING'
-      | 'ACCESS_REVOKED'
-      | 'GOOGLE_NOT_CONNECTED'
-      | 'VERIFICATION_FAILED' = 'ACCESS_PENDING';
-    let accessStatusLabel = 'Google Access Pending';
-
-    if (facultyAccess?.status === 'REVOKED') {
-      accessStatus = 'ACCESS_REVOKED';
-      accessStatusLabel = 'Google Access Revoked';
-    } else if (facultyAccess?.status === 'FAILED') {
-      accessStatus = 'VERIFICATION_FAILED';
-      accessStatusLabel = 'Access Verification Failed';
-    } else if (googleAccount.connected && googleAccount.email) {
-      if (googleAccount.email.toLowerCase() === targetGoogleEmail.toLowerCase()) {
-        if (!isWriter) {
-          accessStatus = 'VIEWER_ACCESS';
-          accessStatusLabel = 'Viewer Access';
-        } else {
-          accessStatus = 'EDITOR_VERIFIED';
-          accessStatusLabel = 'Editor Access Verified';
-        }
-      } else {
-        accessStatus = 'ACCOUNT_MISMATCH';
-        accessStatusLabel = `Account Mismatch (Granted to: ${targetGoogleEmail})`;
-      }
-    } else {
-      if (isGranted) {
-        if (isWriter) {
-          accessStatus = 'PENDING_BROWSER_AUTH';
-          accessStatusLabel = `Editor Permission Granted (${targetGoogleEmail})`;
-        } else {
-          accessStatus = 'VIEWER_ACCESS';
-          accessStatusLabel = `Viewer Permission Granted (${targetGoogleEmail})`;
-        }
-      } else {
-        accessStatus = 'ACCESS_PENDING';
-        accessStatusLabel = 'Google Access Pending';
-      }
-    }
-
-    // Diagnostic log for development tracking (NEVER logs tokens)
-    logger.info('[FacultyAttendance] Authorized Sheet View Access Verified:', {
-      facultyId: userId,
-      facultyGoogleEmail: targetGoogleEmail,
-      spreadsheetId: connection.googleSpreadsheetId,
-      gid: tab.googleSheetId,
-      permissionRole: facultyAccess?.accessRole || 'writer',
-      permissionStatus: facultyAccess?.status || 'PENDING',
-      accessStatus,
-      accessStatusLabel,
-    });
-
-    // Read sheet values
-    const facultyToken = await GoogleOAuthToken.findOne({
-      where: { userId, status: 'ACTIVE' },
-    });
-    let accessToken = facultyToken?.encryptedAccessToken || undefined;
-    if (!accessToken) {
-      const deptToken = await GoogleOAuthToken.findOne({
-        where: { departmentId: assignment.departmentId, status: 'ACTIVE' },
-      });
-      accessToken = deptToken?.encryptedAccessToken || undefined;
-    }
-
-    let rawRows: string[][] = [];
-    let loadError: string | null = null;
-    try {
-      rawRows = await googleSheetsService.readSheetValues(
-        connection.googleSpreadsheetId,
-        tab.sheetTitle,
-        accessToken
-      );
-    } catch (err: any) {
-      logger.warn(`Failed reading sheet values for tab ${tab.sheetTitle}:`, err.message);
-      loadError = err.message;
-    }
-
-    const headers = rawRows.length > 0 ? rawRows[0] : [];
-    const dataRows = rawRows.length > 1 ? rawRows.slice(1) : [];
-
-    return {
-      spreadsheetTitle: `CSE_III_Sem_${normSec}_Div Attendance Workbook`,
-      spreadsheetId: connection.googleSpreadsheetId,
-      spreadsheetUrl: connection.googleSpreadsheetUrl,
-      sheetTitle: tab.sheetTitle, // e.g. "CS301"
-      sheetId: tab.googleSheetId, // GID e.g. "1097112166"
-      subjectCode: (assignment as any).subject?.code || 'BCS301',
-      subjectName: (assignment as any).subject?.name || 'ADA',
-      semester: assignment.semester,
-      section: assignment.section,
-      academicYear: assignment.academicYear,
-      departmentCode: (assignment as any).department?.code || 'CSE',
-      googleAccountEmail: googleAccount.email,
-      targetGoogleEmail,
-      googleConnected: googleAccount.connected,
-      accessStatus,
-      accessStatusLabel,
-      accessRole: facultyAccess?.accessRole || 'writer',
-      isEditable: accessStatus === 'EDITOR_VERIFIED' || accessStatus === 'PENDING_BROWSER_AUTH',
-      deepLinkUrl,
-      embedUrl,
-      grid: rawRows,
-      columns: headers,
-      rows: dataRows,
-      loadError,
-    };
-  },
-
-  /**
-   * Updates attendance cell values in the real Google Sheet via Google Sheets API
-   */
-  async updateFacultyAttendanceSheetCells(
-    userId: string,
-    assignmentId: string,
-    updates: Array<{
-      cellAddress: string;
-      value: string;
-      oldValue?: string;
-      studentUsn?: string;
-      date?: string;
-      row?: number;
-      col?: number;
-    }>,
-    clientIp?: string,
-    userAgent?: string
-  ) {
-    // 1. Strict Layer-1 Assignment Security Check
-    const assignment = await FacultyAssignment.findOne({
-      where: { id: assignmentId, userId, status: 'ACTIVE', attendanceAccess: true },
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: Department, as: 'department' },
-      ],
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized: You do not have permission to edit this attendance sheet.');
-    }
-
-    const normSec = normalizeSection(assignment.section);
-
-    const connection = await GoogleSheetConnection.findOne({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        sheetType: 'ATTENDANCE',
-        status: 'ACTIVE',
-        [Op.or]: [
-          { section: normSec },
-          { section: assignment.section },
-          { section: `Section ${normSec}` },
-          { section: { [Op.iLike]: `%${normSec}%` } },
-        ],
-      },
-      include: [{ model: GoogleSheetTab, as: 'tabs' }],
-    });
-
-    if (!connection) {
-      throw new Error('No active attendance spreadsheet connected for this subject.');
-    }
-
-    let tab = (connection.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    if (!tab) {
-      throw new Error(`Google tab mapping not found for ${(assignment as any).subject?.name}.`);
-    }
-
-    // 2. Validate values (0, 1, EX, or '')
-    for (const u of updates) {
-      const v = (u.value || '').trim().toUpperCase();
-      if (v !== '0' && v !== '1' && v !== 'EX' && v !== 'PRESENT' && v !== 'ABSENT' && v !== '') {
-        throw new Error(
-          `Invalid attendance value "${u.value}". Attendance cells only accept 1 (Present), 0 (Absent), or EX.`
-        );
-      }
-    }
-
-    // 3. Resolve OAuth access token
-    const facultyToken = await GoogleOAuthToken.findOne({
-      where: { userId, status: 'ACTIVE' },
-    });
-    let accessToken = facultyToken?.encryptedAccessToken || undefined;
-    if (!accessToken) {
-      const deptToken = await GoogleOAuthToken.findOne({
-        where: { departmentId: assignment.departmentId, status: 'ACTIVE' },
-      });
-      accessToken = deptToken?.encryptedAccessToken || undefined;
-    }
-
-    // 4. Update real Google Sheet via Google Sheets API batchUpdate
-    const result = await googleSheetsService.updateSheetCellValues(
-      connection.googleSpreadsheetId,
-      tab.sheetTitle,
-      updates,
-      accessToken
-    );
-
-    // 5. Create immutable audit log entry
-    try {
-      await AuditLog.create({
-        userId,
-        action: 'FACULTY_GOOGLE_SHEET_ATTENDANCE_EDIT',
-        ipAddress: clientIp || '127.0.0.1',
-        userAgent: userAgent || 'JCER-ERP-Faculty',
-        details: {
-          assignmentId,
-          spreadsheetId: connection.googleSpreadsheetId,
-          tabTitle: tab.sheetTitle,
-          tabGid: tab.googleSheetId,
-          subjectCode: (assignment as any).subject?.code,
-          updatesCount: updates.length,
-          updates: updates.slice(0, 20), // Audit sample of modified cells
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } catch (auditErr: any) {
-      logger.warn('Failed creating audit log for sheet edit:', auditErr.message);
-    }
-
-    return {
-      success: true,
-      updatedCount: result.updatedCount,
-      tabTitle: tab.sheetTitle,
-      savedAt: new Date().toISOString(),
-      message: 'All changes saved to Google Sheets',
-    };
-  },
-
-  /**
-   * Retrieves full in-app Google Sheet view data for a continuous assessment marks assignment
-   */
-  async getFacultyMarksSheetView(userId: string, assignmentId: string) {
-    const assignment = await FacultyAssignment.findOne({
-      where: { id: assignmentId, userId, status: 'ACTIVE', marksAccess: true },
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: Department, as: 'department' },
-      ],
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized or inactive marks assignment. Access denied.');
-    }
-
-    const connection = await GoogleSheetConnection.findOne({
-      where: {
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        sheetType: { [Op.in]: ['ACADEMIC_MARKS', 'BITWISE_MARKS'] },
-        status: 'ACTIVE',
-      },
-      include: [{ model: GoogleSheetTab, as: 'tabs' }],
-    });
-
-    if (!connection) {
-      throw new Error(
-        `No active Bitwise Marks spreadsheet is connected for Semester ${assignment.semester}. Contact your HOD.`
-      );
-    }
-
-    let tab = (connection.tabs || []).find(
-      (t: any) => t.subjectId === assignment.subjectId || t.subjectCode === (assignment as any).subject?.code
-    );
-    if (!tab && connection.tabs?.length) {
-      tab = connection.tabs[0];
-    }
-
-    if (!tab) {
-      throw new Error(
-        `Google Sheet Tab for ${(assignment as any).subject?.name} (${(assignment as any).subject?.code}) is not mapped.`
-      );
-    }
-
-    // Protection: NEVER expose master FINAL MARKS tab
-    if (tab.sheetTitle.toUpperCase().includes('FINAL MARKS')) {
-      throw new Error('Access denied to master administrative summary tab.');
-    }
-
-    const user = await User.findByPk(userId);
-    const facultyAccess = await FacultyGoogleSheetAccess.findOne({
-      where: {
-        facultyId: userId,
-        googleSheetConnectionId: connection.id,
-      },
-    });
-
-    const googleAccount = await this.getFacultyGoogleOAuthStatus(userId);
-    const deepLinkUrl = `https://docs.google.com/spreadsheets/d/${connection.googleSpreadsheetId}/edit#gid=${tab.googleSheetId}`;
-    const embedUrl = `https://docs.google.com/spreadsheets/d/${connection.googleSpreadsheetId}/edit?gid=${tab.googleSheetId}`;
-
-    const targetGoogleEmail = facultyAccess?.googleEmail || user?.email || '';
-    const isGranted = facultyAccess?.status === 'GRANTED';
-    const isWriter = (facultyAccess?.accessRole || 'writer') === 'writer';
-
-    let accessStatus:
-      | 'EDITOR_VERIFIED'
-      | 'PENDING_BROWSER_AUTH'
-      | 'VIEWER_ACCESS'
-      | 'ACCOUNT_MISMATCH'
-      | 'ACCESS_PENDING'
-      | 'ACCESS_REVOKED'
-      | 'GOOGLE_NOT_CONNECTED'
-      | 'VERIFICATION_FAILED' = 'ACCESS_PENDING';
-    let accessStatusLabel = 'Google Access Pending';
-
-    if (facultyAccess?.status === 'REVOKED') {
-      accessStatus = 'ACCESS_REVOKED';
-      accessStatusLabel = 'Google Access Revoked';
-    } else if (facultyAccess?.status === 'FAILED') {
-      accessStatus = 'VERIFICATION_FAILED';
-      accessStatusLabel = 'Access Verification Failed';
-    } else if (googleAccount.connected && googleAccount.email) {
-      if (googleAccount.email.toLowerCase() === targetGoogleEmail.toLowerCase()) {
-        if (!isWriter) {
-          accessStatus = 'VIEWER_ACCESS';
-          accessStatusLabel = 'Viewer Access';
-        } else {
-          accessStatus = 'EDITOR_VERIFIED';
-          accessStatusLabel = 'Editor Access Verified';
-        }
-      } else {
-        accessStatus = 'ACCOUNT_MISMATCH';
-        accessStatusLabel = `Account Mismatch (Granted to: ${targetGoogleEmail})`;
-      }
-    } else {
-      if (isGranted) {
-        if (isWriter) {
-          accessStatus = 'PENDING_BROWSER_AUTH';
-          accessStatusLabel = `Editor Permission Granted (${targetGoogleEmail})`;
-        } else {
-          accessStatus = 'VIEWER_ACCESS';
-          accessStatusLabel = `Viewer Permission Granted (${targetGoogleEmail})`;
-        }
-      } else {
-        accessStatus = 'ACCESS_PENDING';
-        accessStatusLabel = 'Google Access Pending';
-      }
-    }
-
-    const facultyToken = await GoogleOAuthToken.findOne({
-      where: { userId, status: 'ACTIVE' },
-    });
-    let accessToken = facultyToken?.encryptedAccessToken || undefined;
-    if (!accessToken) {
-      const deptToken = await GoogleOAuthToken.findOne({
-        where: { departmentId: assignment.departmentId, status: 'ACTIVE' },
-      });
-      accessToken = deptToken?.encryptedAccessToken || undefined;
-    }
-
-    let rawRows: string[][] = [];
-    let loadError: string | null = null;
-    try {
-      rawRows = await googleSheetsService.readSheetValues(
-        connection.googleSpreadsheetId,
-        tab.sheetTitle,
-        accessToken
-      );
-    } catch (err: any) {
-      logger.warn(`Failed reading marks sheet values for tab ${tab.sheetTitle}:`, err.message);
-      loadError = err.message;
-    }
-
-    const headers = rawRows.length > 0 ? rawRows[0] : [];
-    const dataRows = rawRows.length > 1 ? rawRows.slice(1) : [];
-
-    return {
-      spreadsheetTitle: `1st INTERNAL ASSESSMENT MARKS 2025-26`,
-      spreadsheetId: connection.googleSpreadsheetId,
-      spreadsheetUrl: connection.googleSpreadsheetUrl,
-      sheetTitle: tab.sheetTitle, // e.g. "MAT"
-      sheetId: tab.googleSheetId,
-      subjectCode: (assignment as any).subject?.code || 'BCS301',
-      subjectName: (assignment as any).subject?.name || 'ADA',
-      semester: assignment.semester,
-      section: assignment.section,
-      academicYear: assignment.academicYear,
-      departmentCode: (assignment as any).department?.code || 'CSE',
-      googleAccountEmail: googleAccount.email,
-      targetGoogleEmail,
-      googleConnected: googleAccount.connected,
-      accessStatus,
-      accessStatusLabel,
-      accessRole: facultyAccess?.accessRole || 'writer',
-      isEditable: accessStatus === 'EDITOR_VERIFIED' || accessStatus === 'PENDING_BROWSER_AUTH',
-      deepLinkUrl,
-      embedUrl,
-      columns: headers,
-      rows: dataRows,
-      loadError,
     };
   },
 };

@@ -4,7 +4,6 @@ dotenv.config();
 import db from '../config/database';
 import Subject from '../models/Subject';
 import FacultyAssignment from '../models/FacultyAssignment';
-import GoogleSheetTab from '../models/GoogleSheetTab';
 import FacultyAuthorizationRequest from '../models/FacultyAuthorizationRequest';
 
 async function run() {
@@ -26,10 +25,6 @@ async function run() {
       // Clean up authorization requests referencing these subjects
       const deletedAuthReqs = await FacultyAuthorizationRequest.destroy({ where: { subjectId: subjectIds } });
       console.log(`Deleted ${deletedAuthReqs} faculty authorization requests.`);
-
-      // Reset subjectId on GoogleSheetTab referencing these subjects
-      const updatedTabs = await GoogleSheetTab.update({ subjectId: null, status: 'UNMAPPED' }, { where: { subjectId: subjectIds } });
-      console.log(`Reset ${updatedTabs[0]} google sheet tabs to UNMAPPED.`);
 
       // Delete subjects
       const deletedCount = await Subject.destroy({ where: { id: subjectIds } });

@@ -614,7 +614,7 @@ export const DocumentVerificationPage: React.FC = () => {
 
       {/* ── CREDENTIAL PREVIEW & DISPATCH MODAL ── */}
       {dispatchTarget && createPortal(
-        <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             
             {/* Modal Header */}

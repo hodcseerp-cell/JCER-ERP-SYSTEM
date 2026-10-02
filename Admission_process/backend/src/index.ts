@@ -3,14 +3,6 @@ import app from './app';
 import sequelize, { logDatabaseConfiguration } from './config/database';
 import { initRedis } from './config/redis';
 
-// Import Google Sheets Integration Models to ensure Sequelize registers them
-import './models/GoogleSheetConnection';
-import './models/GoogleSheetTab';
-import './models/FacultyGoogleSheetAccess';
-import './models/GoogleSheetSyncLog';
-import './models/GoogleOAuthToken';
-import './models/GoogleSheetResource';
-
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
@@ -573,17 +565,48 @@ async function startServer() {
 
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'faculty_assignments' AND column_name = 'googleSheetsAccess'
-          ) THEN
-            ALTER TABLE "faculty_assignments" ADD COLUMN "googleSheetsAccess" BOOLEAN DEFAULT true;
-          END IF;
-
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.columns
             WHERE table_name = 'faculty_authorization_requests' AND column_name = 'assignmentsData'
           ) THEN
             ALTER TABLE "faculty_authorization_requests" ADD COLUMN "assignmentsData" JSONB DEFAULT NULL;
           END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_authorization_requests' AND column_name = 'sequence'
+          ) THEN
+            ALTER TABLE "faculty_authorization_requests" ADD COLUMN "sequence" INTEGER DEFAULT 1;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_authorization_requests' AND column_name = 'decidedByName'
+          ) THEN
+            ALTER TABLE "faculty_authorization_requests" ADD COLUMN "decidedByName" VARCHAR(150) DEFAULT NULL;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'faculty_authorization_requests' AND column_name = 'decidedByRole'
+          ) THEN
+            ALTER TABLE "faculty_authorization_requests" ADD COLUMN "decidedByRole" VARCHAR(100) DEFAULT NULL;
+          END IF;
+
+          -- Allow NULL on subjectId for profile-only authorization requests
+          BEGIN
+            ALTER TABLE "faculty_authorization_requests" ALTER COLUMN "subjectId" DROP NOT NULL;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+
+          -- Make sure authority and status can store multi-level values
+          BEGIN
+            ALTER TABLE "faculty_authorization_requests" ALTER COLUMN "authority" TYPE VARCHAR(50);
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+
+          BEGIN
+            ALTER TABLE "faculty_authorization_requests" ALTER COLUMN "status" TYPE VARCHAR(50);
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
 
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
@@ -612,28 +635,141 @@ async function startServer() {
       console.warn('Pre-cast migration for schema extensions notice:', hodMigrationErr.message);
     }
 
-    // Pre-cast: Google Sheets & OAuth schema migrations (ensure userId, googleAccountEmail, profile cols and section exist before indexing)
+    // Migration: Safely remove obsolete Google Sheets & OAuth database objects (tables, columns, types)
     try {
       await sequelize.query(`
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "userId" UUID;
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "googleAccountEmail" VARCHAR(255);
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "googleAccountId" VARCHAR(255);
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "displayName" VARCHAR(255);
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "profilePicture" TEXT;
-        ALTER TABLE IF EXISTS "google_oauth_tokens" ADD COLUMN IF NOT EXISTS "lastUsedAt" TIMESTAMP WITH TIME ZONE;
-        ALTER TABLE IF EXISTS "google_sheet_connections" ADD COLUMN IF NOT EXISTS "section" VARCHAR(20) DEFAULT 'A';
-        ALTER TABLE IF EXISTS "faculty_google_sheet_access" ADD COLUMN IF NOT EXISTS "section" VARCHAR(20) DEFAULT 'A';
-        ALTER TABLE IF EXISTS "google_sheet_tabs" ADD COLUMN IF NOT EXISTS "googleSpreadsheetId" VARCHAR(255);
-        DROP INDEX IF EXISTS "google_sheet_connections_department_id_academic_year_semester_s";
-        DROP INDEX IF EXISTS "google_sheet_connections_department_id_academic_year_semester_section_sheet_type";
-        UPDATE "google_oauth_tokens" SET "googleAccountEmail" = "userEmail" WHERE "googleAccountEmail" IS NULL AND "userEmail" IS NOT NULL;
-        UPDATE "google_oauth_tokens" SET "userId" = "connectedBy" WHERE "userId" IS NULL AND "connectedBy" IS NOT NULL;
-        UPDATE "google_sheet_tabs" t SET "googleSpreadsheetId" = c."googleSpreadsheetId" FROM "google_sheet_connections" c WHERE t."googleSheetConnectionId" = c."id" AND t."googleSpreadsheetId" IS NULL;
-        DELETE FROM "google_sheet_tabs" WHERE "sheetTitle" IN ('401', '402', '403', '405', '407', '408', 'FINAL MARKS', 'Form responses 1');
+        DROP TABLE IF EXISTS "google_sheet_sync_logs" CASCADE;
+        DROP TABLE IF EXISTS "google_sheet_resources" CASCADE;
+        DROP TABLE IF EXISTS "google_sheet_tabs" CASCADE;
+        DROP TABLE IF EXISTS "faculty_google_sheet_access" CASCADE;
+        DROP TABLE IF EXISTS "google_sheet_connections" CASCADE;
+        DROP TABLE IF EXISTS "google_oauth_tokens" CASCADE;
+        ALTER TABLE IF EXISTS "faculty_assignments" DROP COLUMN IF EXISTS "googleSheetsAccess";
+        DROP TYPE IF EXISTS "enum_google_oauth_tokens_status" CASCADE;
+        DROP TYPE IF EXISTS "enum_google_sheet_connections_status" CASCADE;
+        DROP TYPE IF EXISTS "enum_google_sheet_resources_sheetType" CASCADE;
+        DROP TYPE IF EXISTS "enum_google_sheet_resources_status" CASCADE;
+        DROP TYPE IF EXISTS "enum_google_sheet_sync_logs_syncType" CASCADE;
+        DROP TYPE IF EXISTS "enum_google_sheet_sync_logs_status" CASCADE;
+        DROP TYPE IF EXISTS "enum_faculty_google_sheet_access_accessRole" CASCADE;
+        DROP TYPE IF EXISTS "enum_faculty_google_sheet_access_status" CASCADE;
       `);
-      console.log('✓ Google Sheets & OAuth schema tables verified.');
-    } catch (oauthMigrationErr: any) {
-      console.warn('Pre-cast migration for google tables skipped:', oauthMigrationErr.message);
+      console.log('✓ Obsolete Google Sheets & OAuth database objects removed.');
+    } catch (dropGoogleErr: any) {
+      console.warn('Google tables cleanup migration notice:', dropGoogleErr.message);
+    }
+
+    // Migration: Safely ensure Applied Science department, columns, and scope configurations exist
+    try {
+      await sequelize.query(`
+        ALTER TABLE IF EXISTS "departments" 
+        ADD COLUMN IF NOT EXISTS "type" VARCHAR(30) NOT NULL DEFAULT 'STANDARD',
+        ADD COLUMN IF NOT EXISTS "handlingSemesters" JSONB DEFAULT NULL;
+
+        ALTER TABLE IF EXISTS "sections" 
+        ADD COLUMN IF NOT EXISTS "branch" VARCHAR(30) DEFAULT NULL;
+        
+        ALTER TABLE IF EXISTS "faculty_assignments" 
+        ADD COLUMN IF NOT EXISTS "branch" VARCHAR(30) DEFAULT NULL,
+        ADD COLUMN IF NOT EXISTS "assignmentType" VARCHAR(50) NOT NULL DEFAULT 'REGULAR';
+
+        CREATE TABLE IF NOT EXISTS "hod_subject_handling_requests" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "hodUserId" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+          "departmentId" UUID NOT NULL REFERENCES "departments"("id") ON DELETE CASCADE,
+          "semester" INTEGER NOT NULL DEFAULT 1,
+          "subjectId" UUID NOT NULL REFERENCES "subjects"("id") ON DELETE CASCADE,
+          "academicYear" VARCHAR(30) NOT NULL DEFAULT '2026-27',
+          "reason" TEXT DEFAULT NULL,
+          "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+          "rejectionReason" TEXT DEFAULT NULL,
+          "reviewedBy" UUID REFERENCES "users"("id") ON DELETE SET NULL,
+          "reviewedAt" TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+          "teachingAssignmentId" UUID REFERENCES "faculty_assignments"("id") ON DELETE SET NULL,
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_user" ON "hod_subject_handling_requests" ("hodUserId");
+        CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_status" ON "hod_subject_handling_requests" ("status");
+        CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_subj" ON "hod_subject_handling_requests" ("subjectId");
+      `);
+
+      const [asDept]: any = await sequelize.query(`
+        SELECT id FROM "departments" WHERE "code" = 'AS' OR "name" ILIKE '%Applied Science%' LIMIT 1;
+      `);
+      if (asDept && asDept.length > 0) {
+        await sequelize.query(`
+          UPDATE "departments" 
+          SET "name" = 'Applied Science', 
+              "code" = 'AS', 
+              "type" = 'SEMESTER_HANDLING', 
+              "handlingSemesters" = '[1, 2]'::jsonb,
+              "updatedAt" = NOW()
+          WHERE "id" = '${asDept[0].id}';
+        `);
+      } else {
+        await sequelize.query(`
+          INSERT INTO "departments" ("id", "name", "code", "type", "handlingSemesters", "createdAt", "updatedAt")
+          VALUES (
+            gen_random_uuid(),
+            'Applied Science',
+            'AS',
+            'SEMESTER_HANDLING',
+            '[1, 2]'::jsonb,
+            NOW(),
+            NOW()
+          );
+        `);
+      }
+      console.log('✓ Applied Science department scope & schema verified.');
+    } catch (asMigErr: any) {
+      console.warn('Applied Science schema ensure notice:', asMigErr.message);
+    }
+
+    // Migration: Safely ensure attendance_sessions table and attendance_records.attendanceSessionId exist
+    try {
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "attendance_sessions" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "facultyAssignmentId" UUID NOT NULL REFERENCES "faculty_assignments"("id") ON DELETE CASCADE,
+          "departmentId" UUID NOT NULL REFERENCES "departments"("id") ON DELETE CASCADE,
+          "subjectId" UUID NOT NULL REFERENCES "subjects"("id") ON DELETE CASCADE,
+          "sectionId" UUID REFERENCES "sections"("id") ON DELETE SET NULL,
+          "section" VARCHAR(20) NOT NULL DEFAULT 'A',
+          "semester" INTEGER NOT NULL,
+          "academicYear" VARCHAR(20) NOT NULL,
+          "attendanceDate" DATE NOT NULL,
+          "sessionPeriod" INTEGER NOT NULL DEFAULT 1,
+          "status" VARCHAR(20) NOT NULL DEFAULT 'SUBMITTED',
+          "totalStudents" INTEGER NOT NULL DEFAULT 0,
+          "presentCount" INTEGER NOT NULL DEFAULT 0,
+          "absentCount" INTEGER NOT NULL DEFAULT 0,
+          "submittedAt" TIMESTAMP WITH TIME ZONE,
+          "submittedById" UUID REFERENCES "users"("id") ON DELETE SET NULL,
+          "lockedAt" TIMESTAMP WITH TIME ZONE,
+          "lockedById" UUID REFERENCES "users"("id") ON DELETE SET NULL,
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "attendance_sessions_faculty_assignment_id_date_period_unique" 
+        ON "attendance_sessions" ("facultyAssignmentId", "attendanceDate", "sessionPeriod");
+
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'attendance_records' AND column_name = 'attendanceSessionId'
+          ) THEN
+            ALTER TABLE "attendance_records" ADD COLUMN "attendanceSessionId" UUID REFERENCES "attendance_sessions"("id") ON DELETE CASCADE;
+          END IF;
+        END
+        $$;
+      `);
+      console.log('✓ AttendanceSession table & relationships verified.');
+    } catch (attSessionErr: any) {
+      console.warn('AttendanceSession schema ensure notice:', attSessionErr.message);
     }
 
     if (process.env.NODE_ENV === 'development') {

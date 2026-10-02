@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Users, UserCheck, Eye, History, UserPlus, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import deanService, { HodRecord, DepartmentRecord } from '../../../services/dean.service';
@@ -269,76 +270,79 @@ export const HodListPage: React.FC = () => {
       </div>
 
       {/* ── DELETE CONFIRMATION MODAL ── */}
-      {deleteModalOpen && selectedHodToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
-            <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                  Delete HOD Record
-                </h3>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  Are you sure you want to permanently delete this Head of Department? This action will remove this record and associated data from the database.
-                </p>
+      {deleteModalOpen && selectedHodToDelete &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center flex-shrink-0 text-rose-600 dark:text-rose-400">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                    Delete HOD Record
+                  </h3>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                    Are you sure you want to permanently delete this Head of Department? This action will remove this record and associated data from the database.
+                  </p>
 
-                <div className="mt-4 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-1.5 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-400 font-medium">Name:</span>
-                    <span className="font-bold text-neutral-900 dark:text-white">{selectedHodToDelete.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-400 font-medium">Department:</span>
-                    <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-                      {selectedHodToDelete.departmentCode ? `${selectedHodToDelete.departmentCode} - ${selectedHodToDelete.departmentName || ''}` : selectedHodToDelete.departmentName || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-400 font-medium">Email:</span>
-                    <span className="font-medium text-neutral-600 dark:text-neutral-400 truncate max-w-[200px]">{selectedHodToDelete.email}</span>
+                  <div className="mt-4 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-400 font-medium">Name:</span>
+                      <span className="font-bold text-neutral-900 dark:text-white">{selectedHodToDelete.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-400 font-medium">Department:</span>
+                      <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                        {selectedHodToDelete.departmentCode ? `${selectedHodToDelete.departmentCode} - ${selectedHodToDelete.departmentName || ''}` : selectedHodToDelete.departmentName || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-400 font-medium">Email:</span>
+                      <span className="font-medium text-neutral-600 dark:text-neutral-400 truncate max-w-[200px]">{selectedHodToDelete.email}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-6 flex items-center justify-end space-x-3">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => {
-                  setDeleteModalOpen(false);
-                  setSelectedHodToDelete(null);
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-all disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={handleConfirmDelete}
-                className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-md shadow-rose-600/20 transition-all disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Confirm Delete</span>
-                  </>
-                )}
-              </button>
+              <div className="mt-6 flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setDeleteModalOpen(false);
+                    setSelectedHodToDelete(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleConfirmDelete}
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-md shadow-rose-600/20 transition-all disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Confirm Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
     </div>
+
   );
 };
 

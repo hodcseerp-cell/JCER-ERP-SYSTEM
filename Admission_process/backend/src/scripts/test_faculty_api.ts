@@ -17,13 +17,10 @@ async function main() {
     console.log('\n1. Dashboard Data:');
     const dashboard = await facultyService.getFacultyDashboard(user.id);
     console.log('Profile:', dashboard.profile);
-    console.log('Google Account Status:', dashboard.googleAccount);
     console.log('Stats:', dashboard.stats);
     console.log(`Assignments (${dashboard.assignments.length}):`);
     dashboard.assignments.forEach(a => {
       console.log(`  - ${a.subjectName} (${a.subjectCode}), Sem ${a.semester}, Sec ${a.section}`);
-      console.log(`    Att Sheet: Connected=${a.attendanceSheet.connected}, Tab=${a.attendanceSheet.tabTitle}, GID=${a.attendanceSheet.tabGid}, Link=${a.attendanceSheet.deepLinkUrl}`);
-      console.log(`    Marks Sheet: Connected=${a.marksSheet.connected}, Tab=${a.marksSheet.tabTitle}, GID=${a.marksSheet.tabGid}, Link=${a.marksSheet.deepLinkUrl}`);
     });
 
     if (dashboard.assignments.length > 0) {
@@ -33,7 +30,6 @@ async function main() {
       console.log(`\n2. Attendance Workspace for Assignment ${assignmentId}:`);
       const attWs = await facultyService.getFacultyAttendanceWorkspace(user.id, assignmentId);
       console.log('Course:', attWs.assignment);
-      console.log('Google Sheet Tab:', attWs.googleSheet.tabTitle, 'GID:', attWs.googleSheet.tabGid);
       console.log('Metrics:', attWs.metrics);
       console.log(`Students Enrolled (${attWs.students.length}):`);
       attWs.students.forEach(s => {
@@ -44,7 +40,6 @@ async function main() {
       console.log(`\n3. Marks Workspace for Assignment ${assignmentId}:`);
       const marksWs = await facultyService.getFacultyMarksWorkspace(user.id, assignmentId);
       console.log('Course:', marksWs.assignment);
-      console.log('Marks Sheet Tab:', marksWs.googleSheet.tabTitle, 'GID:', marksWs.googleSheet.tabGid);
       console.log('Evaluations:', marksWs.evaluations);
       console.log(`Students count: ${marksWs.students.length}`);
 

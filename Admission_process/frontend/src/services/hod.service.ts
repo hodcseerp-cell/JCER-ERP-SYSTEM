@@ -50,9 +50,21 @@ export interface HodDashboardData {
     id: string;
     name: string;
     code: string;
+    type?: 'STANDARD' | 'SEMESTER_HANDLING';
+    handlingSemesters?: number[] | null;
   } | null;
   academicYear: string;
   stats: HodDashboardStats;
+  branchBreakdown?: Array<{
+    branchCode: string;
+    branchName: string;
+    departmentId: string;
+    sem1Count: number;
+    sem2Count: number;
+    totalStudents: number;
+    allocatedStudents: number;
+    unallocatedStudents: number;
+  }>;
   pendingAuthorizationsList: PendingAuthorizationItem[];
   recentAssignments: RecentAssignmentItem[];
   attendanceAnalytics: {
@@ -75,6 +87,8 @@ export interface HodDepartmentInfo {
     id: string;
     name: string;
     code: string;
+    type?: 'STANDARD' | 'SEMESTER_HANDLING';
+    handlingSemesters?: number[] | null;
   };
   facultyList: Array<{
     id: string;
@@ -99,6 +113,7 @@ export interface HodDepartmentInfo {
 
 export interface HodStudentItem {
   id: string;
+  slNo?: number;
   userId: string;
   usn: string | null;
   enrollmentNumber: string | null;
@@ -107,6 +122,15 @@ export interface HodStudentItem {
   email: string;
   phone: string;
   semester: number;
+  branch?: string | null;
+  branchCode?: string | null;
+  branchName?: string | null;
+  actualBranch?: string | null;
+  department?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
   section: string | null;
   batchYear: number;
   admissionStatus: string;
@@ -121,10 +145,38 @@ export interface HodStudentItem {
   updatedAt?: string;
 }
 
+export interface SemesterTransitionSummary {
+  academicYear: string;
+  totalSem2Students: number;
+  readyForTransition: number;
+  alreadyTransitioned: number;
+  branchBreakdown: Array<{
+    departmentId: string;
+    branchCode: string;
+    branchName: string;
+    sem2Count: number;
+    readyCount: number;
+    transitionedCount: number;
+    students: Array<{
+      id: string;
+      slNo: number;
+      usn: string | null;
+      applicationNumber: string | null;
+      name: string;
+      email: string | null;
+      phone: string | null;
+      semester: number;
+      currentSection: string;
+      branch: string;
+    }>;
+  }>;
+}
+
 export interface HodSectionItem {
   id: string;
   code?: string;
   name: string;
+  branch?: string | null;
   semester: number;
   academicYear: string;
   capacity: number;
@@ -167,16 +219,37 @@ export interface HodSectionStudentItem {
   isUnallocated?: boolean;
 }
 
+export interface HodBranchOverviewItem {
+  branchCode: string;
+  branchName: string;
+  departmentId: string;
+  totalStudents: number;
+  sectionCount: number;
+  allocatedStudents: number;
+  unallocatedStudents: number;
+}
+
+export interface HodBranchesOverviewPayload {
+  semester: number;
+  academicYear: string;
+  department: { id: string; name: string; code: string; type?: string };
+  branches: HodBranchOverviewItem[];
+}
+
 export interface HodSectionCohortData {
   section: HodSectionItem;
   siblingSections: Array<{ id: string; name: string; capacity: number; code?: string }>;
   stats: {
-    totalStudents: number;
-    allocatedStudents: number;
-    unallocatedStudents: number;
-    sectionCapacity: number;
-    sectionAllocatedCount: number;
-    remainingCapacity: number;
+    totalStudents?: number;
+    totalDepartmentStudents?: number;
+    allocatedStudents?: number;
+    unallocatedStudents?: number;
+    thisSectionAllocated?: number;
+    otherSectionsAllocated?: number;
+    sectionCapacity?: number;
+    sectionAllocatedCount?: number;
+    remainingCapacity?: number;
+    fillPercentage?: number;
   };
   students: HodSectionStudentItem[];
 }
@@ -198,71 +271,81 @@ export interface HodCohortStudentItem {
   admissionType: string;
 }
 
-export interface HodGoogleSheetTabItem {
+export interface HodCohortSubjectItem {
   id: string;
-  sheetId: number;
-  title: string;
-  index: number;
-  sheetType: string;
-  subjectId: string | null;
-  subjectCode: string | null;
-  status: string;
-  mappedSubject: {
+  name: string;
+  code: string;
+  type: string;
+  category?: string;
+  credits: number;
+  semester: number;
+  cycle?: 'P_CYCLE' | 'C_CYCLE' | string | null;
+  schemeId?: string;
+  isAssigned?: boolean;
+  assignmentStatus?: 'ASSIGNED' | 'NOT_ASSIGNED';
+}
+
+export interface HodCohortFacultyAssignment {
+  userId: string;
+  facultyName: string;
+  facultyEmail: string | null;
+  cycle: string | null;
+  subjects: Array<{
     id: string;
     name: string;
     code: string;
-    type?: string;
-  } | null;
-}
-
-export interface HodGoogleSheetConnectionItem {
-  id: string;
-  sheetType: 'ATTENDANCE' | 'BITWISE_MARKS' | 'ACADEMIC_MARKS';
-  section: string;
-  spreadsheetId: string;
-  spreadsheetUrl: string;
-  accountEmail: string;
-  status: string;
-  connectedAt: string;
-  lastSyncedAt?: string;
-  connectedBy?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  };
-  tabs: HodGoogleSheetTabItem[];
+    cycle: string | null;
+    section: string;
+    type: string;
+  }>;
+  sections: string[];
 }
 
 export interface HodSemesterCohortPayload {
   semester: number;
+  academicYear: string;
   department: {
     id: string;
     name: string;
     code: string;
+    type?: string;
   };
-  academicYear: string;
-  summary: {
+  // New enriched stats from backend
+  stats?: {
+    totalStudents: number;
+    activeStudents: number;
+    allocatedCount: number;
+    unallocatedCount: number;
+    totalSections: number;
+    totalSubjects: number;
+    totalFaculty: number;
+    sections: string;
+    sectionsList: string[];
+    sectionsBreakdown: Array<{ section: string; count: number }>;
+  };
+  // Legacy summary shape (kept for backward compat)
+  summary?: {
     totalStudents: number;
     activeStudents: number;
     sections: string;
     sectionsList: string[];
     sectionsBreakdown: Array<{ section: string; count: number }>;
   };
+  sectionsBreakdown?: Array<{ section: string; count: number }>;
   students: HodCohortStudentItem[];
-  googleSheets: {
-    attendance: HodGoogleSheetConnectionItem | null;
-    attendanceConnections?: HodGoogleSheetConnectionItem[];
-    bitwiseMarks: HodGoogleSheetConnectionItem | null;
-  };
-  subjects: Array<{
-    id: string;
-    name: string;
-    code: string;
-    type: string;
-    credits: number;
-    semester: number;
-  }>;
+  subjects: HodCohortSubjectItem[];
+  facultyAssignments?: HodCohortFacultyAssignment[];
+}
+
+export interface HodFacultyApprovalRecord {
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'LOCKED' | string;
+  approvedByName?: string | null;
+  decidedByName?: string | null;
+  approvedByRole?: string | null;
+  decidedByRole?: string | null;
+  approvedAt?: string | null;
+  decidedAt?: string | null;
+  rejectionReason?: string | null;
 }
 
 export interface HodFacultyItem {
@@ -272,24 +355,93 @@ export interface HodFacultyItem {
   email: string;
   phone?: string;
   designation: string;
+  department?: string | null;
+  departmentId?: string | null;
+  departmentName?: string | null;
+  departmentCode?: string | null;
+  coreDepartmentId?: string | null;
+  coreDepartmentName?: string | null;
+  coreDepartmentCode?: string | null;
+  isCoreDepartment?: boolean;
+  cycle?: 'P_CYCLE' | 'C_CYCLE' | string | null;
   joiningDate?: string;
   accountStatus: string; // 'ACTIVE' | 'INACTIVE' | 'PENDING_AUTHORIZATION'
-  authorizationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'N/A';
-  authority: 'DEAN' | 'PRINCIPAL' | 'N/A';
+  authorizationStatus: 'PENDING_DEAN' | 'PENDING_PRINCIPAL' | 'FULLY_APPROVED' | 'REJECTED' | 'PENDING' | 'APPROVED' | string;
+  approvalSummary?: string;
+  authority?: 'DEAN' | 'PRINCIPAL' | 'DEAN_ACADEMICS' | string;
+  rejectedByName?: string | null;
   rejectionReason?: string | null;
   profileImage?: string;
+  assignedSubjectsCount?: number;
+  totalActiveAssignmentsCount?: number;
+  deanApproval?: HodFacultyApprovalRecord | null;
+  principalApproval?: HodFacultyApprovalRecord | null;
   assignments: Array<{
     id: string;
     subjectId: string;
     subjectName?: string;
     subjectCode?: string;
+    subjectCycle?: string | null;
+    cycle?: string | null;
+    subjectSchemeId?: string;
+    credits?: number;
     semester: number;
     section: string;
-    attendanceAccess: boolean;
-    marksAccess: boolean;
+    academicYear?: string;
+    attendanceAccess?: boolean;
+    marksAccess?: boolean;
     status: string;
   }>;
+  hodAssignments?: Array<{
+    id: string;
+    subjectId: string;
+    subjectName?: string;
+    subjectCode?: string;
+    subjectCycle?: string | null;
+    credits?: number;
+    semester: number;
+    section: string;
+    academicYear?: string;
+    departmentId?: string;
+    departmentCode?: string;
+    departmentName?: string;
+    status: string;
+  }>;
+  allActiveAssignments?: Array<{
+    id: string;
+    subjectId: string;
+    subjectName?: string;
+    subjectCode?: string;
+    subjectCycle?: string | null;
+    credits?: number;
+    semester: number;
+    section: string;
+    academicYear?: string;
+    departmentId?: string;
+    departmentCode?: string;
+    departmentName?: string;
+    status: string;
+  }>;
+  authorizationHistory?: any[];
 }
+
+export interface CourseCategoryDefinition {
+  code: string;
+  name: string;
+  label: string;
+}
+
+export const APPLIED_SCIENCE_COURSE_CATEGORIES: CourseCategoryDefinition[] = [
+  { code: 'ASC', name: 'Applied Science Course', label: 'ASC — Applied Science Course' },
+  { code: 'IPCC', name: 'Integrated Professional Core Course', label: 'IPCC — Integrated Professional Core Course' },
+  { code: 'PCC', name: 'Professional Core Course', label: 'PCC — Professional Core Course' },
+  { code: 'PCCL', name: 'Professional Core Course Laboratory', label: 'PCCL — Professional Core Course Laboratory' },
+  { code: 'ESC', name: 'Engineering Science Course', label: 'ESC — Engineering Science Course' },
+  { code: 'ETC', name: 'Emerging Technology Course', label: 'ETC — Emerging Technology Course' },
+  { code: 'AEC', name: 'Ability Enhancement Course', label: 'AEC — Ability Enhancement Course' },
+  { code: 'SDC', name: 'Skill Development / Project Course', label: 'SDC — Skill Development / Project Course' },
+  { code: 'NCMC', name: 'Non-Credit Mandatory Course', label: 'NCMC — Non-Credit Mandatory Course' },
+];
 
 export interface HodSubjectItem {
   id: string;
@@ -298,6 +450,10 @@ export interface HodSubjectItem {
   credits: number;
   semester: number;
   type: string;
+  category?: string;
+  cycle?: 'P_CYCLE' | 'C_CYCLE' | string | null;
+  schemeId?: string;
+  scheme?: { id?: string; name?: string; code?: string } | any;
   status: string;
   assignedFaculty: Array<{
     assignmentId: string;
@@ -307,6 +463,72 @@ export interface HodSubjectItem {
     attendanceAccess: boolean;
     marksAccess: boolean;
   }>;
+}
+
+export interface HodDepartmentSchemeData {
+  activeSchemeId: string | null;
+  activeSchemeName: string | null;
+  departmentCode: string;
+  departmentName: string;
+  type?: string;
+  handlingSemesters?: number[] | null;
+}
+
+export interface HodTeachingAssignment {
+  id: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  semester: number;
+  section: string;
+  academicYear: string;
+  assignmentType: string;
+  status: string;
+  attendanceAccess: boolean;
+  marksAccess: boolean;
+  assignedAt: string;
+}
+
+export interface HodSubjectHandlingRequestItem {
+  id: string;
+  hodUserId: string;
+  departmentId: string;
+  departmentName?: string;
+  departmentCode?: string;
+  semester: number;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  academicYear: string;
+  reason?: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionReason?: string | null;
+  reviewedBy?: string | null;
+  reviewerName?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface HodAvailableSubject {
+  id: string;
+  name: string;
+  code: string;
+  semester: number;
+  credits: number;
+  type: string;
+  departmentId: string | null;
+  departmentName: string;
+  departmentCode: string;
+  isAlreadyAssigned: boolean;
+  hasPendingRequest: boolean;
+}
+
+export interface HodTeachingResponsibilitiesData {
+  activeAssignments: HodTeachingAssignment[];
+  totalSubjectsCount: number;
+  myRequests: HodSubjectHandlingRequestItem[];
+  academicYear: string;
 }
 
 export interface HodDefaulterItem {
@@ -341,23 +563,6 @@ export interface HodPerformanceItem {
   };
 }
 
-export interface HodSheetMatrixItem {
-  assignmentId: string;
-  facultyId: string;
-  facultyName: string;
-  facultyEmail: string;
-  subjectName: string;
-  subjectCode: string;
-  semester: number;
-  section: string;
-  attendanceAccess: boolean;
-  marksAccess: boolean;
-  googleSheetsAccess?: boolean;
-  status: string;
-  spreadsheetUrl: string;
-  lastSyncedAt: string;
-}
-
 export interface TeachingAssignmentInput {
   semester: number | string;
   subjectName: string;
@@ -367,11 +572,9 @@ export interface TeachingAssignmentInput {
   permissions?: {
     attendance: boolean;
     marks: boolean;
-    googleSheets: boolean;
   };
   attendanceAccess?: boolean;
   marksAccess?: boolean;
-  googleSheetsAccess?: boolean;
 }
 
 export const hodService = {
@@ -380,6 +583,7 @@ export const hodService = {
     academicYear?: string;
     semester?: string | number;
     section?: string;
+    branch?: string;
   }): Promise<HodDashboardData> => {
     const res = await API.get('/hod/dashboard', { params });
     return res.data.data;
@@ -396,6 +600,7 @@ export const hodService = {
     limit?: number;
     semester?: string | number;
     section?: string;
+    branch?: string;
     status?: string;
     admissionType?: string;
     qualification?: string;
@@ -418,31 +623,47 @@ export const hodService = {
     return res.data.data;
   },
 
-  getStudentSemesters: async (): Promise<Array<{ semester: number; totalStudents: number; assignedSectionsCount: number }>> => {
-    const res = await API.get('/hod/students/semesters');
+  getStudentSemesters: async (academicYear?: string): Promise<Array<{ semester: number; totalStudents: number; assignedSectionsCount: number }>> => {
+    const res = await API.get('/hod/students/semesters', { params: { academicYear } });
     return res.data.data;
   },
 
-  getStudentSections: async (semester?: number | string, academicYear?: string): Promise<HodSectionItem[]> => {
+  getBranchesOverview: async (
+    semester?: number | string,
+    academicYear?: string
+  ): Promise<HodBranchesOverviewPayload> => {
     try {
-      const res = await API.get('/hod/students/sections', { params: { semester, academicYear } });
+      const res = await API.get('/hod/sections/branches-overview', { params: { semester, academicYear } });
       return res.data.data;
     } catch (err: any) {
       if (err.response?.status === 404) {
-        const fallback = await API.get('/hod/sections', { params: { semester, academicYear } });
+        const fallback = await API.get('/hod/students/sections/branches-overview', { params: { semester, academicYear } });
         return fallback.data.data;
       }
       throw err;
     }
   },
 
-  getSections: async (semester?: number | string, academicYear?: string): Promise<HodSectionItem[]> => {
+  getStudentSections: async (semester?: number | string, academicYear?: string, branch?: string): Promise<HodSectionItem[]> => {
     try {
-      const res = await API.get('/hod/students/sections', { params: { semester, academicYear } });
+      const res = await API.get('/hod/students/sections', { params: { semester, academicYear, branch } });
       return res.data.data;
     } catch (err: any) {
       if (err.response?.status === 404) {
-        const fallback = await API.get('/hod/sections', { params: { semester, academicYear } });
+        const fallback = await API.get('/hod/sections', { params: { semester, academicYear, branch } });
+        return fallback.data.data;
+      }
+      throw err;
+    }
+  },
+
+  getSections: async (semester?: number | string, academicYear?: string, branch?: string): Promise<HodSectionItem[]> => {
+    try {
+      const res = await API.get('/hod/students/sections', { params: { semester, academicYear, branch } });
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get('/hod/sections', { params: { semester, academicYear, branch } });
         return fallback.data.data;
       }
       throw err;
@@ -466,6 +687,7 @@ export const hodService = {
     name: string;
     semester: number;
     capacity: number;
+    branch?: string;
     academicYear?: string;
     classroom?: string;
     description?: string;
@@ -638,9 +860,13 @@ export const hodService = {
   },
 
   // 3. Faculty
-  getFacultyList: async (): Promise<HodFacultyItem[]> => {
-    const res = await API.get('/hod/faculty');
-    return res.data.data;
+  getFacultyList: async (params?: { branch?: string }): Promise<HodFacultyItem[]> => {
+    const res = await API.get('/hod/faculty', { params });
+    const list = res.data.data || [];
+    if (res.data.hodDepartment) {
+      (list as any).hodDepartment = res.data.hodDepartment;
+    }
+    return list;
   },
 
   createFaculty: async (data: {
@@ -650,20 +876,24 @@ export const hodService = {
     phone?: string;
     designation: string;
     joiningDate?: string;
-    teachingAssignments?: TeachingAssignmentInput[];
-    subjectName?: string;
-    subjectCode?: string;
-    subjectId?: string;
-    semester?: number;
-    section?: string;
-    academicYear?: string;
-    attendanceAccess?: boolean;
-    marksAccess?: boolean;
-    googleSheetsAccess?: boolean;
-    authority: 'DEAN' | 'PRINCIPAL';
+    coreDepartmentId?: string;
+    cycle?: string | null;
   }): Promise<any> => {
     const res = await API.post('/hod/faculty', data);
     return res.data;
+  },
+
+  getDepartments: async (): Promise<Array<{ id: string; code: string; name: string; type?: string }>> => {
+    try {
+      const res = await API.get('/hod/departments');
+      return res.data.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.get('/dean/departments');
+        return fallback.data.data;
+      }
+      throw err;
+    }
   },
 
   getFacultyDetail: async (id: string): Promise<any> => {
@@ -671,12 +901,52 @@ export const hodService = {
     return res.data.data;
   },
 
+  removeFacultyFromTeachingDepartment: async (facultyId: string): Promise<{ success: boolean; message: string; removedCount?: number }> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/remove-from-department`);
+    return res.data;
+  },
+
+  deactivateFaculty: async (facultyId: string): Promise<{ success: boolean; message: string }> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/deactivate`);
+    return res.data;
+  },
+
+  assignFacultySubject: async (facultyId: string, data: {
+    subjectId: string;
+    semester: number;
+    cycle?: string | null;
+    section?: string;
+    academicYear?: string;
+    coreDepartmentId?: string;
+    coreDepartmentCode?: string;
+    teachingDepartmentId?: string;
+    teachingDepartmentCode?: string;
+    attendanceAccess?: boolean;
+    marksAccess?: boolean;
+  }): Promise<any> => {
+    const res = await API.post(`/hod/faculty/${facultyId}/assignment`, data);
+    return res.data;
+  },
+
+  deleteFacultyAssignment: async (assignmentId: string, facultyId?: string): Promise<any> => {
+    if (facultyId) {
+      try {
+        const res = await API.delete(`/hod/faculty/${facultyId}/assignment/${assignmentId}`);
+        return res.data;
+      } catch (err: any) {
+        if (err.response?.status !== 404) throw err;
+      }
+    }
+    const res = await API.delete(`/hod/faculty/assignment/${assignmentId}`);
+    return res.data;
+  },
+
   updateFacultyAssignment: async (id: string, data: any): Promise<any> => {
     const res = await API.put(`/hod/faculty/${id}/assignment`, data);
     return res.data;
   },
 
-  toggleFacultyAccess: async (id: string, data: { attendanceAccess?: boolean; marksAccess?: boolean; googleSheetsAccess?: boolean }): Promise<any> => {
+  toggleFacultyAccess: async (id: string, data: { attendanceAccess?: boolean; marksAccess?: boolean }): Promise<any> => {
     const res = await API.patch(`/hod/faculty/${id}/access`, data);
     return res.data;
   },
@@ -691,18 +961,28 @@ export const hodService = {
     return res.data;
   },
 
-  getFacultyAssignments: async (): Promise<any[]> => {
-    const res = await API.get('/hod/faculty/assignments');
+  getFacultyAssignments: async (facultyId?: string, academicYear?: string): Promise<any[]> => {
+    const res = await API.get('/hod/faculty/assignments', { params: { facultyId, academicYear } });
     return res.data.data;
   },
 
-  // 4. Subjects
-  getSubjects: async (params?: { semester?: string | number; academicYear?: string; status?: string }): Promise<HodSubjectItem[]> => {
+  // 4. Subjects & Academic Scheme
+  getDepartmentScheme: async (): Promise<HodDepartmentSchemeData> => {
+    const res = await API.get('/hod/scheme');
+    return res.data.data;
+  },
+
+  updateDepartmentScheme: async (schemeId: string): Promise<{ success: boolean; message: string; data: { activeSchemeId: string; activeSchemeName: string } }> => {
+    const res = await API.put('/hod/scheme', { schemeId });
+    return res.data;
+  },
+
+  getSubjects: async (params?: { semester?: string | number; cycle?: string; schemeId?: string; academicYear?: string; status?: string }): Promise<HodSubjectItem[]> => {
     const res = await API.get('/hod/subjects', { params });
     return res.data.data;
   },
 
-  createSubject: async (data: { code: string; name: string; semester: number; credits?: number; type?: string }): Promise<any> => {
+  createSubject: async (data: { code: string; name: string; semester: number; cycle?: string | null; credits?: number; type?: string; category?: string }): Promise<any> => {
     const res = await API.post('/hod/subjects', data);
     return res.data;
   },
@@ -754,210 +1034,28 @@ export const hodService = {
     return res.data.data;
   },
 
-  // 7. Sheets & Google Integration
-  getSheetAccessMatrix: async (): Promise<HodSheetMatrixItem[]> => {
-    const res = await API.get('/hod/sheets/access');
-    return res.data.data;
-  },
-
-  updateSheetAccess: async (assignmentId: string, data: { attendanceAccess?: boolean; marksAccess?: boolean; googleSheetsAccess?: boolean }): Promise<any> => {
-    const res = await API.patch(`/hod/sheets/access/${assignmentId}`, data);
-    return res.data;
-  },
-
-  getSheetSyncHistory: async (): Promise<any[]> => {
-    const res = await API.get('/google-sheets/sync-history');
-    return res.data.data;
-  },
-
   // Dedicated Semester Cohort API
   getSemesterCohort: async (
     semester: number | string,
-    params?: { academicYear?: string; search?: string }
+    params?: { academicYear?: string; search?: string; branch?: string }
   ): Promise<HodSemesterCohortPayload> => {
     const res = await API.get(`/hod/students/semesters/${semester}`, { params });
     return res.data.data;
   },
 
-  // Semester-Scoped Google Sheet APIs
-  getSemesterGoogleSheets: async (
-    semester: number | string,
-    academicYear?: string,
-    section?: string
-  ): Promise<{
-    semester: number;
-    academicYear: string;
-    divisions?: Array<{ section: string; divisionName: string; isConnected: boolean; connection: any }>;
-    attendance: any;
-    marks: any;
-    allConnections?: any[];
-  }> => {
-    const res = await API.get(`/hod/semesters/${semester}/google-sheets`, { params: { academicYear, section } });
+  // 7. Special Applied Science: Semester Transition
+  getSemesterTransitionSummary: async (academicYear?: string): Promise<SemesterTransitionSummary> => {
+    const res = await API.get('/hod/semester-transition/summary', { params: { academicYear } });
     return res.data.data;
   },
 
-  connectSemesterGoogleSheet: async (
-    semester: number | string,
-    data: {
-      spreadsheetUrl: string;
-      sheetType: 'ATTENDANCE' | 'ACADEMIC_MARKS' | 'BITWISE_MARKS';
-      academicYear?: string;
-      section?: string;
-    }
-  ): Promise<any> => {
-    const res = await API.post(`/hod/semesters/${semester}/google-sheets/connect`, data);
-    return res.data;
-  },
-
-  connectSemesterAttendanceSheetsBatch: async (
-    semester: number | string,
-    data: {
-      connections: Array<{ section: string; spreadsheetUrl: string }>;
-      academicYear?: string;
-    }
-  ): Promise<any> => {
-    const res = await API.post(`/hod/semesters/${semester}/google-sheets/attendance/batch`, data);
-    return res.data;
-  },
-
-  validateGoogleSpreadsheet: async (
-    spreadsheetUrl: string,
-    semester?: number | string
-  ): Promise<any> => {
-    const endpoint = semester ? `/hod/semesters/${semester}/google-sheets/validate` : `/hod/google-sheets/validate`;
-    const res = await API.post(endpoint, { spreadsheetUrl });
-    return res.data;
-  },
-
-  getSemesterGoogleSheetTabs: async (
-    semester: number | string,
-    params?: { sheetType?: string; academicYear?: string; section?: string }
-  ): Promise<any> => {
-    const res = await API.get(`/hod/semesters/${semester}/google-sheets/tabs`, { params });
-    return res.data.data;
-  },
-
-  mapGoogleSheetTab: async (connectionId: string, data: { tabId: string; subjectId: string | null }): Promise<any> => {
-    const res = await API.post(`/hod/google-sheets/${connectionId}/map-tab`, data);
-    return res.data;
-  },
-
-  refreshGoogleSheet: async (connectionId: string): Promise<any> => {
-    const res = await API.post(`/hod/google-sheets/${connectionId}/refresh`);
-    return res.data;
-  },
-
-  disconnectGoogleSheet: async (connectionId: string): Promise<any> => {
-    const res = await API.post(`/hod/google-sheets/${connectionId}/disconnect`);
-    return res.data;
-  },
-
-  // Faculty Google Access Matrix & Permissions
-  getFacultyGoogleSheetAccessMatrix: async (params?: {
+  executeSemesterTransition: async (data: {
+    studentIds?: string[];
+    branch?: string;
     academicYear?: string;
-    semester?: string | number;
-    section?: string;
-    facultyId?: string;
-    subjectId?: string;
-  }): Promise<any[]> => {
-    const res = await API.get('/hod/faculty/google-sheet-access', { params });
-    return res.data.data;
-  },
-
-  grantFacultyGoogleSheetAccess: async (
-    facultyId: string,
-    data: {
-      assignmentId: string;
-      googleEmail?: string;
-      attendanceAccess?: boolean;
-      marksAccess?: boolean;
-      role?: 'writer' | 'reader';
-    }
-  ): Promise<any> => {
-    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access`, data);
+  }): Promise<{ success: boolean; message: string; transitionedCount: number }> => {
+    const res = await API.post('/hod/semester-transition/execute', data);
     return res.data;
-  },
-
-  verifyFacultyGoogleSheetAccess: async (
-    facultyId: string,
-    data?: { accessId?: string; assignmentId?: string }
-  ): Promise<any> => {
-    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access/verify`, data || {});
-    return res.data;
-  },
-
-  revokeFacultyGoogleSheetAccess: async (
-    facultyId: string,
-    data: { assignmentId: string }
-  ): Promise<any> => {
-    const res = await API.post(`/hod/faculty/${facultyId}/google-sheet-access/revoke`, data);
-    return res.data;
-  },
-
-  // Google OAuth Management
-  getGoogleAccountStatus: async (): Promise<{
-    connected: boolean;
-    isConnected: boolean;
-    email: string | null;
-    displayName?: string | null;
-    googleAccountId?: string | null;
-    profilePicture?: string | null;
-    status?: string;
-    connectedAt?: string | null;
-    lastConnectedAt?: string | null;
-    lastUsedAt?: string | null;
-  }> => {
-    const res = await API.get('/google/account');
-    return res.data.data;
-  },
-
-  getGoogleOAuthStatus: async (): Promise<{
-    connected: boolean;
-    isConnected: boolean;
-    email: string | null;
-    displayName?: string | null;
-    googleAccountId?: string | null;
-    profilePicture?: string | null;
-    status?: string;
-    connectedAt?: string | null;
-    lastConnectedAt?: string | null;
-    lastUsedAt?: string | null;
-  }> => {
-    const res = await API.get('/google/account');
-    return res.data.data;
-  },
-
-  getGoogleOAuthAuthUrl: async (forceSelect: boolean = true): Promise<{ authUrl: string }> => {
-    const res = await API.get('/google/oauth/auth-url', {
-      params: { forceSelect },
-    });
-    return res.data.data;
-  },
-
-  submitGoogleOAuthCallback: async (data: { code: string; state?: string }): Promise<any> => {
-    const res = await API.post('/google/oauth/callback', data);
-    return res.data;
-  },
-
-  disconnectGoogleOAuth: async (): Promise<any> => {
-    const res = await API.post('/google/oauth/disconnect');
-    return res.data;
-  },
-
-  // Synchronization Endpoints
-  syncAttendanceSheet: async (data: { connectionId: string; tabId?: string; tabGid?: string; tabTitle?: string }): Promise<any> => {
-    const res = await API.post('/google-sheets/sync/attendance', data);
-    return res.data;
-  },
-
-  syncMarksSheet: async (data: { connectionId: string; tabId?: string; tabGid?: string; tabTitle?: string; assessmentName?: string }): Promise<any> => {
-    const res = await API.post('/google-sheets/sync/marks', data);
-    return res.data;
-  },
-
-  getFacultyMySheets: async (): Promise<any[]> => {
-    const res = await API.get('/faculty/my-sheets');
-    return res.data.data;
   },
 
   // 8. Reports & Settings
@@ -979,6 +1077,32 @@ export const hodService = {
   updatePassword: async (data: { currentPassword: string; newPassword: string }): Promise<any> => {
     const res = await API.put('/hod/settings/password', data);
     return res.data;
+  },
+
+  // 9. Subject Handling Requests (Teaching Responsibilities)
+  getTeachingResponsibilities: async (): Promise<HodTeachingResponsibilitiesData> => {
+    const res = await API.get('/hod/subject-handling/teaching-responsibilities');
+    return res.data.data;
+  },
+
+  getAvailableSubjectsForHandling: async (semester: number | string): Promise<HodAvailableSubject[]> => {
+    const res = await API.get('/hod/subject-handling/available-subjects', { params: { semester } });
+    return res.data.data;
+  },
+
+  submitSubjectHandlingRequest: async (data: {
+    semester: number;
+    subjectId: string;
+    academicYear?: string;
+    reason?: string;
+  }): Promise<{ success: boolean; message: string; data: HodSubjectHandlingRequestItem }> => {
+    const res = await API.post('/hod/subject-handling/requests', data);
+    return res.data;
+  },
+
+  getMySubjectHandlingRequests: async (): Promise<HodSubjectHandlingRequestItem[]> => {
+    const res = await API.get('/hod/subject-handling/requests');
+    return res.data.data;
   },
 };
 

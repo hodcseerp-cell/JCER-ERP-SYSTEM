@@ -69,10 +69,9 @@ import HodAttendanceDefaultersPage from './pages/hod/HodAttendanceDefaultersPage
 import HodAcademicsOverviewPage from './pages/hod/HodAcademicsOverviewPage';
 import HodBitwiseAnalysisPage from './pages/hod/HodBitwiseAnalysisPage';
 import HodStudentPerformancePage from './pages/hod/HodStudentPerformancePage';
-import HodSheetsAccessPage from './pages/hod/HodSheetsAccessPage';
 import HodReportsPage from './pages/hod/HodReportsPage';
 import HodSettingsPage from './pages/hod/HodSettingsPage';
-import HodGoogleSheetsConnectPage from './pages/hod/HodGoogleSheetsConnectPage';
+import HodSemesterTransitionPage from './pages/hod/HodSemesterTransitionPage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -207,27 +206,30 @@ const AuthBootstrap: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return <>{children}</>;
 };
 
+import { AcademicYearProvider } from './context/AcademicYearContext';
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export const App: React.FC = () => (
   <Provider store={store}>
-    <TopLoadingBar />
-    <PwaManager />
-    <ToastContainer
-      position="top-right"
-      autoClose={3000}
-      hideProgressBar={false}
-      newestOnTop={false}
-      closeOnClick
-      rtl={false}
-      pauseOnFocusLoss
-      draggable
-      pauseOnHover
-      theme="colored"
-    />
-    <HotToaster position="top-right" />
-    <BrowserRouter>
-      <AuthBootstrap>
-        <Routes>
+    <AcademicYearProvider>
+      <TopLoadingBar />
+      <PwaManager />
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="colored"
+      />
+      <HotToaster position="top-right" />
+      <BrowserRouter>
+        <AuthBootstrap>
+          <Routes>
           {/* ── Public ── */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -381,7 +383,7 @@ export const App: React.FC = () => (
               <Route path="faculty" element={<HodFacultyListPage />} />
               <Route path="faculty/create" element={<HodCreateFacultyPage />} />
               <Route path="faculty/assignments" element={<HodFacultyAssignmentsPage />} />
-              <Route path="faculty/access" element={<HodSheetsAccessPage />} />
+              <Route path="faculty/access" element={<HodFacultyAssignmentsPage />} />
               <Route path="faculty/authorizations" element={<HodFacultyListPage />} />
               <Route path="faculty/:id" element={<HodFacultyManagePage />} />
 
@@ -403,18 +405,13 @@ export const App: React.FC = () => (
               <Route path="academics/bitwise" element={<HodBitwiseAnalysisPage />} />
               <Route path="academics/performance" element={<HodStudentPerformancePage />} />
 
-              {/* Excel / Sheets */}
-              <Route path="sheets" element={<HodSheetsAccessPage />} />
-              <Route path="sheets/attendance" element={<HodSheetsAccessPage />} />
-              <Route path="sheets/marks" element={<HodSheetsAccessPage />} />
-              <Route path="sheets/access" element={<HodSheetsAccessPage />} />
-              <Route path="sheets/sync-history" element={<HodSheetsAccessPage />} />
-              <Route path="google-sheets/connect" element={<HodGoogleSheetsConnectPage />} />
-
               {/* Reports & Settings */}
               <Route path="reports" element={<HodReportsPage />} />
               <Route path="settings" element={<HodSettingsPage />} />
               <Route path="profile" element={<HodSettingsPage />} />
+
+              {/* Special Applied Science */}
+              <Route path="semester-transition" element={<HodSemesterTransitionPage />} />
             </Route>
 
             {/* ── Faculty Portal ── */}
@@ -433,6 +430,7 @@ export const App: React.FC = () => (
         </Routes>
       </AuthBootstrap>
     </BrowserRouter>
+    </AcademicYearProvider>
   </Provider>
 );
 

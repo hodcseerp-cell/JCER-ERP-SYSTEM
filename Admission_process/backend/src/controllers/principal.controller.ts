@@ -22,10 +22,11 @@ import emailService from '../services/email.service';
 import db from '../config/database';
 import AnalyticsService from '../services/analytics.service';
 import securityEvents from '../services/securityEvents.service';
+import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import logger from '../utils/logger.util';
 
 interface AuthRequest extends Request {
-  user?: { id: string; role: string };
+  user?: { id: string; role: string; firstName?: string; lastName?: string; email?: string };
 }
 
 // Helper to record audit log for Principal actions
@@ -852,6 +853,8 @@ export const getFacultyAuthorizations = async (
 
     if (authority && authority !== 'ALL') {
       where.authority = authority;
+    } else {
+      where.authority = { [Op.in]: ['PRINCIPAL', 'DEAN'] };
     }
 
     if (status && status !== 'ALL') {
@@ -863,7 +866,15 @@ export const getFacultyAuthorizations = async (
     }
 
     if (academicYear && academicYear !== 'ALL') {
-      where.academicYear = academicYear;
+      const startYear = String(academicYear).split(/[-–]/)[0].trim();
+      where.academicYear = {
+        [Op.or]: [
+          { [Op.iLike]: `${startYear}-%` },
+          { [Op.iLike]: `${startYear}–%` },
+          { [Op.eq]: academicYear },
+          { [Op.eq]: startYear },
+        ],
+      };
     }
 
     const searchTerm = typeof search === 'string' ? search.trim() : '';
@@ -896,32 +907,9 @@ export const getFacultyAuthorizations = async (
       order: [['createdAt', 'DESC']],
     });
 
-    const formatted = requests.map((item: any) => ({
-      id: item.id,
-      facultyId: item.facultyUserId,
-      facultyName: `${item.faculty?.firstName || ''} ${item.faculty?.lastName || ''}`.trim(),
-      email: item.faculty?.email,
-      phone: item.faculty?.phone,
-      profileImage: item.faculty?.profileImage,
-      departmentId: item.departmentId,
-      departmentName: item.department?.name,
-      departmentCode: item.department?.code,
-      subjectId: item.subjectId,
-      subjectName: item.subject?.name || 'General Assignment',
-      subjectCode: item.subject?.code || 'N/A',
-      semester: item.semester,
-      section: item.section,
-      academicYear: item.academicYear,
-      designation: item.designation,
-      authority: item.authority,
-      status: item.status,
-      rejectionReason: item.rejectionReason,
-      createdBy: item.createdByHOD ? `${item.createdByHOD.firstName} ${item.createdByHOD.lastName}` : 'HOD',
-      createdDate: item.createdAt,
-      decidedBy: item.decidedBy ? `${item.decidedBy.firstName} ${item.decidedBy.lastName}` : null,
-      decidedAt: item.decidedAt,
-      canApprove: item.status === 'PENDING' && item.authority === 'PRINCIPAL',
-    }));
+    const formatted = await Promise.all(
+      requests.map((item: any) => facultyAuthorizationService.formatRequestForQueue(item, 'PRINCIPAL'))
+    );
 
     return res.json({ success: true, data: formatted });
   } catch (error: any) {
@@ -990,6 +978,8 @@ export const getFacultyAuthorizationById = async (
       return res.status(404).json({ error: 'Faculty authorization request not found.' });
     }
 
+    const formatted = await facultyAuthorizationService.formatRequestForQueue(request, 'PRINCIPAL');
+
     // Fetch all assignments associated with this faculty user
     const assignments = await FacultyAssignment.findAll({
       where: { userId: request.facultyUserId },
@@ -997,19 +987,8 @@ export const getFacultyAuthorizationById = async (
       order: [['semester', 'ASC'], ['createdAt', 'ASC']],
     });
 
-    const reqJson: any = request.toJSON();
     const responseData = {
-      ...reqJson,
-      facultyName: `${reqJson.faculty?.firstName || ''} ${reqJson.faculty?.lastName || ''}`.trim(),
-      email: reqJson.faculty?.email,
-      phone: reqJson.faculty?.phone,
-      profileImage: reqJson.faculty?.profileImage,
-      departmentName: reqJson.department?.name,
-      departmentCode: reqJson.department?.code,
-      subjectName: reqJson.subject?.name || 'General Assignment',
-      subjectCode: reqJson.subject?.code || 'N/A',
-      createdBy: reqJson.createdByHOD ? `${reqJson.createdByHOD.firstName} ${reqJson.createdByHOD.lastName}` : 'HOD',
-      createdDate: reqJson.createdAt,
+      ...formatted,
       assignments: assignments.map((a: any) => ({
         id: a.id,
         subjectId: a.subjectId,
@@ -1022,7 +1001,6 @@ export const getFacultyAuthorizationById = async (
         academicYear: a.academicYear,
         attendanceAccess: a.attendanceAccess,
         marksAccess: a.marksAccess,
-        googleSheetsAccess: a.googleSheetsAccess,
         status: a.status,
       })),
     };
@@ -1042,116 +1020,27 @@ export const approveFacultyAuthorization = async (
   res: Response,
   next: NextFunction
 ): Promise<any> => {
-  const t = await db.transaction();
   try {
     const { id } = req.params;
 
-    const authReq = await FacultyAuthorizationRequest.findByPk(id, { transaction: t });
-    if (!authReq) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Authorization request not found.' });
-    }
-
-    if (authReq.status === 'APPROVED') {
-      await t.rollback();
-      return res.status(400).json({ error: 'This faculty request has already been approved.' });
-    }
-
-    if (authReq.status === 'REJECTED') {
-      await t.rollback();
-      return res.status(400).json({ error: 'This faculty request has already been rejected and cannot be approved directly.' });
-    }
-
-    // Workflow validation: If request is routed to DEAN, Dean review is required first
-    if (authReq.authority === 'DEAN') {
-      await t.rollback();
-      return res.status(400).json({
-        error: 'This faculty authorization request was routed to Dean Academics and requires Dean review first.',
-      });
-    }
-
-    // 1. Update Request Status
-    await authReq.update(
-      {
-        status: 'APPROVED',
-        decidedByUserId: req.user?.id || null,
-        decidedAt: new Date(),
-        rejectionReason: null,
-      },
-      { transaction: t }
-    );
-
-    // 2. Activate Faculty User Account
-    await User.update(
-      { status: 'ACTIVE' },
-      { where: { id: authReq.facultyUserId }, transaction: t }
-    );
-
-    // 3. Ensure Teacher Record exists & is linked
-    let teacher = await Teacher.findOne({
-      where: { userId: authReq.facultyUserId },
-      transaction: t,
-    });
-
-    if (!teacher) {
-      teacher = await Teacher.create(
-        {
-          userId: authReq.facultyUserId,
-          departmentId: authReq.departmentId,
-          designation: authReq.designation || 'Assistant Professor',
-          joiningDate: new Date(),
-        },
-        { transaction: t }
-      );
-    } else {
-      await teacher.update(
-        {
-          departmentId: authReq.departmentId,
-          designation: authReq.designation || teacher.designation,
-        },
-        { transaction: t }
-      );
-    }
-
-    // 4. Activate all FacultyAssignment records for this faculty user
-    await FacultyAssignment.update(
-      { status: 'ACTIVE' },
-      { where: { userId: authReq.facultyUserId }, transaction: t }
-    );
-
-    // 5. In-app notification to submitting HOD if exists
-    if (authReq.createdByHODId) {
-      const facultyUser = await User.findByPk(authReq.facultyUserId, { transaction: t });
-      const facultyName = facultyUser ? `${facultyUser.firstName} ${facultyUser.lastName}` : 'Faculty candidate';
-      await Notification.create(
-        {
-          title: 'Faculty Authorization Approved',
-          content: `Faculty registration for ${facultyName} has been approved by the Principal. The faculty account is now active.`,
-          type: 'SUCCESS',
-          audience: 'SPECIFIC_USER',
-          targetUserId: authReq.createdByHODId,
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-        },
-        { transaction: t }
-      );
-    }
-
-    await t.commit();
-    await logPrincipalAudit(req, 'PRINCIPAL_APPROVE_FACULTY_AUTHORIZATION', {
+    const result = await facultyAuthorizationService.approveRequest({
       requestId: id,
-      facultyUserId: authReq.facultyUserId,
-      departmentId: authReq.departmentId,
-      authority: authReq.authority,
+      expectedAuthority: 'PRINCIPAL',
+      approver: {
+        id: req.user!.id,
+        role: req.user!.role,
+        firstName: req.user?.firstName,
+        lastName: req.user?.lastName,
+        email: req.user?.email,
+      },
+      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'System',
     });
 
-    return res.json({
-      success: true,
-      message: 'Faculty authorization approved successfully by Principal. Faculty account is now active.',
-    });
-  } catch (error) {
-    await t.rollback();
-    return next(error);
+    return res.json(result);
+  } catch (error: any) {
+    logger.error('Principal approve error:', error);
+    return res.status(400).json({ error: error.message || 'Failed to approve faculty authorization.' });
   }
 };
 
@@ -1164,88 +1053,33 @@ export const rejectFacultyAuthorization = async (
   res: Response,
   next: NextFunction
 ): Promise<any> => {
-  const t = await db.transaction();
   try {
     const { id } = req.params;
     const { reason } = req.body;
 
     if (!reason || reason.trim().length === 0) {
-      await t.rollback();
       return res.status(400).json({ error: 'A rejection reason is required.' });
     }
 
-    const authReq = await FacultyAuthorizationRequest.findByPk(id, { transaction: t });
-    if (!authReq) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Authorization request not found.' });
-    }
-
-    if (authReq.status === 'APPROVED') {
-      await t.rollback();
-      return res.status(400).json({ error: 'This faculty request has already been approved and cannot be rejected.' });
-    }
-
-    if (authReq.status === 'REJECTED') {
-      await t.rollback();
-      return res.status(400).json({ error: 'This faculty request has already been rejected.' });
-    }
-
-    if (authReq.authority === 'DEAN') {
-      await t.rollback();
-      return res.status(400).json({
-        error: 'This faculty authorization request was routed to Dean Academics and requires Dean review first.',
-      });
-    }
-
-    await authReq.update(
-      {
-        status: 'REJECTED',
-        rejectionReason: reason.trim(),
-        decidedByUserId: req.user?.id || null,
-        decidedAt: new Date(),
-      },
-      { transaction: t }
-    );
-
-    // Keep user inactive
-    await User.update(
-      { status: 'INACTIVE' },
-      { where: { id: authReq.facultyUserId }, transaction: t }
-    );
-
-    // In-app notification to submitting HOD if exists
-    if (authReq.createdByHODId) {
-      const facultyUser = await User.findByPk(authReq.facultyUserId, { transaction: t });
-      const facultyName = facultyUser ? `${facultyUser.firstName} ${facultyUser.lastName}` : 'Faculty candidate';
-      await Notification.create(
-        {
-          title: 'Faculty Authorization Rejected',
-          content: `Faculty registration for ${facultyName} was rejected by the Principal. Reason: ${reason.trim()}`,
-          type: 'WARNING',
-          audience: 'SPECIFIC_USER',
-          targetUserId: authReq.createdByHODId,
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-        },
-        { transaction: t }
-      );
-    }
-
-    await t.commit();
-    await logPrincipalAudit(req, 'PRINCIPAL_REJECT_FACULTY_AUTHORIZATION', {
+    const result = await facultyAuthorizationService.rejectRequest({
       requestId: id,
-      facultyUserId: authReq.facultyUserId,
-      reason: reason.trim(),
-      authority: authReq.authority,
+      expectedAuthority: 'PRINCIPAL',
+      reason,
+      approver: {
+        id: req.user!.id,
+        role: req.user!.role,
+        firstName: req.user?.firstName,
+        lastName: req.user?.lastName,
+        email: req.user?.email,
+      },
+      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'System',
     });
 
-    return res.json({
-      success: true,
-      message: 'Faculty authorization request rejected.',
-    });
-  } catch (error) {
-    await t.rollback();
-    return next(error);
+    return res.json(result);
+  } catch (error: any) {
+    logger.error('Principal reject error:', error);
+    return res.status(400).json({ error: error.message || 'Failed to reject faculty authorization.' });
   }
 };
 

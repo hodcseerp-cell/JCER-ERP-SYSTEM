@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import admissionService, { AdmissionApplication, AdmissionListResult } from '../../../services/admission.service';
 import { 
@@ -9,6 +10,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import API from '../../../services/api';
+import { ShowStudentsRangeSelector } from '../../../components/common/ShowStudentsRangeSelector';
 
 const getPhotoUrl = (path: string | null | undefined, appId?: string) => {
   if (!path) return '';
@@ -54,6 +56,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
   
   // Filters & Pagination
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState<string>(defaultStatus);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [branchId, setBranchId] = useState('ALL');
@@ -105,7 +108,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
 
       const result = await admissionService.listApplications({
         page,
-        limit: 10,
+        limit,
         status: activeStatus,
         branchId: branchId === 'ALL' ? undefined : branchId,
         admissionType: admissionType === 'ALL' ? undefined : admissionType,
@@ -137,7 +140,7 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
   useEffect(() => {
     fetchApplications();
     // eslint-disable-next-line
-  }, [page, status, statusFilter, branchId, admissionType, sortBy, sortOrder, search]);
+  }, [page, limit, status, statusFilter, branchId, admissionType, sortBy, sortOrder, search]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -403,14 +406,29 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
           {/* Quick Search */}
           <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[260px] space-y-1">
             <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400 block h-3.5 invisible">Search</span>
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search by name, app number..." 
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700/60 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 h-[38px]"
+            <div className="relative flex items-center gap-2.5">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Search by name, app number..." 
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700/60 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 h-[38px]"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 h-[38px] cursor-pointer"
+              >
+                Search
+              </button>
+              <ShowStudentsRangeSelector
+                value={limit}
+                onChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                }}
               />
             </div>
           </form>
@@ -750,8 +768,8 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
         )}
 
         {/* Onboarding Credentials Modal */}
-        {credentialsModalApp && (
-          <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        {credentialsModalApp && createPortal(
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-neutral-900 rounded-[32px] w-full max-w-md p-6 border border-neutral-100 dark:border-neutral-800 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
               <button 
                 onClick={() => setCredentialsModalApp(null)}
@@ -847,7 +865,8 @@ export const AdmissionQueuePage: React.FC<AdmissionQueuePageProps> = ({ defaultS
                 </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>

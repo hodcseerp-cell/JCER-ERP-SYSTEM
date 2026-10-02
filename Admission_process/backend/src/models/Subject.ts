@@ -10,6 +10,8 @@ class Subject extends Model {
   public departmentId!: string | null;
   public credits!: number;
   public type!: 'IPCC' | 'CC' | string;
+  public cycle!: 'P_CYCLE' | 'C_CYCLE' | string | null;
+  public schemeId!: string;
   public status!: 'ACTIVE' | 'INACTIVE';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -29,7 +31,6 @@ Subject.init(
     code: {
       type: DataTypes.STRING(25),
       allowNull: false,
-      unique: true,
     },
     semester: {
       type: DataTypes.INTEGER,
@@ -54,6 +55,16 @@ Subject.init(
       allowNull: false,
       defaultValue: 'IPCC',
     },
+    cycle: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+    },
+    schemeId: {
+      type: DataTypes.STRING(30),
+      allowNull: false,
+      defaultValue: '2025',
+    },
     status: {
       type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
       allowNull: false,
@@ -73,6 +84,12 @@ Subject.init(
       },
       {
         fields: ['departmentId'],
+      },
+      {
+        fields: ['schemeId'],
+      },
+      {
+        fields: ['cycle'],
       },
     ],
   }

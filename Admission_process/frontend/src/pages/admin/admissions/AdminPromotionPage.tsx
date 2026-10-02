@@ -18,6 +18,7 @@ import {
   Calendar,
   Layers
 } from 'lucide-react';
+import { ShowStudentsRangeSelector } from '../../../components/common/ShowStudentsRangeSelector';
 
 interface StudentData {
   id: string;
@@ -84,7 +85,7 @@ export const AdminPromotionPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalRecords, setTotalRecords] = useState<number>(0);
-  const limit = 15;
+  const [limit, setLimit] = useState<number>(10);
 
   // Selected students
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -110,7 +111,7 @@ export const AdminPromotionPage: React.FC = () => {
     fetchStudents();
     setSelectedStudentIds([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSemester, departmentFilter, admissionTypeFilter, currentAcademicYear, searchQuery, page]);
+  }, [currentSemester, departmentFilter, admissionTypeFilter, currentAcademicYear, searchQuery, page, limit]);
 
   const fetchFilters = async () => {
     try {
@@ -672,9 +673,9 @@ export const AdminPromotionPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-          <div className="relative max-w-md">
+        {/* Search & Range Selector */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -684,6 +685,13 @@ export const AdminPromotionPage: React.FC = () => {
               className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+          />
         </div>
       </div>
 

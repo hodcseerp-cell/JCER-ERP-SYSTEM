@@ -16,22 +16,24 @@ import {
   Users,
 } from 'lucide-react';
 import facultyService, { FacultyAnalyticsData } from '../../services/faculty.service';
+import { useAcademicYear } from '../../context/AcademicYearContext';
 
 export const FacultyAnalyticsPage: React.FC = () => {
+  const { academicYear } = useAcademicYear();
   const [data, setData] = useState<FacultyAnalyticsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await facultyService.getAnalytics();
+      const res = await facultyService.getAnalytics(academicYear);
       setData(res);
     } catch (err) {
       console.error('Failed to load faculty analytics:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [academicYear]);
 
   useEffect(() => {
     loadAnalytics();
@@ -288,7 +290,7 @@ export const FacultyAnalyticsPage: React.FC = () => {
                 Teaching Allocation Summary
               </h3>
               <p className="text-xs text-neutral-400 font-semibold mt-0.5">
-                Departmental cohort alignment and Google Sheet mapping summary.
+                Departmental cohort alignment and curriculum summary.
               </p>
 
               <div className="mt-5 p-5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-700/60 space-y-3">

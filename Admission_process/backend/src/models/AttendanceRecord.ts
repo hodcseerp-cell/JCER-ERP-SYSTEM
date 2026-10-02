@@ -4,9 +4,11 @@ import Student from './Student';
 import FacultyAssignment from './FacultyAssignment';
 import Department from './Department';
 import Subject from './Subject';
+import AttendanceSession from './AttendanceSession';
 
 class AttendanceRecord extends Model {
   public id!: string;
+  public attendanceSessionId!: string | null;
   public studentId!: string;
   public facultyAssignmentId!: string;
   public departmentId!: string;
@@ -27,6 +29,14 @@ AttendanceRecord.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    attendanceSessionId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'attendance_sessions',
+        key: 'id',
+      },
     },
     studentId: {
       type: DataTypes.UUID,
@@ -92,6 +102,7 @@ AttendanceRecord.init(
     tableName: 'attendance_records',
     timestamps: true,
     indexes: [
+      { fields: ['attendanceSessionId'] },
       { fields: ['studentId'] },
       { fields: ['facultyAssignmentId'] },
       { fields: ['departmentId'] },
@@ -107,6 +118,7 @@ AttendanceRecord.init(
   }
 );
 
+AttendanceRecord.belongsTo(AttendanceSession, { as: 'session', foreignKey: 'attendanceSessionId' });
 AttendanceRecord.belongsTo(Student, { as: 'student', foreignKey: 'studentId' });
 AttendanceRecord.belongsTo(FacultyAssignment, { as: 'facultyAssignment', foreignKey: 'facultyAssignmentId' });
 AttendanceRecord.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });

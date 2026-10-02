@@ -225,7 +225,7 @@ All HOD endpoints enforce `authenticateToken` + `authorize('HOD')` + automatic d
 - **Role**: `HOD`
 - **Scope**: Authenticated HOD department
 - **Academic Protection Rule**:
-  - Checks if the subject is linked to `faculty_assignments`, `attendance_records`, `assessments`, or `google_sheet_tabs`.
+  - Checks if the subject is linked to `faculty_assignments`, `attendance_records`, or `assessments`.
   - If records exist: Hard delete is blocked. The backend transitions the subject to `INACTIVE` status (or returns `409 Conflict` with code `SUBJECT_HAS_ACADEMIC_DATA` when hard delete is requested).
 - **Response `200 OK`**:
   ```json
@@ -266,43 +266,6 @@ All HOD endpoints enforce `authenticateToken` + `authorize('HOD')` + automatic d
   }
   ```
 - **Response `201 Created`**: Returns created assignment and links to faculty access.
-
----
-
-### 2.6 Google Sheet Integration
-#### `POST /api/hod/google-sheets/connect`
-- **Role**: `HOD`
-- **Scope**: Authenticated HOD department
-- **Request Body**:
-  ```json
-  {
-    "sheetUrl": "https://docs.google.com/spreadsheets/d/.../edit#gid=123456",
-    "sheetType": "ATTENDANCE"
-  }
-  ```
-- **Response `200 OK`**: Returns discovered sheets/tabs preserving Google sheet IDs and titles.
-
-#### `POST /api/hod/google-sheets/map`
-- **Role**: `HOD`
-- **Scope**: Authenticated HOD department
-- **Request Body**:
-  ```json
-  {
-    "googleSpreadsheetId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-    "googleSheetTabId": "66972508",
-    "sheetTitle": "IA Marks",
-    "subjectId": "uuid",
-    "sheetType": "ACADEMIC_MARKS"
-  }
-  ```
-- **Response `200 OK`**:
-  ```json
-  {
-    "success": true,
-    "message": "Sheet resource mapped successfully to ERP subject",
-    "data": { "id": "uuid", "status": "MAPPED" }
-  }
-  ```
 
 ---
 

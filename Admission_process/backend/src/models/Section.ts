@@ -10,6 +10,7 @@ class Section extends Model {
   public semester!: number;
   public academicYear!: string;
   public name!: string;
+  public branch!: string | null;
   public capacity!: number;
   public classroom!: string | null;
   public description!: string | null;
@@ -46,6 +47,10 @@ Section.init(
       type: DataTypes.STRING(50),
       allowNull: false,
     },
+    branch: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
     capacity: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -78,7 +83,7 @@ Section.init(
     tableName: 'sections',
     timestamps: true,
     indexes: [
-      { fields: ['departmentId', 'semester', 'academicYear', 'name'], unique: true },
+      { fields: ['departmentId', 'semester', 'academicYear', 'branch', 'name'], unique: true },
       { fields: ['status'] },
     ],
   }

@@ -8,6 +8,7 @@ class Teacher extends Model {
   public userId!: string;
   public departmentId!: string;
   public designation!: string;
+  public cycle!: 'P_CYCLE' | 'C_CYCLE' | string | null;
   public joiningDate!: Date;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -43,6 +44,11 @@ Teacher.init(
     designation: {
       type: DataTypes.STRING(50),
       allowNull: false,
+    },
+    cycle: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
     },
     joiningDate: {
       type: DataTypes.DATE,

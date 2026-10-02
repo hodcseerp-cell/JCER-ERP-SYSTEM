@@ -34,14 +34,35 @@ export interface FacultyAuthRequest {
   section: string;
   academicYear: string;
   designation: string;
-  authority: 'DEAN' | 'PRINCIPAL';
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  authority: 'DEAN' | 'PRINCIPAL' | string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  overallStatus?: 'PENDING_APPROVAL' | 'AUTHORIZED' | 'REJECTED' | string;
+  displayStatus?: string;
+  firstApprovedByName?: string | null;
+  firstApprovedRole?: string | null;
+  firstApprovedAt?: string | null;
+  isFirstApproval?: boolean;
+  canApprove?: boolean;
+  canReject?: boolean;
   rejectionReason?: string | null;
   createdBy: string;
   createdDate: string;
   decidedBy?: string | null;
   decidedAt?: string | null;
-  canApprove?: boolean;
+  deanApproval?: {
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+    decidedByName?: string | null;
+    decidedByRole?: string | null;
+    decidedAt?: string | null;
+    rejectionReason?: string | null;
+  } | null;
+  principalApproval?: {
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+    decidedByName?: string | null;
+    decidedByRole?: string | null;
+    decidedAt?: string | null;
+    rejectionReason?: string | null;
+  } | null;
 }
 
 export interface FacultyAssignmentDetail {
@@ -56,7 +77,6 @@ export interface FacultyAssignmentDetail {
   academicYear: string;
   attendanceAccess: boolean;
   marksAccess: boolean;
-  googleSheetsAccess: boolean;
   status: string;
 }
 

@@ -32,6 +32,7 @@ import usePrincipalNotificationCount from '../../hooks/usePrincipalNotificationC
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import { filterMenuItems } from '../../utils/feature.util';
+import AcademicYearSelector from '../common/AcademicYearSelector';
 
 interface MenuItem {
   name: string;
@@ -329,6 +330,8 @@ export const PrincipalLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-3 flex-shrink-0">
+            {/* Global Academic Year Selector */}
+            <AcademicYearSelector />
 
             {/* Notification Bell Dropdown */}
             <div className="relative" ref={notifMenuRef}>

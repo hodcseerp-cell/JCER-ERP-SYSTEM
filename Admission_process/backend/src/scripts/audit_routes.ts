@@ -2,7 +2,6 @@ import adminRoutes from '../routes/admin.routes';
 import admissionRoutes from '../routes/admission.routes';
 import authRoutes from '../routes/auth.routes';
 import deanRoutes from '../routes/dean.routes';
-import googleRoutes from '../routes/google.routes';
 import hodRoutes from '../routes/hod.routes';
 import principalRoutes from '../routes/principal.routes';
 import promotionRoutes from '../routes/promotion.routes';
@@ -14,7 +13,6 @@ const routers: Record<string, any> = {
   admissionRoutes,
   authRoutes,
   deanRoutes,
-  googleRoutes,
   hodRoutes,
   principalRoutes,
   promotionRoutes,

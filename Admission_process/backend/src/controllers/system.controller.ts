@@ -5,6 +5,47 @@ import Student from '../models/Student';
 import Admission from '../models/Admission';
 import Department from '../models/Department';
 import SystemConfiguration from '../models/SystemConfiguration';
+import AcademicYear from '../models/AcademicYear';
+
+export const getAcademicYears = async (_req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const config = await SystemConfiguration.findOne();
+    const dbYears = await AcademicYear.findAll({
+      order: [['year', 'DESC']],
+    });
+
+    const currentFromDb = dbYears.find((y) => y.isCurrent || y.status === 'ACTIVE')?.year;
+    const currentYear = config?.admissionCycle || currentFromDb || '2026-27';
+
+    // Format list of years
+    let years = dbYears.map((y) => ({
+      id: y.id,
+      year: y.year,
+      status: y.status,
+      isCurrent: y.isCurrent || y.year === currentYear,
+      startDate: y.startDate,
+      endDate: y.endDate,
+    }));
+
+    if (years.length === 0) {
+      years = [
+        { id: 'ay-2026-27', year: '2026-27', status: 'ACTIVE', isCurrent: true, startDate: new Date('2026-08-01'), endDate: new Date('2027-07-31') },
+        { id: 'ay-2025-26', year: '2025-26', status: 'ACTIVE', isCurrent: false, startDate: new Date('2025-08-01'), endDate: new Date('2026-07-31') },
+        { id: 'ay-2024-25', year: '2024-25', status: 'ARCHIVED', isCurrent: false, startDate: new Date('2024-08-01'), endDate: new Date('2025-07-31') },
+      ];
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        currentYear,
+        years,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
 
 export const getConfig = async (_req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import admissionService, { AdmissionApplication } from '../../../services/admission.service';
@@ -1922,8 +1923,8 @@ export const AdmissionReviewPage: React.FC = () => {
       />
 
       {/* ─── DIRECT CANCEL ADMISSION MODAL ─── */}
-      {cancelDirectModalOpen && app && (
-        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      {cancelDirectModalOpen && app && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in duration-200">
             
             {cancelDirectStep === 1 ? (
@@ -2119,7 +2120,8 @@ export const AdmissionReviewPage: React.FC = () => {
             )}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </CorrectionContext.Provider>
   );

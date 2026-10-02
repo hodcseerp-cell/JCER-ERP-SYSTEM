@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { loginStart, loginSuccess, loginFailure } from '../../store/authSlice';
@@ -401,8 +402,8 @@ export const LoginPage: React.FC = () => {
       <GlobalFooter variant="light-glass" className="relative z-20 shrink-0" />
 
       {/* ─── ADMIN & PRINCIPAL DAILY OTP MODAL ───────────────────────────────── */}
-      {showDailyOtpModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+      {showDailyOtpModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div 
             className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-7 relative overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
@@ -508,12 +509,13 @@ export const LoginPage: React.FC = () => {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── REUSABLE FORGOT PASSWORD MODAL (ALL ROLES) ────────────────────── */}
-      {showForgotModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+      {showForgotModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in">
           <div 
             className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-7 relative overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
@@ -757,7 +759,8 @@ export const LoginPage: React.FC = () => {
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

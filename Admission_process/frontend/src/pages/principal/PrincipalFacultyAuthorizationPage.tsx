@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Search,
@@ -22,26 +23,26 @@ import {
 import principalService, {
   FacultyAuthRequest,
   DepartmentRecord,
-  AcademicYearRecord,
   FacultyAuthDetailResponse,
 } from '../../services/principal.service';
 import Skeleton from '../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { useAcademicYear } from '../../context/AcademicYearContext';
 
 export const PrincipalFacultyAuthorizationPage: React.FC = () => {
   const navigate = useNavigate();
+  const { academicYear } = useAcademicYear();
 
   const [requests, setRequests] = useState<FacultyAuthRequest[]>([]);
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
-  const [academicYears, setAcademicYears] = useState<AcademicYearRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
-  const [selectedStatus, setSelectedStatus] = useState<string>('PENDING');
-  const [selectedAuthority, setSelectedAuthority] = useState<string>('PRINCIPAL');
-  const [selectedYear, setSelectedYear] = useState<string>('2026-27');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedAuthority, setSelectedAuthority] = useState<string>('ALL');
 
   // Modal States
   const [approveModal, setApproveModal] = useState<FacultyAuthRequest | FacultyAuthDetailResponse | null>(null);
@@ -51,33 +52,29 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
 
   const fetchDependencies = async () => {
     try {
-      const [depts, yrs] = await Promise.all([
-        principalService.getDepartments().catch(() => []),
-        principalService.getAcademicYears().catch(() => []),
-      ]);
+      const depts = await principalService.getDepartments().catch(() => []);
       setDepartments(depts || []);
-      setAcademicYears(yrs || []);
-      const activeYr = yrs?.find((y) => y.isCurrent)?.year || '2026-27';
-      setSelectedYear(activeYr);
     } catch (err) {
-      console.warn('Could not load filter dependencies for Principal authorization:', err);
+      console.warn('Could not load departments for Principal authorization:', err);
     }
   };
 
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const data = await principalService.getFacultyAuthorizations({
         search: search.trim() || undefined,
-        departmentId: selectedDept,
-        status: selectedStatus,
-        authority: selectedAuthority,
-        academicYear: selectedYear,
+        departmentId: selectedDept === 'ALL' ? undefined : selectedDept,
+        status: selectedStatus === 'ALL' ? undefined : selectedStatus,
+        authority: selectedAuthority === 'ALL' ? undefined : selectedAuthority,
+        academicYear: academicYear || '2026-27',
       });
       setRequests(Array.isArray(data) ? data : []);
       window.dispatchEvent(new CustomEvent('faculty-auth-changed'));
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Could not load faculty authorization requests:', err);
+      setFetchError(err?.response?.data?.error || err?.message || 'Failed to load faculty authorization requests.');
       setRequests([]);
     } finally {
       setLoading(false);
@@ -90,7 +87,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
 
   useEffect(() => {
     fetchRequests();
-  }, [selectedDept, selectedStatus, selectedAuthority, selectedYear]);
+  }, [selectedDept, selectedStatus, selectedAuthority, academicYear]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,11 +132,17 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
     }
   };
 
-  // KPI counts
-  const totalCount = requests.length;
-  const pendingPrincipalCount = requests.filter((r) => r.status === 'PENDING' && r.authority === 'PRINCIPAL').length;
-  const approvedCount = requests.filter((r) => r.status === 'APPROVED').length;
-  const rejectedCount = requests.filter((r) => r.status === 'REJECTED').length;
+  // Safe KPI counts
+  const totalCount = Array.isArray(requests) ? requests.length : 0;
+  const pendingPrincipalCount = Array.isArray(requests)
+    ? requests.filter((r) => r.status === 'PENDING').length
+    : 0;
+  const approvedCount = Array.isArray(requests)
+    ? requests.filter((r) => r.status === 'APPROVED' || r.overallStatus === 'AUTHORIZED').length
+    : 0;
+  const rejectedCount = Array.isArray(requests)
+    ? requests.filter((r) => r.status === 'REJECTED' || r.overallStatus === 'REJECTED').length
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -166,7 +169,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           <button
             onClick={() => fetchRequests()}
             disabled={loading}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-all flex items-center space-x-1.5"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-all flex items-center space-x-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -176,7 +179,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
 
       {/* ── KPI STATS CARDS ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-800/80">
+        <div className="p-4 rounded-2xl bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Total in Scope</span>
             <Users className="w-4 h-4 text-neutral-400" />
@@ -187,7 +190,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           <span className="text-[10px] text-neutral-400 font-medium mt-0.5 block">Filtered requests</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/70 dark:border-orange-800/40">
+        <div className="p-4 rounded-2xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/70 dark:border-orange-800/40 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-orange-700 dark:text-orange-300">
               Pending Principal Sign-off
@@ -202,7 +205,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40">
+        <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
               Approved
@@ -217,7 +220,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-800/40">
+        <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-800/40 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
               Rejected
@@ -234,7 +237,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
       </div>
 
       {/* ── FILTER & SEARCH BAR ── */}
-      <div className="p-4 rounded-2xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80">
+      <div className="p-4 rounded-2xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs">
         <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-2.5">
           {/* Search Input */}
           <div className="relative min-w-[220px] flex-1">
@@ -252,7 +255,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           <select
             value={selectedDept}
             onChange={(e) => setSelectedDept(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
           >
             <option value="ALL">All Departments</option>
             {departments.map((d) => (
@@ -266,7 +269,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
           >
             <option value="ALL">All Statuses</option>
             <option value="PENDING">Pending Review</option>
@@ -278,39 +281,38 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
           <select
             value={selectedAuthority}
             onChange={(e) => setSelectedAuthority(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
           >
-            <option value="ALL">All Authorities</option>
+            <option value="ALL">All Queues</option>
             <option value="PRINCIPAL">Principal Queue (Direct)</option>
             <option value="DEAN">Dean Academics Queue</option>
           </select>
 
-          {/* Academic Year Filter */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-          >
-            {academicYears.length > 0 ? (
-              academicYears.map((y) => (
-                <option key={y.id} value={y.year}>
-                  AY: {y.year}
-                </option>
-              ))
-            ) : (
-              <option value="2026-27">AY: 2026-27</option>
-            )}
-          </select>
-
           <button
             type="submit"
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white transition-all shadow-xs flex items-center space-x-1"
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white transition-all shadow-xs flex items-center space-x-1 cursor-pointer"
           >
             <Filter className="w-3.5 h-3.5" />
             <span>Apply</span>
           </button>
         </form>
       </div>
+
+      {/* ── ERROR BANNER WITH RETRY (IF FAILED) ── */}
+      {fetchError && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 flex items-center justify-between text-xs text-rose-700 dark:text-rose-300">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={() => fetchRequests()}
+            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* ── TABLE CARD ── */}
       <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 overflow-hidden shadow-xs">
@@ -361,8 +363,17 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 ))
               ) : requests.length > 0 ? (
                 requests.map((reqItem) => {
-                  const isPrincipalActionable = reqItem.status === 'PENDING' && reqItem.authority === 'PRINCIPAL';
-                  const isAwaitingDean = reqItem.status === 'PENDING' && reqItem.authority === 'DEAN';
+                  const isPrincipalActionable = reqItem.status === 'PENDING';
+                  const isOverallAuthorized =
+                    reqItem.overallStatus === 'AUTHORIZED' ||
+                    reqItem.status === 'APPROVED' ||
+                    reqItem.deanApproval?.status === 'APPROVED';
+                  const isPrincipalApproved = reqItem.status === 'APPROVED';
+                  const isDeanApproved = reqItem.deanApproval?.status === 'APPROVED';
+                  const isRejected = reqItem.status === 'REJECTED' || reqItem.overallStatus === 'REJECTED';
+
+                  const facultyDisplayName = reqItem.facultyName || 'Faculty Candidate';
+                  const initialLetter = (facultyDisplayName || 'F').charAt(0).toUpperCase();
 
                   return (
                     <tr
@@ -379,19 +390,19 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                             {reqItem.profileImage ? (
                               <img
                                 src={reqItem.profileImage}
-                                alt={reqItem.facultyName}
+                                alt={facultyDisplayName}
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              reqItem.facultyName.charAt(0)
+                              initialLetter
                             )}
                           </div>
                           <div>
                             <span className="font-extrabold text-neutral-900 dark:text-white block group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
-                              {reqItem.facultyName}
+                              {facultyDisplayName}
                             </span>
                             <span className="text-[10px] text-neutral-400 font-medium">
-                              {reqItem.email}
+                              {reqItem.email || 'N/A'}
                             </span>
                             {reqItem.designation && (
                               <span className="text-[9px] text-neutral-500 font-medium block">
@@ -405,23 +416,23 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                       {/* Department */}
                       <td className="py-4 px-6 font-bold text-neutral-800 dark:text-neutral-200">
                         <span className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 text-[11px]">
-                          {reqItem.departmentCode || 'DEP'}
+                          {reqItem.departmentCode || 'N/A'}
                         </span>
                       </td>
 
                       {/* Subject */}
                       <td className="py-4 px-6">
                         <span className="font-bold text-neutral-900 dark:text-white block">
-                          {reqItem.subjectName}
+                          {reqItem.subjectName || 'General Assignment'}
                         </span>
                         <span className="text-[10px] text-neutral-400 font-semibold">
-                          {reqItem.subjectCode}
+                          {reqItem.subjectCode || '—'}
                         </span>
                       </td>
 
                       {/* Semester */}
                       <td className="py-4 px-6 text-center font-semibold text-neutral-700 dark:text-neutral-300">
-                        <span>Sem {reqItem.semester}</span>
+                        <span>{reqItem.semester ? `Sem ${reqItem.semester}` : '—'}</span>
                       </td>
 
                       {/* Authority */}
@@ -439,42 +450,80 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
 
                       {/* Submitted By */}
                       <td className="py-4 px-6 text-neutral-600 dark:text-neutral-400 font-medium">
-                        {reqItem.createdBy}
+                        {reqItem.createdBy || 'HOD'}
                       </td>
 
                       {/* Submitted On */}
                       <td className="py-4 px-6 text-neutral-500 font-medium text-[11px]">
-                        {new Date(reqItem.createdDate).toLocaleDateString()}
+                        {reqItem.createdDate ? new Date(reqItem.createdDate).toLocaleDateString() : '—'}
                       </td>
 
                       {/* Status */}
-                      <td className="py-4 px-6 text-center">
-                        <div className="flex flex-col items-center">
-                          <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              reqItem.status === 'PENDING'
-                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20'
-                                : reqItem.status === 'APPROVED'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                            }`}
-                          >
-                            {reqItem.status}
-                          </span>
-                          {reqItem.decidedBy && (
-                            <span className="text-[9px] text-neutral-400 font-normal mt-0.5">
-                              by {reqItem.decidedBy}
+                      <td className="py-4 px-6 text-center whitespace-nowrap">
+                        {(() => {
+                          if (isOverallAuthorized) {
+                            if (isPrincipalApproved && isDeanApproved) {
+                              return (
+                                <div className="flex flex-col items-center">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    AUTHORIZED
+                                  </span>
+                                  <span className="text-[9px] text-emerald-600 font-semibold mt-0.5">Both Approved</span>
+                                </div>
+                              );
+                            }
+                            if (isPrincipalApproved) {
+                              return (
+                                <div className="flex flex-col items-center">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    AUTHORIZED
+                                  </span>
+                                  <span className="text-[9px] text-neutral-500 font-medium mt-0.5">Principal Approved</span>
+                                </div>
+                              );
+                            }
+                            if (isDeanApproved) {
+                              return (
+                                <div className="flex flex-col items-center">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300">
+                                    <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                                    AUTHORIZED
+                                  </span>
+                                  <span className="text-[9px] text-purple-600 font-medium mt-0.5">Approved by Dean</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                                AUTHORIZED
+                              </span>
+                            );
+                          }
+
+                          if (isRejected) {
+                            return (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                REJECTED
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                              PENDING REVIEW
                             </span>
-                          )}
-                        </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-4 px-6 text-right whitespace-nowrap">
                         <div className="inline-flex items-center space-x-1.5">
                           <button
                             onClick={() => navigate(`/principal/faculty/authorizations/${reqItem.id}`)}
-                            className="px-2.5 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1"
+                            className="px-2.5 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>View</span>
@@ -484,7 +533,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                             <>
                               <button
                                 onClick={() => setApproveModal(reqItem)}
-                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] transition-all flex items-center space-x-1 border border-emerald-500/20"
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] transition-all flex items-center space-x-1 border border-emerald-500/20 cursor-pointer"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>Approve</span>
@@ -494,18 +543,12 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                                   setRejectModal(reqItem);
                                   setRejectionReason('');
                                 }}
-                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold text-[11px] transition-all flex items-center space-x-1 border border-rose-500/20"
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold text-[11px] transition-all flex items-center space-x-1 border border-rose-500/20 cursor-pointer"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                                 <span>Reject</span>
                               </button>
                             </>
-                          )}
-
-                          {isAwaitingDean && (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold px-2 py-1 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
-                              Awaiting Dean
-                            </span>
                           )}
                         </div>
                       </td>
@@ -518,7 +561,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                     <ShieldCheck className="w-8 h-8 mx-auto opacity-30 text-neutral-400" />
                     <p className="text-sm font-semibold">No data found</p>
                     <p className="text-xs text-neutral-400">
-                      No faculty authorization requests match your current filters.
+                      No faculty authorization requests match your current filters for Academic Year {academicYear || 'selected'}.
                     </p>
                   </td>
                 </tr>
@@ -529,8 +572,8 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
       </div>
 
       {/* ── APPROVE CONFIRMATION MODAL ── */}
-      {approveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      {approveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
@@ -544,22 +587,22 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 You are approving the appointment and curriculum authorization for:
               </p>
               <p className="text-sm font-black text-orange-600 dark:text-orange-400 pt-1">
-                {approveModal.facultyName} ({approveModal.departmentCode})
+                {approveModal.facultyName || 'Faculty Candidate'} ({approveModal.departmentCode || 'N/A'})
               </p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1.5 text-neutral-600 dark:text-neutral-300">
               <div className="flex justify-between">
                 <span className="text-neutral-400 font-medium">Designation:</span>
-                <span className="font-bold">{approveModal.designation}</span>
+                <span className="font-bold">{approveModal.designation || 'Faculty'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-400 font-medium">Assigned Subject:</span>
-                <span className="font-bold">{approveModal.subjectName}</span>
+                <span className="font-bold">{approveModal.subjectName || 'General Assignment'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-400 font-medium">Academic Year:</span>
-                <span className="font-bold">{approveModal.academicYear}</span>
+                <span className="font-bold">{approveModal.academicYear || academicYear || '2026-27'}</span>
               </div>
             </div>
 
@@ -572,7 +615,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 type="button"
                 onClick={() => setApproveModal(null)}
                 disabled={actionProcessing}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition-all"
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -580,7 +623,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 type="button"
                 onClick={handleApproveConfirm}
                 disabled={actionProcessing}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-xs flex items-center justify-center space-x-1.5"
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {actionProcessing ? (
                   <>
@@ -596,12 +639,13 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── REJECT CONFIRMATION MODAL ── */}
-      {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      {rejectModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <XCircle className="w-6 h-6" />
@@ -612,7 +656,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 Reject Faculty Request
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                You are rejecting the registration for <strong>{rejectModal.facultyName}</strong>. Please provide a formal reason for the HOD.
+                You are rejecting the registration for <strong>{rejectModal.facultyName || 'Faculty Candidate'}</strong>. Please provide a formal reason for the HOD.
               </p>
             </div>
 
@@ -637,7 +681,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                   setRejectionReason('');
                 }}
                 disabled={actionProcessing}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition-all"
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-300 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -645,7 +689,7 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                 type="button"
                 onClick={handleRejectConfirm}
                 disabled={actionProcessing || !rejectionReason.trim()}
-                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 transition-all shadow-xs flex items-center justify-center space-x-1.5"
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {actionProcessing ? (
                   <>
@@ -661,7 +705,8 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

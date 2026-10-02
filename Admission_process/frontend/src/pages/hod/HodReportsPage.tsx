@@ -46,8 +46,8 @@ export const HodReportsPage: React.FC = () => {
     },
     {
       id: 'faculty-assignments',
-      title: 'Faculty Workload & Sheet Permissions Matrix',
-      desc: 'Audit report of all teaching allotments, subject mappings, and Google Sheet access grants.',
+      title: 'Faculty Workload & Permissions Matrix',
+      desc: 'Audit report of all teaching allotments, subject mappings, and academic access grants.',
       icon: Layers,
       color: 'purple',
     },

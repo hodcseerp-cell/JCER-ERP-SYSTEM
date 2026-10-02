@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Users,
   UserPlus,
-  FileCheck2,
   KeyRound,
   BookOpen,
   ClipboardList,
@@ -18,7 +17,6 @@ import {
   Award,
   TrendingUp,
   BarChart3,
-  FileSpreadsheet,
   FileText,
   Settings,
   User,
@@ -37,6 +35,8 @@ import {
 import hodService, { HodDashboardData } from '../../services/hod.service';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
+import AcademicYearSelector from '../common/AcademicYearSelector';
+import { useAcademicYear } from '../../context/AcademicYearContext';
 
 interface MenuItem {
   name: string;
@@ -117,8 +117,14 @@ export const HodLayout: React.FC = () => {
 
   const deptName = dashboardMeta?.department?.name || user?.department?.name || 'Computer Science & Engineering';
   const deptCode = dashboardMeta?.department?.code || user?.department?.code || 'CSE';
-  const academicYear = dashboardMeta?.academicYear || '2026-27';
+  const { academicYear: globalAY } = useAcademicYear();
+  const academicYear = globalAY || dashboardMeta?.academicYear || '2026-27';
   const hodName = dashboardMeta?.hod?.name || user?.name || 'Head of Department';
+
+  const isSemHandling =
+    dashboardMeta?.department?.type === 'SEMESTER_HANDLING' ||
+    user?.department?.type === 'SEMESTER_HANDLING' ||
+    deptCode === 'AS';
 
   const pendingActions = dashboardMeta?.stats?.pendingFacultyActions || 0;
   const defaultersCount = dashboardMeta?.stats?.attendanceDefaulters || 0;
@@ -126,7 +132,7 @@ export const HodLayout: React.FC = () => {
   const unreadCount = pendingActions > 0 ? pendingActions : pendingAuthorizations.length;
 
   // HOD Sidebar Menu Structure matching Admin Dashboard visual hierarchy
-  const menuGroups: MenuGroup[] = [
+  const standardMenuGroups: MenuGroup[] = [
     {
       title: 'DASHBOARD',
       items: [
@@ -146,7 +152,7 @@ export const HodLayout: React.FC = () => {
       items: [
         { name: 'Faculty List', path: '/hod/faculty', icon: Users },
         { name: 'Create Faculty', path: '/hod/faculty/create', icon: UserPlus },
-        { name: 'Faculty Assignments', path: '/hod/faculty/assignments', icon: FileCheck2 },
+        { name: 'Teaching Allocation', path: '/hod/faculty/assignments', icon: ClipboardList },
         { name: 'Faculty Access', path: '/hod/faculty/access', icon: KeyRound, badge: pendingActions > 0 ? pendingActions : undefined },
       ],
     },
@@ -154,7 +160,6 @@ export const HodLayout: React.FC = () => {
       title: 'ACADEMIC MANAGEMENT',
       items: [
         { name: 'Subjects', path: '/hod/subjects', icon: BookOpen },
-        { name: 'Subject Assignments', path: '/hod/subjects/assign', icon: ClipboardList },
         { name: 'Academic Structure', path: '/hod/academics', icon: Award },
       ],
     },
@@ -165,12 +170,6 @@ export const HodLayout: React.FC = () => {
         { name: 'Attendance Defaulters', path: '/hod/attendance/defaulters', icon: AlertTriangle, badge: defaultersCount > 0 ? defaultersCount : undefined },
         { name: 'Marks / IA', path: '/hod/academics/performance', icon: TrendingUp },
         { name: 'Bit-Wise Marks', path: '/hod/academics/bitwise', icon: BarChart3 },
-      ],
-    },
-    {
-      title: 'EXCEL & SHEETS',
-      items: [
-        { name: 'Sheet Access & Sync', path: '/hod/sheets', icon: FileSpreadsheet },
       ],
     },
     {
@@ -188,6 +187,56 @@ export const HodLayout: React.FC = () => {
     },
   ];
 
+  // Applied Science Specific Menu Structure
+  const appliedScienceMenuGroups: MenuGroup[] = [
+    {
+      title: 'DASHBOARD',
+      items: [
+        { name: 'Dashboard', path: '/hod/dashboard', icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: 'STUDENT MANAGEMENT',
+      items: [
+        { name: 'Students', path: '/hod/students', icon: Users },
+        { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
+        { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
+      ],
+    },
+    {
+      title: 'FACULTY MANAGEMENT',
+      items: [
+        { name: 'Faculty List', path: '/hod/faculty', icon: Users },
+        { name: 'Create Faculty', path: '/hod/faculty/create', icon: UserPlus },
+        { name: 'Teaching Allocation', path: '/hod/faculty/assignments', icon: ClipboardList },
+        { name: 'Faculty Access', path: '/hod/faculty/access', icon: KeyRound, badge: pendingActions > 0 ? pendingActions : undefined },
+      ],
+    },
+    {
+      title: 'ACADEMIC MANAGEMENT',
+      items: [
+        { name: 'Subjects', path: '/hod/subjects', icon: BookOpen },
+        { name: 'Attendance', path: '/hod/attendance', icon: CalendarCheck },
+        { name: 'Analytics', path: '/hod/academics', icon: BarChart3 },
+      ],
+    },
+    {
+      title: 'SPECIAL APPLIED SCIENCE',
+      items: [
+        { name: 'Semester Transition', path: '/hod/semester-transition', icon: CheckCircle2 },
+      ],
+    },
+    {
+      title: 'SETTINGS',
+      items: [
+        { name: 'Settings', path: '/hod/settings', icon: Settings },
+        { name: 'My Profile', path: '/hod/profile', icon: User },
+      ],
+    },
+  ];
+
+  const menuGroups = isSemHandling ? appliedScienceMenuGroups : standardMenuGroups;
+
   const subNavTabs = [
     { name: 'Dashboard', path: '/hod/dashboard' },
     { name: 'Students', path: '/hod/students' },
@@ -195,22 +244,21 @@ export const HodLayout: React.FC = () => {
   ];
 
   const pageTitles: Record<string, string> = {
-    '/hod/dashboard': 'HOD Dashboard',
+    '/hod/dashboard': isSemHandling ? 'Applied Science Dashboard' : 'HOD Dashboard',
     '/hod/students': 'Student Management',
     '/hod/students/semesters': 'Semester Student Breakdown',
     '/hod/students/sections': 'Section Allocation',
+    '/hod/semester-transition': 'Semester 2 → Semester 3 Transition',
     '/hod/faculty': 'Faculty Management',
     '/hod/faculty/create': 'Create New Faculty',
-    '/hod/faculty/assignments': 'Faculty Subject Assignments',
-    '/hod/faculty/access': 'Faculty Sheet Access Control',
+    '/hod/faculty/assignments': 'Teaching Allocation',
+    '/hod/faculty/access': 'Faculty Access Control',
     '/hod/subjects': 'Department Subjects Directory',
-    '/hod/subjects/assign': 'Subject Faculty Assignment',
     '/hod/attendance': 'Department Attendance Overview',
     '/hod/attendance/defaulters': 'Attendance Defaulters List',
     '/hod/academics': 'Academic Performance Overview',
     '/hod/academics/bitwise': 'Bit-Wise Component Analysis',
     '/hod/academics/performance': 'Student Academic Performance',
-    '/hod/sheets': 'Department Excel & Sheets Workspace',
     '/hod/reports': 'Department Reports Generator',
     '/hod/settings': 'Department Settings',
     '/hod/profile': 'HOD Profile',
@@ -237,6 +285,9 @@ export const HodLayout: React.FC = () => {
   };
 
   const getPageSubtitle = () => {
+    if (isSemHandling) {
+      return 'Academic Control • Applied Science (Sem 1 & 2)';
+    }
     return `Academic Control • ${deptCode}`;
   };
 
@@ -446,12 +497,13 @@ export const HodLayout: React.FC = () => {
           {/* Right Controls */}
           <div className="flex items-center space-x-2.5 flex-shrink-0">
             {/* Department Context Badge */}
-            <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
+            <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
               <Building2 className="w-3.5 h-3.5 text-neutral-500" />
               <span>Dept: <strong>{deptCode}</strong></span>
-              <span className="text-neutral-300 dark:text-neutral-600">•</span>
-              <span>AY: <strong>{academicYear}</strong></span>
             </div>
+
+            {/* Global Academic Year Selector */}
+            <AcademicYearSelector />
 
             {/* Quick Search Button */}
             <button

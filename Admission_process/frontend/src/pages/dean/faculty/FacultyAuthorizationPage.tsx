@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Search, ShieldCheck, CheckCircle2, XCircle, Eye, AlertCircle, RefreshCw } from 'lucide-react';
 import deanService, { FacultyAuthRequest, DepartmentRecord, AcademicYearRecord } from '../../../services/dean.service';
@@ -249,17 +250,66 @@ export const FacultyAuthorizationPage: React.FC = () => {
                       {new Date(reqItem.createdDate).toLocaleDateString()}
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                          reqItem.status === 'PENDING'
-                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                            : reqItem.status === 'APPROVED'
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                        }`}
-                      >
-                        {reqItem.status}
-                      </span>
+                      {(() => {
+                        const isOverallAuthorized = reqItem.overallStatus === 'AUTHORIZED';
+                        const isDeanApproved = reqItem.status === 'APPROVED';
+                        const isPrincipalApproved = reqItem.principalApproval?.status === 'APPROVED';
+
+                        if (isOverallAuthorized) {
+                          if (isDeanApproved && isPrincipalApproved) {
+                            return (
+                              <div className="flex flex-col items-center">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  AUTHORIZED
+                                </span>
+                                <span className="text-[9px] text-emerald-600 font-semibold mt-0.5">Both Approved</span>
+                              </div>
+                            );
+                          }
+                          if (isDeanApproved) {
+                            return (
+                              <div className="flex flex-col items-center">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  AUTHORIZED
+                                </span>
+                                <span className="text-[9px] text-neutral-500 font-medium mt-0.5">Dean Approved</span>
+                              </div>
+                            );
+                          }
+                          if (isPrincipalApproved) {
+                            return (
+                              <div className="flex flex-col items-center">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300">
+                                  <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                                  AUTHORIZED
+                                </span>
+                                <span className="text-[9px] text-purple-600 font-medium mt-0.5">By Principal</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                              AUTHORIZED
+                            </span>
+                          );
+                        }
+
+                        if (reqItem.status === 'REJECTED') {
+                          return (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                              REJECTED
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                            PENDING REVIEW
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-6 text-right">
                       <div className="inline-flex items-center space-x-1.5">
@@ -309,8 +359,8 @@ export const FacultyAuthorizationPage: React.FC = () => {
       </div>
 
       {/* ── APPROVE CONFIRMATION MODAL ── */}
-      {approveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+      {approveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center space-x-3 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="w-6 h-6 flex-shrink-0" />
@@ -351,12 +401,13 @@ export const FacultyAuthorizationPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── REJECT CONFIRMATION MODAL ── */}
-      {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+      {rejectModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
               <XCircle className="w-6 h-6 flex-shrink-0" />
@@ -401,7 +452,8 @@ export const FacultyAuthorizationPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

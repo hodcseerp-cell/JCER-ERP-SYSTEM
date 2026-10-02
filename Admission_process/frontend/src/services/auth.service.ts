@@ -18,6 +18,8 @@ export interface UserSession {
     id: string;
     name: string;
     code: string;
+    type?: 'STANDARD' | 'SEMESTER_HANDLING';
+    handlingSemesters?: number[];
   };
 }
 

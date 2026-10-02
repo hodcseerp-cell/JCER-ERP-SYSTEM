@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import admissionService from '../../../services/admission.service';
 import { 
@@ -10,6 +11,7 @@ import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import * as ExcelJS from 'exceljs';
 import { getAcademicYear } from '../../../utils/date.util';
+import { ShowStudentsRangeSelector } from '../../../components/common/ShowStudentsRangeSelector';
 
 interface USNApplicant {
   id: string;
@@ -1021,25 +1023,34 @@ export const AdminUsnAllocationPage: React.FC = () => {
 
         </div>
 
-        {/* Search */}
-        <div className="relative w-full">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by student name or application number..."
-            className="w-full pl-9 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-955 border border-neutral-200/80 dark:border-neutral-800 rounded-xl text-xs font-semibold focus:outline-none focus:border-violet-500 focus:bg-white dark:focus:bg-neutral-955 dark:text-white transition-all shadow-inner"
+        {/* Search + Range */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+          <div className="relative flex-1 w-full">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by student name or application number..."
+              className="w-full pl-9 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-955 border border-neutral-200/80 dark:border-neutral-800 rounded-xl text-xs font-semibold focus:outline-none focus:border-violet-500 focus:bg-white dark:focus:bg-neutral-955 dark:text-white transition-all shadow-inner"
+            />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
+            {search && (
+              <button 
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 rounded-full cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <ShowStudentsRangeSelector
+            value={limit}
+            onChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
           />
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
-          {search && (
-            <button 
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 rounded-full cursor-pointer"
-            >
-              <X size={14} />
-            </button>
-          )}
         </div>
       </div>
 

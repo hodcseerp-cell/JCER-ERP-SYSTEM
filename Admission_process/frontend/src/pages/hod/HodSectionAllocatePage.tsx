@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -20,6 +21,7 @@ import {
   Calendar,
   UserMinus,
   Check,
+  Sliders,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, {
@@ -85,6 +87,11 @@ export const HodSectionAllocatePage: React.FC = () => {
   >([]);
   const [rollPrefix, setRollPrefix] = usePersistentState<string>(`hod_sec_alloc_prefix_${sectionId}`, '');
   const [rollStartNumber, setRollStartNumber] = usePersistentState<number>(`hod_sec_alloc_startnum_${sectionId}`, 1);
+
+  // Range Selection Helper
+  const [rangeFrom, setRangeFrom] = useState<number | string>(1);
+  const [rangeTo, setRangeTo] = useState<number | string>(60);
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
   // Auto-dismiss notification
   useEffect(() => {
@@ -244,6 +251,54 @@ export const HodSectionAllocatePage: React.FC = () => {
     setNotification({
       type: 'success',
       message: `Assigned sequential roll numbers to ${selectedStudentIds.size} selected students.`,
+    });
+  };
+
+  // Range Selection Helper
+  const handleApplyRangeSelection = () => {
+    setRangeError(null);
+    if (activeTab !== 'UNALLOCATED') return;
+
+    const fromNum = Number(rangeFrom);
+    const toNum = Number(rangeTo);
+
+    if (isNaN(fromNum) || isNaN(toNum) || fromNum <= 0 || toNum <= 0) {
+      setRangeError('Please enter valid positive numbers for From and To.');
+      return;
+    }
+
+    if (fromNum > toNum) {
+      setRangeError('"From" value cannot be greater than "To" value.');
+      return;
+    }
+
+    const eligible = filteredStudents.filter((s) => s.isUnallocated);
+    if (eligible.length === 0) {
+      setRangeError('No unallocated students available to select.');
+      return;
+    }
+
+    if (fromNum > eligible.length) {
+      setRangeError(`"From" (${fromNum}) exceeds total available unallocated students (${eligible.length}).`);
+      return;
+    }
+
+    const effectiveTo = Math.min(toNum, eligible.length);
+    const countToSelect = effectiveTo - fromNum + 1;
+
+    if (countToSelect > remainingCapacity) {
+      setRangeError(`Section ${sectionCode} has only ${remainingCapacity} available seats.`);
+      return;
+    }
+
+    const slice = eligible.slice(fromNum - 1, effectiveTo);
+    const next = new Set<string>();
+    slice.forEach((s) => next.add(s.id));
+    setSelectedStudentIds(next);
+
+    setNotification({
+      type: 'success',
+      message: `Selected students ${fromNum} through ${effectiveTo} (${slice.length} students). Review before confirming allocation.`,
     });
   };
 
@@ -774,6 +829,81 @@ export const HodSectionAllocatePage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── RANGE SELECTION HELPER CARD (ABOVE TABLE) ─────────────────────── */}
+      {activeTab === 'UNALLOCATED' && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-blue-50/70 dark:from-blue-950/40 dark:via-neutral-900 dark:to-blue-950/40 border border-blue-200 dark:border-blue-900/60 shadow-sm space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-blue-600 text-white">
+              <Sliders size={15} />
+            </div>
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-200">
+                Range Selection Helper
+              </h3>
+              <p className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">
+                Enter a row range to quickly check students in the table below. (Selection helper only — does not save until you click Allocate).
+              </p>
+            </div>
+          </div>
+
+          {rangeError && (
+            <div className="p-2.5 rounded-xl bg-rose-100 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{rangeError}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-black text-neutral-700 dark:text-neutral-300">From:</label>
+              <input
+                type="number"
+                min={1}
+                max={unallocatedCount || 1}
+                value={rangeFrom}
+                onChange={(e) => {
+                  setRangeFrom(e.target.value);
+                  setRangeError(null);
+                }}
+                className="w-20 px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-black text-neutral-700 dark:text-neutral-300">To:</label>
+              <input
+                type="number"
+                min={1}
+                max={unallocatedCount || 1}
+                value={rangeTo}
+                onChange={(e) => {
+                  setRangeTo(e.target.value);
+                  setRangeError(null);
+                }}
+                className="w-20 px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <button
+              onClick={handleApplyRangeSelection}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm transition-all hover:scale-[1.01] cursor-pointer"
+            >
+              Select Range
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedStudentIds(new Set());
+                setRangeError(null);
+              }}
+              className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── STUDENT ALLOCATION TABLE ─────────────────────────────────────────── */}
       <div className="rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
         {loading ? (
@@ -1033,87 +1163,90 @@ export const HodSectionAllocatePage: React.FC = () => {
       )}
 
       {/* ── EQUAL DISTRIBUTION MODAL ─────────────────────────────────────────── */}
-      {equalDistModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/50 backdrop-blur-xs">
-          <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
-                  <Scale size={20} />
+      {equalDistModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+                    <Scale size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-neutral-900 dark:text-white">
+                      Equal Student Distribution Preview
+                    </h3>
+                    <p className="text-xs text-neutral-500">
+                      Preview how {unallocatedCount} unallocated students will be divided across active sections.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-black text-neutral-900 dark:text-white">
-                    Equal Student Distribution Preview
-                  </h3>
-                  <p className="text-xs text-neutral-500">
-                    Preview how {unallocatedCount} unallocated students will be divided across active sections.
-                  </p>
-                </div>
+                <button
+                  onClick={() => setEqualDistModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700"
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => setEqualDistModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700"
-              >
-                <X size={16} />
-              </button>
-            </div>
 
-            <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase font-extrabold border-b border-neutral-800">
-                  <tr className="bg-[#111111] dark:bg-neutral-950 border-b border-neutral-800 font-black text-white uppercase text-[10px]">
-                    <th className="py-2.5 px-3 text-white">Section</th>
-                    <th className="py-2.5 px-3 text-center text-white">Current</th>
-                    <th className="py-2.5 px-3 text-center text-white">+ To Allocate</th>
-                    <th className="py-2.5 px-3 text-center text-white">Final Count</th>
-                    <th className="py-2.5 px-3 text-right text-white">Capacity</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                  {distPreview.map((d) => (
-                    <tr key={d.sectionId}>
-                      <td className="py-2.5 px-3 font-bold text-neutral-900 dark:text-white">
-                        Section {d.sectionCode}
-                      </td>
-                      <td className="py-2.5 px-3 text-center text-neutral-500">{d.current}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-purple-600 dark:text-purple-400">
-                        +{d.toAdd}
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-black text-neutral-900 dark:text-white">
-                        {d.final}
-                      </td>
-                      <td className="py-2.5 px-3 text-right text-neutral-500">{d.capacity}</td>
+              <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase font-extrabold border-b border-neutral-800">
+                    <tr className="bg-[#111111] dark:bg-neutral-950 border-b border-neutral-800 font-black text-white uppercase text-[10px]">
+                      <th className="py-2.5 px-3 text-white">Section</th>
+                      <th className="py-2.5 px-3 text-center text-white">Current</th>
+                      <th className="py-2.5 px-3 text-center text-white">+ To Allocate</th>
+                      <th className="py-2.5 px-3 text-center text-white">Final Count</th>
+                      <th className="py-2.5 px-3 text-right text-white">Capacity</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                    {distPreview.map((d) => (
+                      <tr key={d.sectionId}>
+                        <td className="py-2.5 px-3 font-bold text-neutral-900 dark:text-white">
+                          Section {d.sectionCode}
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-neutral-500">{d.current}</td>
+                        <td className="py-2.5 px-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                          +{d.toAdd}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-black text-neutral-900 dark:text-white">
+                          {d.final}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-neutral-500">{d.capacity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-800/40 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700">
-              <ShieldCheck size={14} className="inline mr-1 text-emerald-600" />
-              This is a preview. Allocations will only be committed upon clicking <strong>Confirm & Allocate</strong> below.
-            </p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-800/40 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700">
+                <ShieldCheck size={14} className="inline mr-1 text-emerald-600" />
+                This is a preview. Allocations will only be committed upon clicking <strong>Confirm & Allocate</strong> below.
+              </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setEqualDistModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleConfirmEqualDistribution}
-                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {saving ? 'Processing...' : 'Confirm & Allocate'}
-              </button>
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEqualDistModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleConfirmEqualDistribution}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {saving ? 'Processing...' : 'Confirm & Allocate'}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
+
     </div>
   );
 };

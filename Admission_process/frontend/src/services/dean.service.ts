@@ -133,6 +133,14 @@ export interface FacultyRecord {
   createdAt: string;
 }
 
+export interface FacultyAuthApprovalDetail {
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  decidedByName?: string | null;
+  decidedByRole?: string | null;
+  decidedAt?: string | null;
+  rejectionReason?: string | null;
+}
+
 export interface FacultyAuthRequest {
   id: string;
   facultyId: string;
@@ -150,13 +158,23 @@ export interface FacultyAuthRequest {
   section: string;
   academicYear: string;
   designation: string;
-  authority: 'DEAN' | 'PRINCIPAL';
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  authority: 'DEAN' | 'PRINCIPAL' | string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  overallStatus?: 'PENDING_APPROVAL' | 'AUTHORIZED' | 'REJECTED' | string;
+  displayStatus?: string;
+  firstApprovedByName?: string | null;
+  firstApprovedRole?: string | null;
+  firstApprovedAt?: string | null;
+  isFirstApproval?: boolean;
+  canApprove?: boolean;
+  canReject?: boolean;
   rejectionReason?: string | null;
   createdBy: string;
   createdDate: string;
   decidedBy?: string | null;
   decidedAt?: string | null;
+  deanApproval?: FacultyAuthApprovalDetail | null;
+  principalApproval?: FacultyAuthApprovalDetail | null;
 }
 
 export interface FacultyAssignmentRecord {
@@ -174,6 +192,49 @@ export interface FacultyAssignmentRecord {
   section: string;
   academicYear: string;
   status: string;
+}
+
+export interface HodSubjectHandlingRequestRecord {
+  id: string;
+  hodUserId: string;
+  hodUser?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    profileImage?: string;
+  };
+  departmentId: string;
+  department?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  semester: number;
+  subjectId: string;
+  subject?: {
+    id: string;
+    name: string;
+    code: string;
+    credits: number;
+    type: string;
+    semester: number;
+  };
+  academicYear: string;
+  reason?: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionReason?: string | null;
+  reviewedBy?: string | null;
+  reviewer?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 const deanService = {
@@ -311,6 +372,34 @@ const deanService = {
   getFacultyAssignments: async (params?: { search?: string; departmentId?: string; semester?: number; academicYear?: string; status?: string }): Promise<FacultyAssignmentRecord[]> => {
     const res = await API.get('/dean/faculty/assignments', { params });
     return res.data.data;
+  },
+
+  // HOD Subject Handling Requests
+  getHodSubjectRequests: async (params?: {
+    search?: string;
+    departmentId?: string;
+    status?: string;
+    academicYear?: string;
+    semester?: number | string;
+  }): Promise<HodSubjectHandlingRequestRecord[]> => {
+    const res = await API.get('/dean/hod-subject-requests', { params });
+    return res.data.data;
+  },
+  getHodSubjectRequestCount: async (): Promise<{ count: number }> => {
+    const res = await API.get('/dean/hod-subject-requests/count');
+    return res.data;
+  },
+  getHodSubjectRequestById: async (id: string): Promise<HodSubjectHandlingRequestRecord> => {
+    const res = await API.get(`/dean/hod-subject-requests/${id}`);
+    return res.data.data;
+  },
+  approveHodSubjectRequest: async (id: string): Promise<any> => {
+    const res = await API.post(`/dean/hod-subject-requests/${id}/approve`);
+    return res.data;
+  },
+  rejectHodSubjectRequest: async (id: string, rejectionReason: string): Promise<any> => {
+    const res = await API.post(`/dean/hod-subject-requests/${id}/reject`, { rejectionReason });
+    return res.data;
   },
 };
 

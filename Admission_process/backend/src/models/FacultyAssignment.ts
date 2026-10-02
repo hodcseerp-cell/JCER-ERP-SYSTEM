@@ -13,11 +13,12 @@ class FacultyAssignment extends Model {
   public subjectId!: string;
   public semester!: number;
   public section!: string;
+  public branch!: string | null;
   public academicYear!: string;
   public attendanceAccess!: boolean;
   public marksAccess!: boolean;
-  public googleSheetsAccess!: boolean;
   public createdByHODId!: string | null;
+  public assignmentType!: 'REGULAR' | 'HOD_SUBJECT_HANDLING' | string;
   public status!: 'ACTIVE' | 'INACTIVE';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -71,6 +72,10 @@ FacultyAssignment.init(
       allowNull: false,
       defaultValue: 'A',
     },
+    branch: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
     academicYear: {
       type: DataTypes.STRING(20),
       allowNull: false,
@@ -85,11 +90,6 @@ FacultyAssignment.init(
       allowNull: false,
       defaultValue: true,
     },
-    googleSheetsAccess: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
-    },
     createdByHODId: {
       type: DataTypes.UUID,
       allowNull: true,
@@ -97,6 +97,11 @@ FacultyAssignment.init(
         model: 'users',
         key: 'id',
       },
+    },
+    assignmentType: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      defaultValue: 'REGULAR',
     },
     status: {
       type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),

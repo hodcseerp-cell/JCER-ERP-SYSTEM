@@ -22,6 +22,7 @@ export interface AuthenticatedRequest extends Request {
   departmentId?: string;
   department?: any;
   hod?: any;
+  isSemesterHandling?: boolean;
   correlationId?: string;
 }
 

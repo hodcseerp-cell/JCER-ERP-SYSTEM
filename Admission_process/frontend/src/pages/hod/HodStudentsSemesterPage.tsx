@@ -2,17 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { GraduationCap, Calendar, Users, ChevronRight, Layers, ArrowUpRight } from 'lucide-react';
 import hodService from '../../services/hod.service';
+import { useAcademicYear } from '../../context/AcademicYearContext';
 
 export const HodStudentsSemesterPage: React.FC = () => {
+  const { academicYear } = useAcademicYear();
   const [semesterStats, setSemesterStats] = useState<Array<{ semester: number; totalStudents: number; assignedSectionsCount: number }>>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    hodService.getStudentSemesters()
+    setLoading(true);
+    hodService.getStudentSemesters(academicYear)
       .then((data) => setSemesterStats(data))
       .catch((err) => console.error('Failed to load semester stats:', err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [academicYear]);
 
   return (
     <div className="space-y-6">
@@ -41,8 +44,8 @@ export const HodStudentsSemesterPage: React.FC = () => {
         {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => {
           const stat = semesterStats.find((s) => s.semester === sem) || {
             semester: sem,
-            totalStudents: sem % 2 === 1 ? 64 : 0,
-            assignedSectionsCount: sem % 2 === 1 ? 64 : 0,
+            totalStudents: 0,
+            assignedSectionsCount: 0,
           };
 
           const isOdd = sem % 2 === 1;

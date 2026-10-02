@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
+import { useAcademicYear } from '../../context/AcademicYearContext';
+import AcademicYearSelector from '../common/AcademicYearSelector';
 
 interface MenuItem {
   name: string;
@@ -65,7 +67,7 @@ export const FacultyLayout: React.FC = () => {
   const employeeId = user?.employeeId || user?.id || 'FAC-2026-001';
   const deptName = user?.department?.name || 'Computer Science & Engineering';
   const deptCode = user?.department?.code || 'CSE';
-  const academicYear = '2026-27';
+  const { academicYear } = useAcademicYear();
 
   // Exactly 4 main navigation menus (Faculty Scope)
   const menuItems: MenuItem[] = [
@@ -289,9 +291,10 @@ export const FacultyLayout: React.FC = () => {
             <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
               <Building2 className="w-3.5 h-3.5 text-neutral-500" />
               <span>Dept: <strong>{deptCode}</strong></span>
-              <span className="text-neutral-300 dark:text-neutral-600">•</span>
-              <span>AY: <strong>{academicYear}</strong></span>
             </div>
+
+            {/* Authoritative Global Academic Year Selector */}
+            <AcademicYearSelector />
 
             {/* Profile Dropdown */}
             <div className="relative" ref={profileMenuRef}>

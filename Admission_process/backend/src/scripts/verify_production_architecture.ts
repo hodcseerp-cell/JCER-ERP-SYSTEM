@@ -6,9 +6,6 @@ import Subject from '../models/Subject';
 import FacultyAssignment from '../models/FacultyAssignment';
 import AttendanceRecord from '../models/AttendanceRecord';
 import Assessment from '../models/Assessment';
-import GoogleSheetTab from '../models/GoogleSheetTab';
-import GoogleSheetResource from '../models/GoogleSheetResource';
-import GoogleSheetConnection from '../models/GoogleSheetConnection';
 import User from '../models/User';
 import Teacher from '../models/Teacher';
 import Section from '../models/Section';
@@ -110,14 +107,13 @@ async function runTests() {
     }
 
     // Check academic protection rule
-    const [assignmentCount, attendanceCount, assessmentCount, sheetTabCount] = await Promise.all([
+    const [assignmentCount, attendanceCount, assessmentCount] = await Promise.all([
       FacultyAssignment.count({ where: { subjectId: testSubject.id } }),
       AttendanceRecord.count({ where: { subjectId: testSubject.id } }),
       Assessment.count({ where: { subjectId: testSubject.id } }),
-      GoogleSheetTab.count({ where: { subjectId: testSubject.id } }),
     ]);
 
-    const totalAcademicRecords = assignmentCount + attendanceCount + assessmentCount + sheetTabCount;
+    const totalAcademicRecords = assignmentCount + attendanceCount + assessmentCount;
     assert(totalAcademicRecords > 0, `Detected ${totalAcademicRecords} academic records linked to subject`);
 
     // In a deletion attempt with academic data:
@@ -133,29 +129,6 @@ async function runTests() {
     await dummyRecord.destroy();
     await testSubject.destroy();
     assert(true, 'Test subject cleanup completed safely');
-
-    // ─── Test 4: Google Sheet Tab & Resource Integrity ───────────────────────
-    console.log('\n--- 4. Testing Google Sheet Tab Mapping & Resource Integrity ---');
-    const existingTabs = await GoogleSheetTab.findAll({ limit: 5 });
-    if (existingTabs.length > 0) {
-      const sampleTab = existingTabs[0];
-      assert(Boolean(sampleTab.googleSheetId), `Google Tab ID preserved as immutable string (${sampleTab.googleSheetId})`);
-      assert(Boolean(sampleTab.sheetTitle), `Real Google Tab title preserved (${sampleTab.sheetTitle})`);
-    } else {
-      console.log('  ℹ️ No existing tabs present; testing GoogleSheetResource model initialization');
-    }
-
-    // Verify GoogleSheetResource table exists and accepts records
-    await GoogleSheetResource.sync();
-    const testResource = await GoogleSheetResource.create({
-      sheetType: 'ACADEMIC_MARKS',
-      googleSpreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-      googleSheetTabId: '66972508',
-      sheetUrl: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=66972508',
-      status: 'MAPPED',
-    });
-    assert(Boolean(testResource.id), 'google_sheet_resources persistence created successfully');
-    await testResource.destroy();
 
     // ─── Test 5: Section Allocation operates on Enrollment ───────────────────
     console.log('\n--- 5. Testing Section Allocation on StudentAcademicEnrollment ---');

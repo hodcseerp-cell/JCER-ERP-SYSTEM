@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -124,7 +125,6 @@ export const FacultyReviewPage: React.FC = () => {
             academicYear: request.academicYear,
             attendanceAccess: true,
             marksAccess: true,
-            googleSheetsAccess: true,
           },
         ];
 
@@ -301,7 +301,6 @@ export const FacultyReviewPage: React.FC = () => {
           {assignmentsList.map((a: any, idx: number) => {
             const attEnabled = a.attendanceAccess !== false && a.permissions?.attendance !== false;
             const marksEnabled = a.marksAccess !== false && a.permissions?.marks !== false;
-            const gsEnabled = a.googleSheetsAccess !== false && a.permissions?.googleSheets !== false;
 
             return (
               <div
@@ -334,7 +333,7 @@ export const FacultyReviewPage: React.FC = () => {
                       : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 border border-neutral-200 dark:border-neutral-700'
                   }`}>
                     {attEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
-                    <span>Attendance Sheet Access: {attEnabled ? 'Enabled' : 'Disabled'}</span>
+                    <span>Attendance Access: {attEnabled ? 'Enabled' : 'Disabled'}</span>
                   </div>
 
                   {/* Marks */}
@@ -345,16 +344,6 @@ export const FacultyReviewPage: React.FC = () => {
                   }`}>
                     {marksEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
                     <span>Marks & Bit-Wise Access: {marksEnabled ? 'Enabled' : 'Disabled'}</span>
-                  </div>
-
-                  {/* Google Sheets */}
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold text-[11px] ${
-                    gsEnabled
-                      ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 border border-neutral-200 dark:border-neutral-700'
-                  }`}>
-                    {gsEnabled ? <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" /> : <XCircle className="w-3.5 h-3.5 text-neutral-400" />}
-                    <span>Google Sheets Access: {gsEnabled ? 'Enabled' : 'Disabled'}</span>
                   </div>
                 </div>
               </div>
@@ -414,8 +403,8 @@ export const FacultyReviewPage: React.FC = () => {
       </div>
 
       {/* ── APPROVE MODAL ── */}
-      {showApproveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+      {showApproveModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center space-x-3 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="w-6 h-6 flex-shrink-0" />
@@ -456,12 +445,13 @@ export const FacultyReviewPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── REJECT MODAL ── */}
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+      {showRejectModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4">
             <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
               <XCircle className="w-6 h-6 flex-shrink-0" />
@@ -506,7 +496,8 @@ export const FacultyReviewPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
