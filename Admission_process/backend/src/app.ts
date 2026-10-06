@@ -211,6 +211,10 @@ const v1Router = express.Router();
 
 // Auth routes
 v1Router.use('/auth', authRoutes);
+v1Router.get('/me/workspaces', authMiddleware, async (req: any, res: any, next: any) => {
+  const { getUserWorkspaces } = await import('./controllers/auth.controller');
+  return getUserWorkspaces(req, res, next);
+});
 
 // Document viewer route for R2 object keys and static uploads
 v1Router.get('/documents/view/*', async (req: Request, res: Response, next: NextFunction): Promise<any> => {
@@ -348,7 +352,8 @@ v1Router.use('/dean', deanRoutes);
 v1Router.use('/hod/mentors', hodMentorRouter);
 v1Router.use('/hod', hodRoutes);
 
-// Faculty Dashboard routes
+// Faculty & Mentor Dashboard routes
+v1Router.use('/mentor', facultyMentorRouter);
 v1Router.use('/faculty/mentor', facultyMentorRouter);
 v1Router.use('/faculty', facultyRoutes);
 v1Router.use('/faculty/marks', bitwiseMarksRoutes);

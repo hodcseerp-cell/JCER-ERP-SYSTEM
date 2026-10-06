@@ -205,10 +205,45 @@ async function startServer() {
 
         CREATE INDEX IF NOT EXISTS "idx_mentoring_records_student" ON "mentoring_records"("studentId");
         CREATE INDEX IF NOT EXISTS "idx_mentoring_records_faculty" ON "mentoring_records"("facultyId");
-        CREATE INDEX IF NOT EXISTS "idx_mentoring_records_meeting_date" ON "mentoring_records"("meetingDate");
-        CREATE INDEX IF NOT EXISTS "idx_mentoring_records_status" ON "mentoring_records"("followUpStatus");
+        -- Extended Phase-aware Mentor Assignment columns
+        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "phase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_1';
+        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "startSemester" INTEGER NULL DEFAULT 1;
+        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "endSemester" INTEGER NULL DEFAULT 2;
+        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
+        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "reassignmentReason" TEXT NULL;
+
+        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_phase" ON "mentor_assignments"("phase");
+        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_batch" ON "mentor_assignments"("admissionBatch");
+
+        -- Safe Student admissionBatch column
+        ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
+
+        -- Mentor Transitions Queue table for Sem 2 -> Sem 3 promotion
+        CREATE TABLE IF NOT EXISTS "mentor_transitions" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "studentId" UUID NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
+          "departmentId" UUID NOT NULL REFERENCES "departments"("id"),
+          "admissionBatch" VARCHAR(30) NOT NULL DEFAULT '2026-27',
+          "fromPhase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_1',
+          "toPhase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_2',
+          "fromSemester" INTEGER NOT NULL DEFAULT 2,
+          "toSemester" INTEGER NOT NULL DEFAULT 3,
+          "previousFacultyId" UUID NULL REFERENCES "users"("id") ON DELETE SET NULL,
+          "newFacultyId" UUID NULL REFERENCES "users"("id") ON DELETE SET NULL,
+          "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+          "decision" VARCHAR(30) NULL,
+          "resolvedByHodId" UUID NULL REFERENCES "users"("id"),
+          "resolvedAt" TIMESTAMP WITH TIME ZONE NULL,
+          "notes" TEXT NULL,
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT "unique_student_phase_transition" UNIQUE ("studentId", "toPhase")
+        );
+
+        CREATE INDEX IF NOT EXISTS "idx_mentor_transitions_dept_status" ON "mentor_transitions"("departmentId", "status");
+        CREATE INDEX IF NOT EXISTS "idx_mentor_transitions_student" ON "mentor_transitions"("studentId");
       `);
-      console.log('✓ Mentor Management tables verified/created.');
+      console.log('✓ Mentor Management tables & Phase Transitions verified/created.');
     } catch (mentorDdlErr: any) {
       console.warn('Mentor Management migration notice:', mentorDdlErr.message);
     }

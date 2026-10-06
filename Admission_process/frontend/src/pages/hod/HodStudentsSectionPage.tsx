@@ -87,6 +87,9 @@ export const HodStudentsSectionPage: React.FC = () => {
   const [sectionToDelete, setSectionToDelete] = useState<HodSectionItem | null>(null);
   const [studentToRemove, setStudentToRemove] = useState<HodSectionStudentItem | null>(null);
   const [removeStudentModalOpen, setRemoveStudentModalOpen] = useState<boolean>(false);
+  const [unallocateAllModalOpen, setUnallocateAllModalOpen] = useState<boolean>(false);
+  const [unallocatingAll, setUnallocatingAll] = useState<boolean>(false);
+  const [unallocateAllError, setUnallocateAllError] = useState<string | null>(null);
 
   // View Students pagination and filter states
   const [viewPageSize, setViewPageSize] = useState<number>(50);
@@ -487,6 +490,37 @@ export const HodStudentsSectionPage: React.FC = () => {
       setRemoveStudentModalOpen(false);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Unallocate All Students from Section
+  const handleConfirmUnallocateAll = async () => {
+    if (!activeSection || unallocatingAll) return;
+    setUnallocatingAll(true);
+    setUnallocateAllError(null);
+    try {
+      const res = await hodService.unallocateAllStudentsFromSection(activeSection.id);
+      const count = res.data?.affectedCount ?? allocatedStudentsList.length;
+      setNotification({
+        type: 'success',
+        message: res.message || `${count} students unallocated successfully from ${activeSection.name}.`,
+      });
+      setUnallocateAllModalOpen(false);
+      await loadAllocatedStudents(activeSection.id);
+      if (selectedBranch) {
+        loadBranchSections(selectedBranch);
+      }
+      loadBranchesOverview();
+    } catch (err: any) {
+      console.error('Unallocate all students failed:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to unallocate students from section.';
+      setUnallocateAllError(errMsg);
+      setNotification({
+        type: 'error',
+        message: errMsg,
+      });
+    } finally {
+      setUnallocatingAll(false);
     }
   };
 
@@ -1500,8 +1534,27 @@ export const HodStudentsSectionPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Highlighted Show Students Range Selector */}
+                {/* Highlighted Show Students Range Selector & Unallocate All Button */}
                 <div className="shrink-0 flex items-center gap-2.5 self-end md:self-auto pl-0 md:pl-3 md:border-l border-neutral-200 dark:border-neutral-700">
+                  {/* Unallocate All Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnallocateAllError(null);
+                      setUnallocateAllModalOpen(true);
+                    }}
+                    disabled={allocatedStudentsList.length === 0}
+                    className={`shrink-0 px-3 py-1.5 rounded-xl border text-xs font-black transition-all flex items-center gap-1.5 shadow-xs ${
+                      allocatedStudentsList.length > 0
+                        ? 'border-rose-300 dark:border-rose-800 bg-rose-50/80 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 text-rose-700 dark:text-rose-300 cursor-pointer active:scale-95'
+                        : 'border-neutral-200 dark:border-neutral-800 bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400 dark:text-neutral-600 cursor-not-allowed opacity-50'
+                    }`}
+                    title={allocatedStudentsList.length === 0 ? 'No students to unallocate' : `Unallocate all ${allocatedStudentsList.length} students from this section`}
+                  >
+                    <UserMinus size={14} className="shrink-0 text-rose-600 dark:text-rose-400" />
+                    <span>Unallocate All</span>
+                  </button>
+
                   <div className="flex items-center gap-2.5 px-3 py-1.5 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl shadow-xs transition-all hover:border-blue-300">
                     <label
                       htmlFor="view-students-range-select"
@@ -1935,6 +1988,90 @@ export const HodStudentsSectionPage: React.FC = () => {
                   className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-sm transition-all cursor-pointer"
                 >
                   {submitting ? 'Removing...' : 'Confirm Remove'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── UNALLOCATE ALL STUDENTS CONFIRMATION MODAL ───────────────────────── */}
+      {unallocateAllModalOpen && activeSection &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shrink-0">
+                  <UserMinus size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-neutral-900 dark:text-white">
+                    Unallocate All Students?
+                  </h3>
+                  <p className="text-xs text-neutral-500 font-medium">
+                    {activeSection.name}
+                  </p>
+                </div>
+              </div>
+
+              {unallocateAllError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{unallocateAllError}</span>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/80 space-y-2">
+                <p className="text-xs text-neutral-700 dark:text-neutral-300">
+                  You are about to unallocate all <span className="font-black text-rose-600 dark:text-rose-400">{allocatedStudentsList.length} students</span> currently assigned to <span className="font-bold text-neutral-900 dark:text-white">{activeSection.name}</span>.
+                </p>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-200/70 dark:bg-neutral-700/60 text-[11px] font-bold text-neutral-700 dark:text-neutral-300">
+                  <span>{selectedBranch || activeSection.branch || deptCode}</span>
+                  <span>•</span>
+                  <span>Semester {selectedSemester || activeSection.semester}</span>
+                  <span>•</span>
+                  <span>Academic Year {activeAY || activeSection.academicYear}</span>
+                </div>
+              </div>
+
+              <div className="text-xs text-neutral-500 dark:text-neutral-400 space-y-1.5 leading-relaxed">
+                <p>
+                  These students will be removed from this section and returned to the unallocated student pool.
+                </p>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 size={12} className="shrink-0" />
+                  <span>Student records and academic history will not be deleted.</span>
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!unallocatingAll) {
+                      setUnallocateAllModalOpen(false);
+                      setUnallocateAllError(null);
+                    }
+                  }}
+                  disabled={unallocatingAll}
+                  className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUnallocateAll}
+                  disabled={unallocatingAll}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {unallocatingAll ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Unallocating...</span>
+                    </>
+                  ) : (
+                    <span>Unallocate All</span>
+                  )}
                 </button>
               </div>
             </div>

@@ -32,6 +32,7 @@ const avatarUpload = multer({
 router.post('/activity', authMiddleware, authController.recordActivity);
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/status', authMiddleware, authController.status);
+router.get('/workspaces', authMiddleware, authController.getUserWorkspaces);
 router.post('/change-password', authMiddleware, authController.changePassword);
 router.put('/profile', authMiddleware, authController.updateProfile);
 router.post('/profile-image', authMiddleware, avatarUpload.single('avatar'), authController.uploadProfileImage);

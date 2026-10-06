@@ -1601,6 +1601,196 @@ export class SectionAllocationService {
   }
 
   /**
+   * POST /sections/:sectionId/unallocate-all
+   * Atomically unallocate ALL students currently assigned to this section.
+   * Clears sectionId, section, and rollNumber (for sem 1) relationships without deleting student records.
+   */
+  public async unallocateAllStudents(
+    sectionId: string,
+    departmentId: string,
+    actorUser?: any
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      sectionId: string;
+      sectionName: string;
+      affectedCount: number;
+    };
+  }> {
+    const validId = SectionAllocationService.validateUuid(sectionId, 'sectionId');
+
+    const transaction = await sequelize.transaction();
+    try {
+      // 1. Find section by exact UUID with lock
+      const section = await Section.findByPk(validId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!section) {
+        throw new HttpException('Section not found.', 404, 'SECTION_NOT_FOUND');
+      }
+
+      // 2. Validate authorization & department scope
+      const isAuth = await SectionAllocationService.isHodAuthorizedForSection(section, departmentId, null, transaction);
+      if (!isAuth) {
+        throw new HttpException('You do not have access to this section.', 403, 'SECTION_ACCESS_DENIED');
+      }
+
+      let targetDeptId = section.departmentId;
+      if (section.branch && section.branch !== 'ALL') {
+        const branchDept = await SectionAllocationService.findDepartmentByBranchCode(section.branch, transaction);
+        if (branchDept) targetDeptId = branchDept.id;
+      }
+
+      const cleanCode = SectionAllocationService.getCleanSectionCode(section.name);
+
+      // 3. Find all students currently allocated to this exact sectionId
+      const studentWhere: any = {
+        departmentId: targetDeptId,
+        semester: section.semester,
+        [Op.or]: [
+          { sectionId: section.id },
+          { '$academicEnrollments.sectionId$': section.id },
+          { section: section.name },
+          { section: cleanCode },
+          { section: `Section ${cleanCode}` },
+        ],
+      };
+
+      const secAy = section.academicYear;
+      const secStartYear = secAy ? String(secAy).split(/[-–]/)[0].trim() : '2026';
+      const secAyMatch = {
+        [Op.or]: [
+          { [Op.iLike]: `${secStartYear}-%` },
+          { [Op.iLike]: `${secStartYear}–%` },
+          { [Op.eq]: secAy },
+          { [Op.eq]: secStartYear },
+        ],
+      };
+
+      const students = await Student.findAll({
+        where: studentWhere,
+        include: [
+          {
+            model: StudentAcademicEnrollment,
+            as: 'academicEnrollments',
+            where: {
+              status: 'ACTIVE',
+              academicYearId: secAyMatch,
+            },
+            required: false,
+          },
+        ],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      const affectedCount = students.length;
+
+      if (affectedCount === 0) {
+        await transaction.commit();
+        return {
+          success: true,
+          message: `No students are currently allocated to ${section.name}.`,
+          data: {
+            sectionId: section.id,
+            sectionName: section.name,
+            affectedCount: 0,
+          },
+        };
+      }
+
+      const studentIds = students.map((s) => s.id);
+
+      // 4. Atomically clear section allocation on Student table
+      // Preserves student records, user accounts, attendance, marks, academic data, mentors
+      await Student.update(
+        {
+          sectionId: null,
+          section: null,
+          rollNumber: section.semester === 1 ? null : undefined,
+        },
+        {
+          where: {
+            id: { [Op.in]: studentIds },
+          },
+          transaction,
+        }
+      );
+
+      // 5. Atomically clear section allocation on StudentAcademicEnrollment table
+      await StudentAcademicEnrollment.update(
+        {
+          sectionId: null,
+          rollNumber: section.semester === 1 ? null : undefined,
+        },
+        {
+          where: {
+            studentId: { [Op.in]: studentIds },
+            status: 'ACTIVE',
+            [Op.or]: [
+              { sectionId: section.id },
+              { academicYearId: secAyMatch },
+            ],
+          },
+          transaction,
+        }
+      );
+
+      // 6. Create administrative audit event
+      try {
+        let validActorUserId: string | null = null;
+        if (actorUser?.id) {
+          const userExists = await User.findByPk(actorUser.id, { attributes: ['id'], transaction });
+          if (userExists) validActorUserId = userExists.id;
+        }
+
+        await AuditLog.create(
+          {
+            userId: validActorUserId,
+            action: 'SECTION_STUDENTS_BULK_UNALLOCATED',
+            ipAddress: '127.0.0.1',
+            userAgent: 'HOD Portal',
+            details: {
+              actor: validActorUserId,
+              role: actorUser?.role,
+              departmentId: targetDeptId,
+              sectionId: section.id,
+              sectionName: section.name,
+              semester: section.semester,
+              academicYear: section.academicYear,
+              branch: section.branch,
+              affectedStudentCount: affectedCount,
+              studentIds,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { transaction }
+        );
+      } catch (auditErr) {
+        logger.warn('Non-blocking audit log creation error during bulk unallocation:', auditErr);
+      }
+
+      await transaction.commit();
+
+      return {
+        success: true,
+        message: `${affectedCount} students unallocated successfully from ${section.name}.`,
+        data: {
+          sectionId: section.id,
+          sectionName: section.name,
+          affectedCount,
+        },
+      };
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  }
+
+  /**
    * Manual section creation.
    * Uses user-entered section name with branch, semester & academic year uniqueness check.
    */

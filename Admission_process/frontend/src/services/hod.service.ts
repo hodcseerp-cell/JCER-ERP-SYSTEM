@@ -807,6 +807,29 @@ export const hodService = {
     }
   },
 
+  unallocateAllStudentsFromSection: async (
+    sectionId: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      sectionId: string;
+      sectionName: string;
+      affectedCount: number;
+    };
+  }> => {
+    try {
+      const res = await API.post(`/hod/students/sections/${sectionId}/unallocate-all`);
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        const fallback = await API.post(`/hod/sections/${sectionId}/unallocate-all`);
+        return fallback.data;
+      }
+      throw err;
+    }
+  },
+
   moveStudentSection: async (
     sectionId: string,
     studentId: string,

@@ -10,6 +10,7 @@ class Student extends Model {
   public enrollmentNumber!: string;
   public rollNumber!: string;
   public batchYear!: number;
+  public admissionBatch!: string | null;
   public departmentId!: string;
   public semester!: number;
   public dateOfBirth!: Date | null;
@@ -69,6 +70,11 @@ Student.init(
     batchYear: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    admissionBatch: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+      defaultValue: null,
     },
     departmentId: {
       type: DataTypes.UUID,

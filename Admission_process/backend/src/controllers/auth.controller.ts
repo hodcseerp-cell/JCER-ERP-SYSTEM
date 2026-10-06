@@ -981,3 +981,82 @@ export const recordActivity = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+/**
+ * GET /api/me/workspaces or /api/auth/workspaces
+ * Real DB-derived capabilities for role / workspace switcher
+ */
+export const getUserWorkspaces = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const isHod = user.role === 'HOD' || (await HOD.findOne({ where: { userId: user.id, isActive: true } })) !== null;
+    const isTeacher = user.role === 'TEACHER' || (user.role as string) === 'FACULTY';
+    const hasFacultyAssignment = (await FacultyAssignment.count({ where: { userId: user.id, status: 'ACTIVE' } })) > 0;
+    const isFaculty = isTeacher || isHod || hasFacultyAssignment;
+    const isMentor = (await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } })) > 0;
+
+    const workspaces: Array<{ type: string; label: string; route: string; menteeCount?: number }> = [];
+
+    if (isHod) {
+      workspaces.push({
+        type: 'HOD',
+        label: 'Head of Department',
+        route: '/hod/dashboard',
+      });
+    }
+
+    if (isFaculty) {
+      workspaces.push({
+        type: 'FACULTY',
+        label: 'Faculty Dashboard',
+        route: '/faculty/dashboard',
+      });
+    }
+
+    if (isMentor) {
+      const activeCount = await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } });
+      workspaces.push({
+        type: 'MENTOR',
+        label: 'Mentor Workspace',
+        route: '/mentor/dashboard',
+        menteeCount: activeCount,
+      });
+    }
+
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      workspaces.push({
+        type: 'ADMIN',
+        label: 'Admin Workspace',
+        route: '/admin/dashboard',
+      });
+    }
+
+    if (user.role === 'PRINCIPAL') {
+      workspaces.push({
+        type: 'PRINCIPAL',
+        label: 'Principal Workspace',
+        route: '/principal/dashboard',
+      });
+    }
+
+    if (user.role === 'DEAN') {
+      workspaces.push({
+        type: 'DEAN',
+        label: 'Dean Workspace',
+        route: '/dean/dashboard',
+      });
+    }
+
+    return res.json({
+      success: true,
+      workspaces,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+

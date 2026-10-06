@@ -8,6 +8,9 @@ import Section from '../models/Section';
 import MentorAssignment from '../models/MentorAssignment';
 import MentoringRecord, { MentoringMeetingType, MentoringConcernCategory, MentoringFollowUpStatus } from '../models/MentoringRecord';
 import AttendanceRecord from '../models/AttendanceRecord';
+import AttendanceSession from '../models/AttendanceSession';
+import MentorTransition from '../models/MentorTransition';
+import Notification from '../models/Notification';
 import Subject from '../models/Subject';
 import FinalInternalMarks from '../models/FinalInternalMarks';
 import ExternalExaminationMarks from '../models/ExternalExaminationMarks';
@@ -17,8 +20,30 @@ import AuditLog from '../models/AuditLog';
 import { HttpException } from '../utils/error.util';
 import { normalizeAcademicYear } from '../utils/academicYear.util';
 import logger from '../utils/logger.util';
+import * as XLSX from 'xlsx';
 
 export const ATTENDANCE_THRESHOLD = 85.0;
+
+export const getMentorshipPhase = (semester: number): 'PHASE_1' | 'PHASE_2' => {
+  return Number(semester) <= 2 ? 'PHASE_1' : 'PHASE_2';
+};
+
+export const getStudentAdmissionBatch = (student: any): string => {
+  if (student?.admissionBatch && String(student.admissionBatch).trim()) {
+    return String(student.admissionBatch).trim();
+  }
+  if (student?.batchYear) {
+    const y = Number(student.batchYear);
+    return `${y}-${(y + 1).toString().slice(-2)}`;
+  }
+  if (student?.currentAcademicYear) {
+    const parts = String(student.currentAcademicYear).split(/[-–]/);
+    if (parts.length >= 2) {
+      return `${parts[0]}-${parts[1].slice(-2)}`;
+    }
+  }
+  return '2026-27';
+};
 
 export const getUserFullName = (u: any): string => {
   if (!u) return '—';
@@ -208,6 +233,13 @@ export class MentorService {
         })
       : [];
 
+    const pendingTransitionsCount = await MentorTransition.count({
+      where: {
+        ...(context.isSemesterHandling ? {} : { departmentId: context.departmentId }),
+        status: 'PENDING',
+      },
+    });
+
     return {
       department: context.department,
       isSemesterHandling: context.isSemesterHandling,
@@ -218,6 +250,7 @@ export class MentorService {
         assignedStudents: assignedStudentsCount,
         unassignedStudents: unassignedStudentsCount,
         activeMentors: activeFacultyCount,
+        pendingTransitions: pendingTransitionsCount,
       },
       semesterProgress,
       facultyWorkloadList,
@@ -563,7 +596,7 @@ export class MentorService {
     // Validate students' authorization scope
     const students = await Student.findAll({
       where: { id: { [Op.in]: data.studentIds } },
-      attributes: ['id', 'usn', 'departmentId', 'semester'],
+      attributes: ['id', 'usn', 'departmentId', 'semester', 'batchYear', 'admissionBatch', 'currentAcademicYear'],
     });
 
     if (students.length !== data.studentIds.length) {
@@ -593,12 +626,16 @@ export class MentorService {
       let reassignedCount = 0;
 
       for (const student of students) {
+        const studentBatch = getStudentAdmissionBatch(student);
+        const phase = getMentorshipPhase(student.semester);
+        const startSem = student.semester;
+        const endSem = phase === 'PHASE_1' ? 2 : 8;
+
         // Check if student already has active assignment
         const existingActive = await MentorAssignment.findOne({
           where: {
             studentId: student.id,
             status: 'ACTIVE',
-            academicYear,
           },
           transaction: t,
         });
@@ -613,6 +650,7 @@ export class MentorService {
             {
               status: 'REASSIGNED',
               reassignedAt: new Date(),
+              reassignmentReason: data.notes || 'HOD Reassignment',
             },
             { transaction: t }
           );
@@ -629,6 +667,10 @@ export class MentorService {
             assignedByHodId: context.userId,
             academicYear,
             semester: student.semester,
+            phase,
+            startSemester: startSem,
+            endSemester: endSem,
+            admissionBatch: studentBatch,
             departmentId: student.departmentId,
             mentorDepartmentId: data.mentorDepartmentId,
             status: 'ACTIVE',
@@ -636,6 +678,24 @@ export class MentorService {
             notes: data.notes || null,
           },
           { transaction: t }
+        );
+
+        // Resolve any pending phase transitions for this student
+        await MentorTransition.update(
+          {
+            status: 'RESOLVED',
+            decision: 'ASSIGNED_NEW',
+            newFacultyId: data.facultyId,
+            resolvedByHodId: context.userId,
+            resolvedAt: new Date(),
+          },
+          {
+            where: {
+              studentId: student.id,
+              status: 'PENDING',
+            },
+            transaction: t,
+          }
         );
       }
 
@@ -867,28 +927,307 @@ export class MentorService {
     }));
   }
 
+  /**
+   * 9. Handle Promotion Lifecycle (Promotion-Safe Mentorship)
+   * Called during bulk student promotion.
+   * - Sem 1 -> Sem 2: Phase 1 mentor continues automatically.
+   * - Sem 2 -> Sem 3: Phase 1 closes (COMPLETED), Phase 2 transition requirement queued (PENDING), HOD notified.
+   * - Sem 3 -> Sem 8: Phase 2 mentor continues automatically across promotion.
+   */
+  public static async handlePromotion(
+    promotedStudents: Array<{
+      id?: string;
+      studentId?: string;
+      fromSemester: number;
+      toSemester: number;
+      departmentId: string;
+      admissionBatch?: string;
+    }>,
+    transaction?: Transaction
+  ) {
+    if (!promotedStudents || promotedStudents.length === 0) return;
+
+    let sem3TransitionsCreated = 0;
+
+    for (const item of promotedStudents) {
+      const fromSem = Number(item.fromSemester);
+      const toSem = Number(item.toSemester);
+      const sId = item.id || (item as any).studentId;
+
+      if (!sId) continue;
+
+      if (fromSem === 1 && toSem === 2) {
+        // Phase 1 continuity: active Phase 1 assignment continues automatically
+        continue;
+      }
+
+      if (fromSem === 2 && toSem === 3) {
+        // Sem 2 -> Sem 3 is the critical transition phase!
+        // 1. Mark existing Phase 1 mentor assignment as COMPLETED
+        const activePhase1 = await MentorAssignment.findOne({
+          where: {
+            studentId: sId,
+            status: 'ACTIVE',
+          },
+          transaction,
+        });
+
+        if (activePhase1) {
+          await activePhase1.update(
+            {
+              status: 'COMPLETED',
+              endSemester: 2,
+            },
+            { transaction }
+          );
+        }
+
+        // 2. Idempotently insert into mentor_transitions (prevent duplicate records on re-run)
+        const existingTransition = await MentorTransition.findOne({
+          where: {
+            studentId: sId,
+            toPhase: 'PHASE_2',
+          },
+          transaction,
+        });
+
+        if (!existingTransition) {
+          await MentorTransition.create(
+            {
+              studentId: sId,
+              departmentId: item.departmentId,
+              admissionBatch: item.admissionBatch || '2026-27',
+              fromPhase: 'PHASE_1',
+              toPhase: 'PHASE_2',
+              fromSemester: 2,
+              toSemester: 3,
+              previousFacultyId: activePhase1 ? activePhase1.facultyId : null,
+              status: 'PENDING',
+            },
+            { transaction }
+          );
+          sem3TransitionsCreated++;
+        }
+      }
+      // Sem 3 -> Sem 4...8: Phase 2 mentor continues automatically across promotions.
+    }
+
+    // Notify HOD if any students entered Sem 3 requiring mentor confirmation
+    if (sem3TransitionsCreated > 0) {
+      try {
+        await Notification.create(
+          {
+            title: 'MENTOR REASSIGNMENT REQUIRED',
+            content: `${sem3TransitionsCreated} student(s) have entered Semester 3 and require mentor confirmation for the Semester 3–8 mentoring phase.`,
+            type: 'WARNING',
+            audience: 'ALL',
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+          },
+          { transaction }
+        );
+      } catch (notifErr: any) {
+        logger.warn('Failed to publish mentor transition notification:', notifErr.message);
+      }
+    }
+  }
+
+  /**
+   * 10. Get Pending Mentor Transitions for HOD
+   */
+  public static async getPendingTransitions(
+    context: HodScopeContext,
+    filters: {
+      admissionBatch?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) {
+    const page = Math.max(1, Number(filters.page || 1));
+    const limit = Math.min(200, Math.max(10, Number(filters.limit || 50)));
+    const offset = (page - 1) * limit;
+
+    const whereClause: any = {
+      status: 'PENDING',
+    };
+    if (!context.isSemesterHandling) {
+      whereClause.departmentId = context.departmentId;
+    }
+    if (filters.admissionBatch && filters.admissionBatch !== 'ALL') {
+      whereClause.admissionBatch = filters.admissionBatch;
+    }
+
+    const studentWhere: any = {};
+    if (filters.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      studentWhere[Op.or] = [
+        { usn: { [Op.iLike]: `%${term}%` } },
+        { '$user.firstName$': { [Op.iLike]: `%${term}%` } },
+        { '$user.lastName$': { [Op.iLike]: `%${term}%` } },
+      ];
+    }
+
+    const { count, rows } = await MentorTransition.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          where: Object.keys(studentWhere).length > 0 ? studentWhere : undefined,
+          include: [
+            { model: User, as: 'user', attributes: USER_BASIC_ATTRIBUTES },
+            { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+          ],
+        },
+        {
+          model: User,
+          as: 'previousFaculty',
+          attributes: USER_BASIC_ATTRIBUTES,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
+    });
+
+    return {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit),
+      transitions: rows.map((r: any) => ({
+        id: r.id,
+        studentId: r.studentId,
+        studentName: getUserFullName(r.student?.user),
+        usn: r.student?.usn || '—',
+        semester: r.toSemester,
+        admissionBatch: r.admissionBatch,
+        departmentCode: r.student?.department?.code || '—',
+        previousFacultyId: r.previousFacultyId,
+        previousMentorName: getUserFullName(r.previousFaculty),
+        status: r.status,
+        createdAt: r.createdAt,
+      })),
+    };
+  }
+
+  /**
+   * 11. Resolve Mentor Transitions (Bulk or Single)
+   */
+  public static async resolveTransitions(
+    context: HodScopeContext,
+    payload: {
+      transitions: Array<{
+        transitionId: string;
+        decision: 'CONTINUE' | 'ASSIGN_NEW';
+        newFacultyId?: string;
+        mentorDepartmentId?: string;
+        notes?: string;
+      }>;
+      academicYear?: string;
+    }
+  ) {
+    if (!payload.transitions || payload.transitions.length === 0) {
+      throw new HttpException('No transitions provided to resolve.', 400, 'NO_TRANSITIONS');
+    }
+
+    const academicYear = payload.academicYear || '2026-27';
+
+    const result = await sequelize.transaction(async (t: Transaction) => {
+      let resolvedCount = 0;
+
+      for (const item of payload.transitions) {
+        const transition = await MentorTransition.findByPk(item.transitionId, { transaction: t });
+        if (!transition || transition.status !== 'PENDING') {
+          continue;
+        }
+
+        const student = await Student.findByPk(transition.studentId, { transaction: t });
+        if (!student) continue;
+
+        let targetFacultyId: string | null = null;
+        let decisionType: 'CONTINUED_PREVIOUS' | 'ASSIGNED_NEW' = 'CONTINUED_PREVIOUS';
+
+        if (item.decision === 'CONTINUE') {
+          targetFacultyId = transition.previousFacultyId;
+          decisionType = 'CONTINUED_PREVIOUS';
+          if (!targetFacultyId) {
+            throw new HttpException(
+              `Student ${student.usn || student.id} has no previous mentor to continue. Please assign a new mentor.`,
+              400,
+              'NO_PREVIOUS_MENTOR'
+            );
+          }
+        } else {
+          targetFacultyId = item.newFacultyId || null;
+          decisionType = 'ASSIGNED_NEW';
+          if (!targetFacultyId) {
+            throw new HttpException('New faculty member is required when assigning a new mentor.', 400, 'FACULTY_REQUIRED');
+          }
+        }
+
+        const mentorDeptId = item.mentorDepartmentId || student.departmentId;
+
+        // Create new active Phase 2 MentorAssignment (Sem 3 to Sem 8)
+        await MentorAssignment.create(
+          {
+            studentId: student.id,
+            facultyId: targetFacultyId,
+            assignedByHodId: context.userId,
+            academicYear,
+            semester: student.semester || 3,
+            phase: 'PHASE_2',
+            startSemester: 3,
+            endSemester: 8,
+            admissionBatch: transition.admissionBatch,
+            departmentId: student.departmentId,
+            mentorDepartmentId: mentorDeptId,
+            status: 'ACTIVE',
+            assignedAt: new Date(),
+            notes: item.notes || `Phase 2 transition resolved: ${decisionType}`,
+          },
+          { transaction: t }
+        );
+
+        // Update transition to RESOLVED
+        await transition.update(
+          {
+            status: 'RESOLVED',
+            decision: decisionType,
+            newFacultyId: decisionType === 'ASSIGNED_NEW' ? targetFacultyId : null,
+            resolvedByHodId: context.userId,
+            resolvedAt: new Date(),
+            notes: item.notes || null,
+          },
+          { transaction: t }
+        );
+
+        resolvedCount++;
+      }
+
+      return { resolvedCount };
+    });
+
+    return result;
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // ─── FACULTY MENTOR SERVICES ───────────────────────────────────────────────
   // ════════════════════════════════════════════════════════════════════════════
 
   /**
    * Status check for faculty mentor capability (database-driven)
+   * Mentorship follows batch, so active status determines capability.
    */
   public static async getMentorStatus(facultyId: string, academicYear?: string) {
-    const whereClause: any = {
-      facultyId,
-      status: 'ACTIVE',
-    };
-    if (academicYear) {
-      const normalizedAY = normalizeAcademicYear(academicYear);
-      whereClause[Op.or] = [
-        { academicYear },
-        { academicYear: normalizedAY },
-        { academicYear: academicYear.replace('-20', '-') },
-      ];
-    }
-
-    const activeMenteeCount = await MentorAssignment.count({ where: whereClause });
+    const activeMenteeCount = await MentorAssignment.count({
+      where: {
+        facultyId,
+        status: 'ACTIVE',
+      },
+    });
     return {
       isMentor: activeMenteeCount > 0,
       activeMenteeCount,
@@ -1036,12 +1375,81 @@ export class MentorService {
   }
 
   /**
-   * 2. My Mentees List
+   * Helper to fetch distinct cohorts, semesters and sections for a mentor
+   */
+  public static async getMentorCohorts(facultyId: string) {
+    const assignments = await MentorAssignment.findAll({
+      where: {
+        facultyId,
+        status: 'ACTIVE',
+      },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          attributes: ['id', 'semester', 'section', 'batchYear', 'admissionBatch', 'currentAcademicYear'],
+        },
+      ],
+    });
+
+    const batchesSet = new Set<string>();
+    const semestersByBatch: Record<string, Set<number>> = {};
+    const sectionsByBatch: Record<string, Set<string>> = {};
+
+    for (const a of assignments) {
+      const s = a.student;
+      if (!s) continue;
+      const batch = a.admissionBatch || getStudentAdmissionBatch(s);
+      batchesSet.add(batch);
+
+      if (!semestersByBatch[batch]) semestersByBatch[batch] = new Set<number>();
+      if (!sectionsByBatch[batch]) sectionsByBatch[batch] = new Set<string>();
+
+      semestersByBatch[batch].add(s.semester);
+      if (s.section && s.section.trim()) {
+        sectionsByBatch[batch].add(s.section.trim());
+      }
+    }
+
+    const batches = Array.from(batchesSet).sort().reverse();
+    const formattedSemesters: Record<string, number[]> = {};
+    const formattedSections: Record<string, string[]> = {};
+
+    batches.forEach((b) => {
+      formattedSemesters[b] = Array.from(semestersByBatch[b] || []).sort((x, y) => x - y);
+      formattedSections[b] = Array.from(sectionsByBatch[b] || []).sort();
+    });
+
+    const cohorts = batches.map((b) => {
+      const sems = formattedSemesters[b] || [];
+      const currentSem = sems.length > 0 ? sems[sems.length - 1] : 1;
+      const count = assignments.filter((a) => (a.admissionBatch || getStudentAdmissionBatch(a.student)) === b).length;
+      return {
+        batch: b,
+        admissionBatch: b,
+        menteeCount: count,
+        currentSemester: currentSem,
+        semesters: sems,
+        sections: formattedSections[b] || [],
+      };
+    });
+
+    return {
+      batches,
+      semestersByBatch: formattedSemesters,
+      sectionsByBatch: formattedSections,
+      cohorts,
+    };
+  }
+
+  /**
+   * 2. My Mentees List (Batch First, Promotion-Safe)
    */
   public static async getMyMentees(
     facultyId: string,
     filters: {
       search?: string;
+      admissionBatch?: string;
       semester?: number;
       section?: string;
       attendanceStatus?: 'ALL' | 'BELOW_85' | 'ABOVE_85' | 'NO_RECORDS';
@@ -1050,24 +1458,17 @@ export class MentorService {
       academicYear?: string;
     }
   ) {
-    const academicYear = filters.academicYear || '2026-27';
-    const normalizedAY = normalizeAcademicYear(academicYear);
-
+    // Mentorship follows admission batch/cohort rather than static semester/AY
     const assignments = await MentorAssignment.findAll({
       where: {
         facultyId,
         status: 'ACTIVE',
-        [Op.or]: [
-          { academicYear },
-          { academicYear: normalizedAY },
-          { academicYear: academicYear.replace('-20', '-') },
-        ],
       },
       include: [
         {
           model: Student,
           as: 'student',
-          attributes: ['id', 'usn', 'rollNumber', 'semester', 'section', 'departmentId'],
+          attributes: ['id', 'usn', 'rollNumber', 'semester', 'section', 'departmentId', 'batchYear', 'admissionBatch', 'currentAcademicYear'],
           include: [
             { model: User, as: 'user', attributes: USER_BASIC_ATTRIBUTES },
             { model: Department, as: 'department', attributes: ['name', 'code'] },
@@ -1265,6 +1666,32 @@ export class MentorService {
       include: [{ model: User, as: 'faculty', attributes: USER_BASIC_ATTRIBUTES }],
     });
 
+    // All Mentor Assignments for mentorship history
+    const allAssignments = await MentorAssignment.findAll({
+      where: { studentId },
+      order: [['createdAt', 'ASC']],
+      include: [
+        { model: User, as: 'faculty', attributes: USER_BASIC_ATTRIBUTES },
+        { model: Department, as: 'mentorDepartment', attributes: ['id', 'name', 'code'] },
+      ],
+    });
+
+    const mentorshipHistory = allAssignments.map((a: any) => ({
+      id: a.id,
+      phase: a.phase === 'PHASE_1' ? 'Sem 1–2' : 'Sem 3–8',
+      mentorName: getUserFullName(a.faculty),
+      mentorEmail: a.faculty?.email || '—',
+      period: `Sem ${a.startSemester || (a.phase === 'PHASE_1' ? 1 : 3)}–${a.endSemester || (a.phase === 'PHASE_1' ? 2 : 8)}`,
+      academicYear: a.academicYear,
+      status: a.status,
+      assignedAt: a.assignedAt,
+      reassignedAt: a.reassignedAt,
+      reassignmentReason: a.reassignmentReason || (a.status === 'COMPLETED' ? 'Phase 1 Completed' : null),
+    }));
+
+    const admissionBatch = student.admissionBatch || getStudentAdmissionBatch(student);
+    const mentorshipPhase = getMentorshipPhase(student.semester) === 'PHASE_1' ? 'Semester 1–2' : 'Semester 3–8';
+
     return {
       student: {
         id: student.id,
@@ -1278,7 +1705,30 @@ export class MentorService {
         semester: student.semester,
         section: student.section || '—',
         rollNumber: student.rollNumber || '—',
+        enrollmentNumber: student.enrollmentNumber || '—',
         academicYear: student.currentAcademicYear || '2026-27',
+        admissionBatch,
+        mentorshipPhase,
+      },
+      personalInfo: {
+        name: getUserFullName((student as any).user),
+        usn: student.usn || '—',
+        enrollmentNumber: student.enrollmentNumber || '—',
+        rollNumber: student.rollNumber || '—',
+        dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : '—',
+        gender: student.gender || '—',
+        department: (student as any).department?.name || '—',
+        departmentCode: (student as any).department?.code || '—',
+        admissionBatch,
+        currentSemester: student.semester,
+        section: student.section || '—',
+        address: student.address || '—',
+        parentName: student.fatherName || student.motherName || '—',
+        fatherName: student.fatherName || '—',
+        motherName: student.motherName || '—',
+        parentPhone: student.parentPhone || '—',
+        parentEmail: student.parentEmail || '—',
+        emergencyContact: student.parentPhone || '—',
       },
       activeMentor: activeAssignment
         ? {
@@ -1286,6 +1736,7 @@ export class MentorService {
             facultyEmail: (activeAssignment as any).faculty?.email || '—',
             coreDepartment: (activeAssignment as any).mentorDepartment?.name || '—',
             assignedAt: activeAssignment.assignedAt,
+            phase: activeAssignment.phase === 'PHASE_1' ? 'Semester 1–2' : 'Semester 3–8',
           }
         : null,
       summaryCards: {
@@ -1293,7 +1744,10 @@ export class MentorService {
         latestResult,
         completedSemesters,
         openFollowUps: openFollowUpsCount,
+        admissionBatch,
+        mentorshipPhase,
       },
+      mentorshipHistory,
       recentMentoringRecords: recentMentoringRecords.map((r: any) => ({
         id: r.id,
         meetingDate: r.meetingDate,
@@ -1467,6 +1921,115 @@ export class MentorService {
       ? Math.round((totalAttendedAll / totalConductedAll) * 1000) / 10
       : null;
 
+    // ─── Daily Calendar Data ────────────────────────────────────────────────
+    const dailyMap = new Map<string, {
+      date: string;
+      sessions: Array<{ subjectCode: string; subjectName: string; period: number; status: string }>;
+      presentCount: number;
+      absentCount: number;
+      status: 'PRESENT' | 'ABSENT';
+    }>();
+
+    // ─── Monthly Breakdown Data ─────────────────────────────────────────────
+    const monthlyMap = new Map<string, {
+      monthKey: string;
+      monthName: string;
+      totalClasses: number;
+      attended: number;
+      absent: number;
+      subjectWiseMap: Map<string, { subjectCode: string; subjectName: string; conducted: number; attended: number }>;
+    }>();
+
+    records.forEach((rec) => {
+      const d = new Date(rec.date);
+      const dateStr = d.toISOString().split('T')[0];
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const sCode = (rec as any).subject?.code || '—';
+      const sName = (rec as any).subject?.name || 'Subject';
+
+      // 1. Daily Calendar
+      let dayEntry = dailyMap.get(dateStr);
+      if (!dayEntry) {
+        dayEntry = {
+          date: dateStr,
+          sessions: [],
+          presentCount: 0,
+          absentCount: 0,
+          status: 'PRESENT',
+        };
+        dailyMap.set(dateStr, dayEntry);
+      }
+      dayEntry.sessions.push({
+        subjectCode: sCode,
+        subjectName: sName,
+        period: rec.sessionPeriod || 1,
+        status: rec.status,
+      });
+      if (rec.status === 'PRESENT') {
+        dayEntry.presentCount += 1;
+      } else {
+        dayEntry.absentCount += 1;
+        dayEntry.status = 'ABSENT'; // If absent in any session that day
+      }
+
+      // 2. Monthly Breakdown
+      let mEntry = monthlyMap.get(monthKey);
+      if (!mEntry) {
+        mEntry = {
+          monthKey,
+          monthName,
+          totalClasses: 0,
+          attended: 0,
+          absent: 0,
+          subjectWiseMap: new Map(),
+        };
+        monthlyMap.set(monthKey, mEntry);
+      }
+      mEntry.totalClasses += 1;
+      if (rec.status === 'PRESENT') {
+        mEntry.attended += 1;
+      } else {
+        mEntry.absent += 1;
+      }
+
+      let mSubj = mEntry.subjectWiseMap.get(rec.subjectId);
+      if (!mSubj) {
+        mSubj = { subjectCode: sCode, subjectName: sName, conducted: 0, attended: 0 };
+        mEntry.subjectWiseMap.set(rec.subjectId, mSubj);
+      }
+      mSubj.conducted += 1;
+      if (rec.status === 'PRESENT') mSubj.attended += 1;
+    });
+
+    const calendarData: Record<string, any> = {};
+    dailyMap.forEach((val, key) => {
+      calendarData[key] = val;
+    });
+
+    const monthlyBreakdown = Array.from(monthlyMap.values())
+      .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+      .map((m) => {
+        const pct = m.totalClasses > 0 ? Math.round((m.attended / m.totalClasses) * 1000) / 10 : 0;
+        const subjectWise = Array.from(m.subjectWiseMap.values()).map((sw) => ({
+          subjectCode: sw.subjectCode,
+          subjectName: sw.subjectName,
+          conducted: sw.conducted,
+          attended: sw.attended,
+          absent: sw.conducted - sw.attended,
+          attendancePercentage: sw.conducted > 0 ? Math.round((sw.attended / sw.conducted) * 1000) / 10 : 0,
+        }));
+        return {
+          monthKey: m.monthKey,
+          monthName: m.monthName,
+          totalClasses: m.totalClasses,
+          attended: m.attended,
+          absent: m.absent,
+          attendancePercentage: pct,
+          subjectWise,
+        };
+      });
+
     return {
       studentSemester: student.semester,
       selectedSemester: targetSemester,
@@ -1480,6 +2043,8 @@ export class MentorService {
         : 'NEEDS_ATTENTION',
       threshold: ATTENDANCE_THRESHOLD,
       subjectWise,
+      calendarData,
+      monthlyBreakdown,
     };
   }
 
@@ -1602,6 +2167,575 @@ export class MentorService {
     });
 
     return record;
+  }
+
+  /**
+   * 10. Individual Mentee Analytics (Analytics Tab in Profile)
+   */
+  public static async getMenteeAnalytics(studentId: string, facultyId: string, userRole?: string) {
+    await this.verifyMentorStudentAccess(facultyId, studentId, userRole);
+    const student = await Student.findByPk(studentId, {
+      include: [
+        { model: User, as: 'user', attributes: USER_BASIC_ATTRIBUTES },
+        { model: Department, as: 'department', attributes: ['name', 'code'] },
+      ],
+    });
+    if (!student) throw new HttpException('Student not found.', 404, 'STUDENT_NOT_FOUND');
+
+    const attDetails = await this.getMenteeAttendanceDetails(studentId, facultyId, student.semester, userRole);
+    const acadDetails = await this.getMenteeAcademicPerformance(studentId, facultyId, userRole);
+
+    // Calculate marks average for current semester
+    const curSemAcad = acadDetails.performanceBySemester.find((p) => p.semester === student.semester);
+    let avgScore = 0;
+    if (curSemAcad && curSemAcad.subjects.length > 0) {
+      const marks = curSemAcad.subjects
+        .map((s: any) => s.finalInternalMarks)
+        .filter((m: any) => m !== null && m !== undefined);
+      if (marks.length > 0) {
+        avgScore = Math.round((marks.reduce((a: number, b: number) => a + Number(b), 0) / marks.length) * 10) / 10;
+      }
+    }
+
+    const lowAttSubjects = attDetails.subjectWise.filter((s: any) => s.eligibility === 'NEEDS_ATTENTION');
+    const attPct = attDetails.overallPercentage ?? 100;
+
+    let riskLevel: 'GREEN' | 'YELLOW' | 'RED' = 'GREEN';
+    if (attPct < ATTENDANCE_THRESHOLD || (avgScore > 0 && avgScore < 20)) {
+      riskLevel = 'RED';
+    } else if (attPct < 88 || (avgScore > 0 && avgScore < 25)) {
+      riskLevel = 'YELLOW';
+    }
+
+    // Monthly attendance trend line
+    const attendanceTrend = (attDetails.monthlyBreakdown || []).map((m: any) => ({
+      month: m.monthName,
+      monthKey: m.monthKey,
+      percentage: m.attendancePercentage,
+      conducted: m.totalClasses,
+      attended: m.attended,
+      missed: m.absent ?? (m.totalClasses - m.attended),
+    }));
+
+    // Monthly attendance grouped bars
+    const monthlyAttendanceGrouped = (attDetails.monthlyBreakdown || []).map((m: any) => ({
+      month: m.monthName,
+      monthKey: m.monthKey,
+      attended: m.attended,
+      missed: m.absent ?? (m.totalClasses - m.attended),
+      total: m.totalClasses,
+      percentage: m.attendancePercentage,
+    }));
+
+    // Attended vs Missed donut chart
+    const totalConducted = attDetails.totalConducted || 0;
+    const totalAttended = attDetails.totalAttended || 0;
+    const totalMissed = Math.max(0, totalConducted - totalAttended);
+    const attendedVsMissedDonut = [
+      { name: 'Attended', value: totalAttended, color: '#10b981' },
+      { name: 'Missed', value: totalMissed, color: '#ef4444' },
+    ];
+
+    // Subject-wise attendance bars
+    const subjectAttendanceBars = (attDetails.subjectWise || []).map((sw: any) => ({
+      subjectCode: sw.subjectCode,
+      subjectName: sw.subjectName,
+      conducted: sw.conducted,
+      attended: sw.attended,
+      missed: sw.missed ?? (sw.conducted - sw.attended),
+      attendancePercentage: sw.attendancePercentage,
+    }));
+
+    // Subject academic performance bars for current semester
+    const subjectAcademicBars = (curSemAcad?.subjects || []).map((s: any) => ({
+      subjectCode: s.subjectCode,
+      subjectName: s.subjectName,
+      cie: s.finalInternalMarks !== null && s.finalInternalMarks !== undefined ? Number(s.finalInternalMarks) : 0,
+      see: s.externalExamMarks !== null && s.externalExamMarks !== undefined ? Number(s.externalExamMarks) : null,
+      total: s.totalMarks !== null && s.totalMarks !== undefined ? Number(s.totalMarks) : (s.finalInternalMarks ?? 0),
+    }));
+
+    // Academic trend across semesters
+    const academicTrend = (acadDetails.performanceBySemester || [])
+      .filter((p: any) => p.hasRecords)
+      .map((p: any) => {
+        const validMarks = p.subjects
+          .map((s: any) => s.finalInternalMarks)
+          .filter((m: any) => m !== null && m !== undefined);
+        const avg = validMarks.length > 0
+          ? Math.round((validMarks.reduce((a: number, b: number) => a + Number(b), 0) / validMarks.length) * 10) / 10
+          : 0;
+        return {
+          semester: `Sem ${p.semester}`,
+          averageMarks: avg,
+        };
+      });
+
+    const riskLevelNormalized: 'LOW' | 'MEDIUM' | 'HIGH' =
+      riskLevel === 'RED' ? 'HIGH' : riskLevel === 'YELLOW' ? 'MEDIUM' : 'LOW';
+
+    const riskFactors: string[] = [
+      attPct < ATTENDANCE_THRESHOLD ? `Overall attendance (${attPct}%) is below the ${ATTENDANCE_THRESHOLD}% institutional requirement.` : null,
+      lowAttSubjects.length > 0 ? `${lowAttSubjects.length} subject(s) below the 85% attendance threshold.` : null,
+      avgScore > 0 && avgScore < 20 ? `Internal CIE assessment average (${avgScore}/50) is below benchmark.` : null,
+    ].filter(Boolean) as string[];
+
+    return {
+      studentId,
+      studentName: getUserFullName((student as any).user),
+      usn: student.usn || '—',
+      semester: student.semester,
+      riskLevel,
+      riskLevelNormalized,
+      riskFactors,
+      summaryCards: {
+        overallAttendance: attPct,
+        academicAverage: avgScore,
+        subjectsBelow85: lowAttSubjects.length,
+        subjectsNeedingAttention: lowAttSubjects.length,
+        totalConducted,
+        totalAttended,
+        totalMissed,
+        riskLevel: riskLevelNormalized,
+      },
+      attendanceTrend,
+      monthlyAttendanceGrouped,
+      attendedVsMissedDonut,
+      subjectAttendanceBars,
+      subjectAcademicBars,
+      academicTrend,
+      lowAttendanceSubjects: lowAttSubjects,
+      subjectPerformance: attDetails.subjectWise.map((sw: any) => ({
+        subjectCode: sw.subjectCode,
+        subjectName: sw.subjectName,
+        attendancePercentage: sw.attendancePercentage,
+        conducted: sw.conducted,
+        attended: sw.attended,
+      })),
+    };
+  }
+
+  /**
+   * 11. Global Mentor Group Analytics (Workspace Analytics Menu)
+   */
+  public static async getGlobalMentorAnalytics(facultyId: string) {
+    const assignments = await MentorAssignment.findAll({
+      where: {
+        facultyId,
+        status: 'ACTIVE',
+      },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          attributes: ['id', 'usn', 'semester', 'section', 'departmentId'],
+          include: [
+            { model: User, as: 'user', attributes: USER_BASIC_ATTRIBUTES },
+            { model: Department, as: 'department', attributes: ['name', 'code'] },
+          ],
+        },
+      ],
+    });
+
+    const totalMentees = assignments.length;
+    if (totalMentees === 0) {
+      return {
+        totalMentees: 0,
+        averageAttendance: 0,
+        studentsBelow85: 0,
+        studentsAbove85: 0,
+        averageAcademicScore: 0,
+        studentsNeedingAttention: 0,
+        studentsWithAcademicDecline: 0,
+        attendanceDistribution: {
+          range90To100: 0,
+          range85To90: 0,
+          range75To85: 0,
+          rangeBelow75: 0,
+        },
+        monthlyAttendanceTrend: [],
+        lowAttendanceStudents: [],
+        topPerformingMentees: [],
+        studentsNeedingSupport: [],
+      };
+    }
+
+    const studentStats: any[] = [];
+    const monthlyAttMap = new Map<string, { totalConducted: number; totalAttended: number; name: string }>();
+
+    for (const a of assignments) {
+      const s = a.student;
+      if (!s) continue;
+      const attSummary = await this.getStudentAttendanceSummary(s.id, s.semester);
+      const acadSummary = await this.getLatestAcademicSummary(s.id, s.semester);
+
+      let primaryLowSubject = '—';
+      if (attSummary.totalConducted > 0 && attSummary.attendancePercentage < ATTENDANCE_THRESHOLD) {
+        const records = await AttendanceRecord.findAll({
+          where: { studentId: s.id, semester: s.semester },
+          include: [{ model: Subject, as: 'subject', attributes: ['code', 'name'] }],
+        });
+        const subjMap = new Map<string, { code: string; conducted: number; attended: number }>();
+        records.forEach((r) => {
+          const code = (r as any).subject?.code || 'Subj';
+          let item = subjMap.get(r.subjectId);
+          if (!item) {
+            item = { code, conducted: 0, attended: 0 };
+            subjMap.set(r.subjectId, item);
+          }
+          item.conducted += 1;
+          if (r.status === 'PRESENT') item.attended += 1;
+        });
+        let minPct = 101;
+        subjMap.forEach((val) => {
+          const p = val.conducted > 0 ? (val.attended / val.conducted) * 100 : 0;
+          if (p < minPct) {
+            minPct = p;
+            primaryLowSubject = `${val.code} (${Math.round(p)}%)`;
+          }
+        });
+      }
+
+      const allRecords = await AttendanceRecord.findAll({
+        where: { studentId: s.id, semester: s.semester },
+        attributes: ['date', 'status'],
+      });
+      allRecords.forEach((r) => {
+        const d = new Date(r.date);
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        let mEntry = monthlyAttMap.get(monthKey);
+        if (!mEntry) {
+          mEntry = { totalConducted: 0, totalAttended: 0, name: monthName };
+          monthlyAttMap.set(monthKey, mEntry);
+        }
+        mEntry.totalConducted += 1;
+        if (r.status === 'PRESENT') mEntry.totalAttended += 1;
+      });
+
+      studentStats.push({
+        id: s.id,
+        name: getUserFullName((s as any).user),
+        usn: s.usn || '—',
+        semester: s.semester,
+        section: s.section || '—',
+        departmentCode: (s as any).department?.code || '—',
+        attendancePercentage: attSummary.totalConducted > 0 ? attSummary.attendancePercentage : 100,
+        totalConducted: attSummary.totalConducted,
+        academicScore: (acadSummary as any).averageCie ?? 0,
+        primaryLowSubject,
+      });
+    }
+
+    let sumAtt = 0;
+    let studentsBelow85 = 0;
+    let studentsAbove85 = 0;
+    let sumAcad = 0;
+    let acadCount = 0;
+    const distribution = {
+      range90To100: 0,
+      range85To90: 0,
+      range75To85: 0,
+      rangeBelow75: 0,
+    };
+    const lowAttendanceStudents: any[] = [];
+    const studentsNeedingSupport: any[] = [];
+
+    studentStats.forEach((st) => {
+      const att = st.attendancePercentage;
+      sumAtt += att;
+      if (att >= 90) distribution.range90To100 += 1;
+      else if (att >= 85) distribution.range85To90 += 1;
+      else if (att >= 75) distribution.range75To85 += 1;
+      else distribution.rangeBelow75 += 1;
+
+      if (att < ATTENDANCE_THRESHOLD) {
+        studentsBelow85 += 1;
+        lowAttendanceStudents.push({
+          id: st.id,
+          name: st.name,
+          usn: st.usn,
+          semester: st.semester,
+          section: st.section,
+          attendancePercentage: att,
+          primaryLowSubject: st.primaryLowSubject,
+        });
+        studentsNeedingSupport.push(st);
+      } else {
+        studentsAbove85 += 1;
+      }
+
+      if (st.academicScore > 0) {
+        sumAcad += st.academicScore;
+        acadCount += 1;
+        if (st.academicScore < 20 && !studentsNeedingSupport.some((x) => x.id === st.id)) {
+          studentsNeedingSupport.push(st);
+        }
+      }
+    });
+
+    const averageAttendance = totalMentees > 0 ? Math.round((sumAtt / totalMentees) * 10) / 10 : 0;
+    const averageAcademicScore = acadCount > 0 ? Math.round((sumAcad / acadCount) * 10) / 10 : 0;
+
+    const sortedMonthKeys = Array.from(monthlyAttMap.keys()).sort();
+    const monthlyAttendanceTrend = sortedMonthKeys.map((mk) => {
+      const item = monthlyAttMap.get(mk)!;
+      const pct = item.totalConducted > 0 ? Math.round((item.totalAttended / item.totalConducted) * 1000) / 10 : 0;
+      return {
+        month: item.name,
+        averageAttendance: pct,
+      };
+    });
+
+    const topPerformingMentees = [...studentStats]
+      .filter((s) => s.academicScore > 0)
+      .sort((a, b) => b.academicScore - a.academicScore)
+      .slice(0, 5);
+
+    return {
+      totalMentees,
+      averageAttendance,
+      studentsBelow85,
+      studentsAbove85,
+      averageAcademicScore,
+      studentsNeedingAttention: studentsNeedingSupport.length,
+      studentsWithAcademicDecline: 0,
+      attendanceDistribution: distribution,
+      monthlyAttendanceTrend,
+      lowAttendanceStudents,
+      topPerformingMentees,
+      studentsNeedingSupport,
+    };
+  }
+
+  /**
+   * 12. Parse & Validate Parent Information Excel Import
+   */
+  public static async parseAndValidateParentImport(facultyId: string, buffer: Buffer) {
+    const activeAssignments = await MentorAssignment.findAll({
+      where: { facultyId, status: 'ACTIVE' },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          attributes: ['id', 'usn', 'fatherName', 'motherName', 'parentPhone', 'address'],
+          include: [{ model: User, as: 'user', attributes: USER_BASIC_ATTRIBUTES }],
+        },
+      ],
+    });
+
+    const menteeUsnMap = new Map<string, any>();
+    activeAssignments.forEach((a) => {
+      const s = a.student;
+      if (s && s.usn) {
+        menteeUsnMap.set(s.usn.trim().toUpperCase(), s);
+      }
+    });
+
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      throw new HttpException('Excel file does not contain any sheets.', 400, 'EMPTY_EXCEL');
+    }
+
+    const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    if (!rawRows || rawRows.length === 0) {
+      throw new HttpException('No data rows found in the uploaded file.', 400, 'EMPTY_DATA');
+    }
+
+    const previewRows: any[] = [];
+    const seenUsns = new Set<string>();
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      const rowNormalized: Record<string, string> = {};
+      Object.keys(row).forEach((k) => {
+        const cleanKey = k.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        rowNormalized[cleanKey] = String(row[k] || '').trim();
+      });
+
+      const usn = (rowNormalized['usn'] || rowNormalized['rollno'] || rowNormalized['rollnumber'] || '').toUpperCase();
+      const studentName = rowNormalized['studentname'] || rowNormalized['name'] || '';
+      const parentName = rowNormalized['parentname'] || rowNormalized['fathername'] || rowNormalized['father'] || '';
+      const parentMobile = rowNormalized['parentmobile'] || rowNormalized['mobile'] || rowNormalized['parentphone'] || rowNormalized['phone'] || '';
+      const address = rowNormalized['address'] || rowNormalized['permanentaddress'] || '';
+      const emergencyContact = rowNormalized['emergencycontact'] || rowNormalized['emergency'] || '';
+
+      const errors: string[] = [];
+
+      if (!usn) {
+        errors.push('USN is missing.');
+      } else if (seenUsns.has(usn)) {
+        errors.push(`Duplicate USN "${usn}" in file.`);
+      } else {
+        seenUsns.add(usn);
+      }
+
+      let matchedStudent: any = null;
+      if (usn) {
+        matchedStudent = menteeUsnMap.get(usn);
+        if (!matchedStudent) {
+          const foreignStudent = await Student.findOne({ where: { usn } });
+          if (foreignStudent) {
+            errors.push(`Student (${usn}) is NOT assigned to you as a mentee. You cannot modify students outside your mentoring group.`);
+          } else {
+            errors.push(`Student with USN "${usn}" not found in system.`);
+          }
+        }
+      }
+
+      if (parentMobile && !/^\d{10}$/.test(parentMobile.replace(/[\s-]/g, ''))) {
+        errors.push('Mobile number must be a valid 10-digit number.');
+      }
+
+      const isValid = errors.length === 0;
+
+      previewRows.push({
+        rowNumber: i + 1,
+        usn,
+        studentName: matchedStudent ? getUserFullName((matchedStudent as any).user) : studentName || '—',
+        parentName: parentName || matchedStudent?.fatherName || '—',
+        parentMobile: parentMobile || matchedStudent?.parentPhone || '—',
+        address: address || matchedStudent?.address || '—',
+        emergencyContact: emergencyContact || matchedStudent?.parentPhone || '—',
+        status: isValid ? 'VALID' : 'INVALID',
+        errors,
+        studentId: matchedStudent?.id || null,
+      });
+    }
+
+    const validCount = previewRows.filter((r) => r.status === 'VALID').length;
+    const invalidCount = previewRows.filter((r) => r.status === 'INVALID').length;
+
+    return {
+      totalRows: previewRows.length,
+      validCount,
+      invalidCount,
+      preview: previewRows,
+    };
+  }
+
+  /**
+   * 13. Confirm Parent Information Import
+   */
+  public static async confirmParentImport(
+    facultyId: string,
+    rows: Array<{
+      studentId: string;
+      usn: string;
+      parentName?: string;
+      parentMobile?: string;
+      address?: string;
+      emergencyContact?: string;
+    }>
+  ) {
+    if (!rows || rows.length === 0) {
+      throw new HttpException('No valid rows provided for import confirmation.', 400, 'NO_IMPORT_DATA');
+    }
+
+    const activeAssignments = await MentorAssignment.findAll({
+      where: { facultyId, status: 'ACTIVE' },
+      attributes: ['studentId'],
+    });
+    const authorizedStudentIds = new Set(activeAssignments.map((a) => a.studentId));
+
+    const result = await sequelize.transaction(async (t: Transaction) => {
+      let updatedCount = 0;
+
+      for (const row of rows) {
+        if (!row.studentId || !authorizedStudentIds.has(row.studentId)) {
+          continue;
+        }
+
+        const student = await Student.findByPk(row.studentId, { transaction: t });
+        if (!student) continue;
+
+        const updateData: any = {};
+        if (row.parentName && row.parentName.trim() && row.parentName !== '—') {
+          updateData.fatherName = row.parentName.trim();
+        }
+        if (row.parentMobile && row.parentMobile.trim() && row.parentMobile !== '—') {
+          updateData.parentPhone = row.parentMobile.trim();
+        }
+        if (row.address && row.address.trim() && row.address !== '—') {
+          updateData.address = row.address.trim();
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await student.update(updateData, { transaction: t });
+          updatedCount++;
+        }
+      }
+
+      await AuditLog.create(
+        {
+          userId: facultyId,
+          action: 'BULK_PARENT_INFO_IMPORT',
+          details: {
+            updatedCount,
+            totalSubmitted: rows.length,
+          },
+        },
+        { transaction: t }
+      );
+
+      return { updatedCount };
+    });
+
+    return result;
+  }
+
+  /**
+   * 14. Quick Mentee Search (Restricted strictly to logged-in mentor's active mentees)
+   */
+  public static async searchMentees(facultyId: string, query: string) {
+    if (!query || !query.trim()) return [];
+    const term = query.trim().toLowerCase();
+
+    const assignments = await MentorAssignment.findAll({
+      where: { facultyId, status: 'ACTIVE' },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          attributes: ['id', 'usn', 'semester', 'section', 'departmentId'],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: USER_BASIC_ATTRIBUTES,
+            },
+            {
+              model: Department,
+              as: 'department',
+              attributes: ['name', 'code'],
+            },
+          ],
+        },
+      ],
+    });
+
+    const matches: any[] = [];
+    for (const a of assignments) {
+      const s = a.student;
+      if (!s) continue;
+      const name = getUserFullName((s as any).user).toLowerCase();
+      const usn = (s.usn || '').toLowerCase();
+
+      if (name.includes(term) || usn.includes(term)) {
+        matches.push({
+          id: s.id,
+          name: getUserFullName((s as any).user),
+          usn: s.usn || '—',
+          semester: s.semester,
+          section: s.section || '—',
+          departmentCode: (s as any).department?.code || '—',
+          avatar: (s as any).user?.profileImage || null,
+        });
+      }
+    }
+
+    return matches;
   }
 
   // ════════════════════════════════════════════════════════════════════════════

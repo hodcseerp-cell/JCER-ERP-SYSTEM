@@ -21,6 +21,7 @@ import {
   GraduationCap,
   Sparkles,
   Shield,
+  LineChart,
 } from 'lucide-react';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
@@ -119,6 +120,7 @@ export const MentorLayout: React.FC = () => {
     { name: 'Attendance', path: '/mentor/attendance', icon: CalendarCheck },
     { name: 'Academic Performance', path: '/mentor/performance', icon: Award },
     { name: 'Mentor Notes', path: '/mentor/notes', icon: FileText },
+    { name: 'Analytics', path: '/mentor/analytics', icon: LineChart },
     { name: 'Reports', path: '/mentor/reports', icon: BarChart3 },
   ];
 
@@ -126,8 +128,9 @@ export const MentorLayout: React.FC = () => {
     { name: 'Overview', path: '/mentor/dashboard' },
     { name: 'My Mentees', path: '/mentor/mentees' },
     { name: 'Attendance', path: '/mentor/attendance' },
-    { name: 'Performance', path: '/mentor/performance' },
+    { name: 'Academic Performance', path: '/mentor/performance' },
     { name: 'Mentor Notes', path: '/mentor/notes' },
+    { name: 'Analytics', path: '/mentor/analytics' },
     { name: 'Reports', path: '/mentor/reports' },
   ];
 
@@ -139,6 +142,7 @@ export const MentorLayout: React.FC = () => {
     if (currentPath.startsWith('/mentor/attendance')) return '/mentor/attendance';
     if (currentPath.startsWith('/mentor/performance') || currentPath.startsWith('/mentor/academics')) return '/mentor/performance';
     if (currentPath.startsWith('/mentor/notes')) return '/mentor/notes';
+    if (currentPath.startsWith('/mentor/analytics')) return '/mentor/analytics';
     if (currentPath.startsWith('/mentor/reports')) return '/mentor/reports';
     return '/mentor/dashboard';
   };
@@ -158,6 +162,8 @@ export const MentorLayout: React.FC = () => {
         return 'Mentee Academic Performance';
       case '/mentor/notes':
         return 'Mentoring Session Records & Follow-ups';
+      case '/mentor/analytics':
+        return 'Global Mentor Analytics';
       case '/mentor/reports':
         return 'Mentoring Coverage & Summary Reports';
       case '/mentor/dashboard':
@@ -179,6 +185,8 @@ export const MentorLayout: React.FC = () => {
         return 'Review CIE marks, SGPA trends, backlogs & academic follow-ups';
       case '/mentor/notes':
         return 'Document mentoring meetings, action plans & follow-up status resolution';
+      case '/mentor/analytics':
+        return 'Cohort attendance distribution, academic performance trends & intervention alerts';
       case '/mentor/reports':
         return 'Institutional coverage, attendance distribution & mentoring audits';
       case '/mentor/dashboard':
@@ -329,36 +337,36 @@ export const MentorLayout: React.FC = () => {
       <div className="flex-1 pt-6 flex flex-col min-h-screen min-w-0 pl-6 lg:pl-[320px]">
         
         {/* ── TOP HEADER WITH MULTI-RESPONSIBILITY ROLE SWITCHING ── */}
-        <header className="flex flex-row items-center justify-between py-2 sm:py-4 mb-6 z-30 gap-4">
+        <header className="flex flex-row items-center justify-between py-2 sm:py-3 mb-6 z-30 gap-3 min-w-0 w-full flex-nowrap">
           
           {/* Page Title & Mobile Trigger */}
-          <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-shrink">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden w-9 h-9 rounded-xl flex items-center justify-center border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100"
+              className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 flex-shrink-0"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4" />
             </button>
 
-            <div className="flex-shrink-0">
-              <h1 className="text-xl md:text-2xl lg:text-[24px] font-bold tracking-tight text-neutral-900 dark:text-white whitespace-nowrap leading-tight">
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold tracking-tight text-neutral-900 dark:text-white truncate leading-tight">
                 {getPageTitle()}
               </h1>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 font-medium whitespace-nowrap hidden sm:block">
+              <p className="text-[11px] text-neutral-400 dark:text-neutral-500 font-medium truncate hidden sm:block">
                 {getPageSubtitle()}
               </p>
             </div>
           </div>
 
-          {/* Sub-Nav Pill Bar */}
-          <div className="hidden xl:flex items-center glass-bar p-1 rounded-full flex-shrink-0">
+          {/* Sub-Nav Pill Bar (visible on 2xl screens, leaving full width for core controls on standard desktops) */}
+          <div className="hidden 2xl:flex items-center glass-bar p-1 rounded-full flex-shrink-0">
             {subNavTabs.map((tab) => {
               const isActive = activeNavPath === tab.path || (tab.path === '/mentor/dashboard' && (location.pathname === '/mentor' || location.pathname === '/mentor/overview' || location.pathname === '/mentor/dashboard'));
               return (
                 <Link
                   key={tab.name}
                   to={tab.path}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-all duration-200 whitespace-nowrap ${
                     isActive
                       ? 'admin-nav-pill-active shadow-sm text-white'
                       : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -371,21 +379,23 @@ export const MentorLayout: React.FC = () => {
           </div>
 
           {/* Right Controls: Context Badges + Profile */}
-          <div className="flex items-center space-x-2 flex-shrink-0">
+          <div className="flex items-center space-x-2 flex-shrink-0 ml-auto">
             {/* Dept Context Badge */}
-            <div className="hidden lg:flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
-              <Building2 className="w-3.5 h-3.5 text-neutral-500" />
+            <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-[11px] font-bold shadow-xs whitespace-nowrap">
+              <Building2 className="w-3 h-3 text-neutral-500" />
               <span>Dept: <strong>{deptCode}</strong></span>
             </div>
 
             {/* Global Academic Year Selector */}
-            <AcademicYearSelector />
+            <div className="flex-shrink-0">
+              <AcademicYearSelector />
+            </div>
 
             {/* Profile Dropdown */}
-            <div className="relative" ref={profileMenuRef}>
+            <div className="relative flex-shrink-0" ref={profileMenuRef}>
               <button
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
-                className="flex items-center space-x-2 header-dark-btn h-9 pl-1.5 pr-3 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
+                className="flex items-center space-x-2 header-dark-btn h-8.5 pl-1 pr-2.5 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
               >
                 <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-indigo-600 text-white font-bold text-[10px]">
                   {user?.profileImage ? (
@@ -394,10 +404,10 @@ export const MentorLayout: React.FC = () => {
                     <span>{mentorName.charAt(0)}</span>
                   )}
                 </div>
-                <span className="text-xs font-semibold pr-0.5 hidden md:block">
+                <span className="text-[11px] font-semibold pr-0.5 hidden md:block max-w-[80px] truncate">
                   {mentorName.split(' ')[0]}
                 </span>
-                <ChevronDown className={`w-3.5 h-3.5 opacity-80 hidden md:block transition-transform duration-200 ${profileMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3 h-3 opacity-80 hidden md:block transition-transform duration-200 ${profileMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {profileMenuOpen && (

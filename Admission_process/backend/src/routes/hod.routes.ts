@@ -39,6 +39,7 @@ router.get('/sections/:sectionId/students', hodController.getHodSectionStudents 
 router.get('/sections/:sectionId/cohort', hodController.getHodSectionCohort as any);
 router.post('/sections/:sectionId/students', hodController.bulkAllocateStudentsToSection as any);
 router.post('/sections/:sectionId/bulk-allocate', hodController.bulkAllocateStudentsToSection as any);
+router.post('/sections/:sectionId/unallocate-all', hodController.unallocateAllStudentsFromSection as any);
 router.patch('/sections/:sectionId/students/:studentId/move', hodController.moveStudentSection as any);
 router.delete('/sections/:sectionId/students/:studentId/remove', hodController.removeStudentFromSection as any);
 router.post('/sections/:sectionId/students/:studentId/remove', hodController.removeStudentFromSection as any);
@@ -52,6 +53,7 @@ router.delete('/students/sections/:sectionId', hodController.deleteHodSection as
 router.get('/students/sections/:sectionId/students', hodController.getHodSectionStudents as any);
 router.get('/students/sections/:sectionId/cohort', hodController.getHodSectionCohort as any);
 router.post('/students/sections/:sectionId/bulk-allocate', hodController.bulkAllocateStudentsToSection as any);
+router.post('/students/sections/:sectionId/unallocate-all', hodController.unallocateAllStudentsFromSection as any);
 router.patch('/students/sections/:sectionId/students/:studentId/move', hodController.moveStudentSection as any);
 router.delete('/students/sections/:sectionId/students/:studentId/remove', hodController.removeStudentFromSection as any);
 

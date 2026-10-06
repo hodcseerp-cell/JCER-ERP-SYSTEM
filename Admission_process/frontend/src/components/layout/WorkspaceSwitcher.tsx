@@ -28,54 +28,63 @@ interface WorkspaceSwitcherProps {
   currentWorkspace: WorkspaceType;
 }
 
+interface WorkspaceItem {
+  type: string;
+  label: string;
+  route: string;
+  menteeCount?: number;
+}
+
 export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWorkspace }) => {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   const { academicYear } = useAcademicYear();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [isMentorActive, setIsMentorActive] = useState<boolean>(Boolean(user?.isMentor));
-  const [menteeCount, setMenteeCount] = useState<number>(0);
-  const [isLoadingMentorStatus, setIsLoadingMentorStatus] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Authoritative Database Query for Active Mentor Status
+  // Authoritative Database Capabilities Query
   useEffect(() => {
     let isMounted = true;
-    const checkMentorCapability = async () => {
-      // If user is STUDENT or PARENT, skip
+    const fetchCapabilities = async () => {
       if (user?.role === 'STUDENT' || user?.role === 'PARENT') {
-        setIsMentorActive(false);
+        if (isMounted) setWorkspaces([]);
         return;
       }
 
       try {
-        setIsLoadingMentorStatus(true);
-        const res = await mentorService.getMentorStatus(academicYear);
-        if (isMounted) {
-          setIsMentorActive(Boolean(res?.isMentor));
-          setMenteeCount(res?.activeMenteeCount || 0);
+        setLoading(true);
+        const res = await mentorService.getUserWorkspaces();
+        if (isMounted && res?.workspaces) {
+          setWorkspaces(res.workspaces);
         }
       } catch (err) {
-        // If 401/403 or error, fall back to false unless auth payload had explicit true
+        console.warn('Failed to load user workspaces capability:', err);
+        // Fallback strictly based on verified user claims
         if (isMounted) {
-          setIsMentorActive(false);
+          const list: WorkspaceItem[] = [];
+          if (user?.role === 'HOD' || user?.isHod) {
+            list.push({ type: 'HOD', label: 'Head of Department', route: '/hod/dashboard' });
+          }
+          if (user?.role === 'TEACHER' || user?.role === 'FACULTY' || user?.isFaculty || user?.role === 'HOD') {
+            list.push({ type: 'FACULTY', label: 'Faculty Dashboard', route: '/faculty/dashboard' });
+          }
+          if (user?.isMentor) {
+            list.push({ type: 'MENTOR', label: 'Mentor Workspace', route: '/mentor/dashboard' });
+          }
+          setWorkspaces(list);
         }
       } finally {
-        if (isMounted) {
-          setIsLoadingMentorStatus(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
-    checkMentorCapability();
+    fetchCapabilities();
 
-    // Listen to academic year change events
-    const handleYearChange = () => {
-      checkMentorCapability();
-    };
+    const handleYearChange = () => fetchCapabilities();
     window.addEventListener('academic-year-changed', handleYearChange);
-
     return () => {
       isMounted = false;
       window.removeEventListener('academic-year-changed', handleYearChange);
@@ -93,50 +102,39 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Compute authorized workspaces based strictly on DB-verified capabilities
-  const isHod = user?.role === 'HOD' || Boolean(user?.isHod) || user?.workspaces?.includes('hod');
-  const isFaculty =
-    user?.role === 'FACULTY' ||
-    user?.role === 'TEACHER' ||
-    Boolean(user?.isFaculty) ||
-    isHod ||
-    user?.workspaces?.includes('faculty');
-  const isMentor = isMentorActive;
-
-  const allWorkspaces: WorkspaceOption[] = [
-    {
-      id: 'hod',
-      name: 'HOD Dashboard',
-      path: '/hod/dashboard',
-      icon: Building2,
-      colorClass: 'text-cyan-500 dark:text-cyan-400',
-    },
-    {
+  const getWorkspaceDetails = (ws: WorkspaceItem): WorkspaceOption => {
+    const t = ws.type.toUpperCase();
+    if (t === 'HOD') {
+      return {
+        id: 'hod',
+        name: 'Head of Department',
+        path: ws.route || '/hod/dashboard',
+        icon: Building2,
+        colorClass: 'text-cyan-500 dark:text-cyan-400',
+      };
+    }
+    if (t === 'MENTOR') {
+      return {
+        id: 'mentor',
+        name: 'Mentor Workspace',
+        path: ws.route || '/mentor/dashboard',
+        icon: UserCheck,
+        colorClass: 'text-purple-500 dark:text-purple-400',
+        badge: ws.menteeCount && ws.menteeCount > 0 ? `${ws.menteeCount} Mentees` : undefined,
+      };
+    }
+    return {
       id: 'faculty',
       name: 'Faculty Dashboard',
-      path: '/faculty/dashboard',
+      path: ws.route || '/faculty/dashboard',
       icon: GraduationCap,
       colorClass: 'text-indigo-500 dark:text-indigo-400',
-    },
-    {
-      id: 'mentor',
-      name: 'Mentor Dashboard',
-      path: '/mentor/dashboard',
-      icon: UserCheck,
-      colorClass: 'text-emerald-500 dark:text-emerald-400',
-      badge: menteeCount > 0 ? `${menteeCount} Mentees` : undefined,
-    },
-  ];
+    };
+  };
 
-  const availableWorkspaces = allWorkspaces.filter((w) => {
-    if (w.id === 'hod') return isHod;
-    if (w.id === 'faculty') return isFaculty;
-    if (w.id === 'mentor') return isMentor;
-    return false;
-  });
+  const availableWorkspaces = workspaces.map(getWorkspaceDetails);
 
-  // If user only has 1 workspace, do NOT render the switcher
-  if (availableWorkspaces.length <= 1) {
+  if (availableWorkspaces.length === 0) {
     return null;
   }
 

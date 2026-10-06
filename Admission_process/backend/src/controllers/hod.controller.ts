@@ -2069,6 +2069,28 @@ export const unallocateStudentsFromSection = async (req: AuthenticatedRequest, r
 };
 
 /**
+ * POST /api/hod/sections/:sectionId/unallocate-all
+ * POST /api/hod/students/sections/:sectionId/unallocate-all
+ * Unallocate all students currently assigned to a section atomically.
+ */
+export const unallocateAllStudentsFromSection = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const departmentId = req.departmentId;
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Department scope not resolved.' });
+    }
+
+    const { sectionId } = req.params;
+    const result = await sectionAllocationService.unallocateAllStudents(sectionId, departmentId, req.user);
+    return res.json(result);
+  } catch (error) {
+    logger.error('HOD_UNALLOCATE_ALL_STUDENTS_ERROR:', error);
+    return next(error);
+  }
+};
+
+
+/**
  * POST /api/hod/sections/distribute
  * Transactional bulk distribution across multiple sections (Equal Distribution / Roll Range)
  */

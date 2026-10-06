@@ -9,6 +9,7 @@ import PromotionBatch from '../models/PromotionBatch';
 import StudentPromotionHistory from '../models/StudentPromotionHistory';
 import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import admissionService from '../services/admission.service';
+import MentorService from '../services/mentor.service';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -511,6 +512,20 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
         await admissionService.invalidateCache(student.userId).catch(() => {});
       }
     }
+
+    // Hook Mentor Promotion Continuity & Transition Logic
+    await MentorService.handlePromotion(
+      lockedStudents
+        .filter((s) => finalPromoteIds.includes(s.id))
+        .map((s) => ({
+          id: s.id,
+          departmentId: s.departmentId,
+          admissionBatch: s.admissionBatch || (s.batchYear ? `${s.batchYear}-${(s.batchYear + 1).toString().slice(-2)}` : '2026-27'),
+          fromSemester: fromSem,
+          toSemester: toSem,
+        })),
+      transaction
+    );
 
     await transaction.commit();
 

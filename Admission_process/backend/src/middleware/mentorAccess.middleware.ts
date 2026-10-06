@@ -27,28 +27,18 @@ export const requireActiveMentorAccess = async (
       return next();
     }
 
-    const academicYear = (req.query.academicYear as string) || (req.headers['x-academic-year'] as string);
-    const whereClause: any = {
-      facultyId: userId,
-      status: 'ACTIVE',
-    };
-
-    if (academicYear) {
-      const normalizedAY = normalizeAcademicYear(academicYear);
-      whereClause[Op.or] = [
-        { academicYear },
-        { academicYear: normalizedAY },
-        { academicYear: academicYear.replace('-20', '-') },
-      ];
-    }
-
-    const activeAssignmentsCount = await MentorAssignment.count({ where: whereClause });
+    const activeAssignmentsCount = await MentorAssignment.count({
+      where: {
+        facultyId: userId,
+        status: 'ACTIVE',
+      },
+    });
 
     if (activeAssignmentsCount === 0) {
-      logger.warn(`MENTOR_ACCESS_DENIED: User ${userId} (${role}) attempted to access mentor route without active mentor assignment (AY: ${academicYear || 'ANY'})`);
+      logger.warn(`MENTOR_ACCESS_DENIED: User ${userId} (${role}) attempted to access mentor route without active mentor assignment`);
       return res.status(403).json({
         success: false,
-        error: 'Access Forbidden. You are not assigned as an active mentor for this scope.',
+        error: 'Access Forbidden. You are not assigned as an active mentor.',
         code: 'NOT_A_MENTOR',
       });
     }

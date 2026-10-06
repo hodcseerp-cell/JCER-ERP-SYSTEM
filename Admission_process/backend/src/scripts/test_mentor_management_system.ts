@@ -141,6 +141,10 @@ async function runMentorManagementTests() {
       });
       console.log(`✓ Follow-up updated to: ${updatedRecord.followUpStatus}`);
 
+      // Clean up test note so dummy notes are not persisted
+      await newRecord.destroy();
+      console.log(`✓ Test mentoring record cleaned up.`);
+
       // 10. Test Security & Access Control: An unassigned faculty cannot access this mentee
       console.log(`\n--- Testing Access Control Guard ---`);
       try {

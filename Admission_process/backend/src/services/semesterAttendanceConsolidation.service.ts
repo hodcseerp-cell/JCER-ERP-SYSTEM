@@ -451,7 +451,7 @@ export const semesterAttendanceConsolidationService = {
     if (logoBuffer) {
       try {
         logoImageId = workbook.addImage({
-          buffer: logoBuffer,
+          buffer: logoBuffer as any,
           extension: 'png',
         });
       } catch (err: any) {

@@ -4,7 +4,8 @@ import Student from './Student';
 import User from './User';
 import Department from './Department';
 
-export type MentorAssignmentStatus = 'ACTIVE' | 'INACTIVE' | 'REASSIGNED';
+export type MentorAssignmentStatus = 'ACTIVE' | 'INACTIVE' | 'REASSIGNED' | 'COMPLETED';
+export type MentorshipPhase = 'PHASE_1' | 'PHASE_2';
 
 class MentorAssignment extends Model {
   public id!: string;
@@ -13,11 +14,16 @@ class MentorAssignment extends Model {
   public assignedByHodId!: string;
   public academicYear!: string;
   public semester!: number;
+  public phase!: MentorshipPhase;
+  public startSemester!: number;
+  public endSemester!: number | null;
+  public admissionBatch!: string | null;
   public departmentId!: string;
   public mentorDepartmentId!: string;
   public status!: MentorAssignmentStatus;
   public assignedAt!: Date;
   public reassignedAt!: Date | null;
+  public reassignmentReason!: string | null;
   public notes!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -71,6 +77,25 @@ MentorAssignment.init(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    phase: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'PHASE_1',
+    },
+    startSemester: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 1,
+    },
+    endSemester: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 2,
+    },
+    admissionBatch: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
     departmentId: {
       type: DataTypes.UUID,
       allowNull: false,
@@ -102,6 +127,11 @@ MentorAssignment.init(
       allowNull: true,
       defaultValue: null,
     },
+    reassignmentReason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -119,6 +149,8 @@ MentorAssignment.init(
       { fields: ['mentorDepartmentId'] },
       { fields: ['academicYear'] },
       { fields: ['semester'] },
+      { fields: ['phase'] },
+      { fields: ['admissionBatch'] },
       { fields: ['status'] },
       { fields: ['studentId', 'status'] },
     ],

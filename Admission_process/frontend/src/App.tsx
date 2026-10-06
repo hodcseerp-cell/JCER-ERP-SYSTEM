@@ -102,6 +102,7 @@ import HodViewAllocationsPage from './pages/hod/mentors/HodViewAllocationsPage';
 import FacultyMentorOverviewPage from './pages/faculty/mentor/FacultyMentorOverviewPage';
 import FacultyMyMenteesPage from './pages/faculty/mentor/FacultyMyMenteesPage';
 import FacultyMenteeProfilePage from './pages/faculty/mentor/FacultyMenteeProfilePage';
+import MentorAnalyticsPage from './pages/faculty/mentor/MentorAnalyticsPage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -494,6 +495,7 @@ export const App: React.FC = () => (
               <Route path="performance" element={<MentorPerformancePage />} />
               <Route path="academics" element={<MentorPerformancePage />} />
               <Route path="notes" element={<MentorNotesPage />} />
+              <Route path="analytics" element={<MentorAnalyticsPage />} />
               <Route path="reports" element={<MentorReportsPage />} />
             </Route>
           </Route>

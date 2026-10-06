@@ -165,10 +165,11 @@ export const getMentorDashboardOverview = async (req: AuthenticatedRequest, res:
 export const getMyMentees = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const facultyId = req.user?.id!;
-    const { search, semester, section, attendanceStatus, sortBy, sortOrder, academicYear } = req.query;
+    const { search, admissionBatch, semester, section, attendanceStatus, sortBy, sortOrder, academicYear } = req.query;
 
     const data = await MentorService.getMyMentees(facultyId, {
       search: search as string,
+      admissionBatch: admissionBatch as string,
       semester: semester ? Number(semester) : undefined,
       section: section as string,
       attendanceStatus: attendanceStatus as any,
@@ -256,6 +257,106 @@ export const updateFollowUpStatus = async (req: AuthenticatedRequest, res: Respo
       message: 'Follow-up status updated successfully.',
       data,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingTransitions = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const context = getHodContext(req);
+    const { admissionBatch, search, page, limit } = req.query;
+    const data = await MentorService.getPendingTransitions(context, {
+      admissionBatch: admissionBatch as string,
+      search: search as string,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 50,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resolveTransitions = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const context = getHodContext(req);
+    const data = await MentorService.resolveTransitions(context, req.body);
+    return res.json({
+      success: true,
+      message: `Successfully resolved ${data.resolvedCount} mentor transition(s).`,
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMentorCohorts = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const facultyId = req.user?.id!;
+    const data = await MentorService.getMentorCohorts(facultyId);
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMenteeAnalytics = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const { studentId } = req.params;
+    const facultyId = req.user?.id!;
+    const data = await MentorService.getMenteeAnalytics(studentId, facultyId, req.user?.role);
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getGlobalMentorAnalytics = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const facultyId = req.user?.id!;
+    const data = await MentorService.getGlobalMentorAnalytics(facultyId);
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const parseParentImport = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const facultyId = req.user?.id!;
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'Please upload an Excel file.' });
+    }
+    const data = await MentorService.parseAndValidateParentImport(facultyId, req.file.buffer);
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const confirmParentImport = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const facultyId = req.user?.id!;
+    const { rows } = req.body;
+    const data = await MentorService.confirmParentImport(facultyId, rows);
+    return res.json({
+      success: true,
+      message: `Successfully updated parent information for ${data.updatedCount} student(s).`,
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const searchMentees = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    const facultyId = req.user?.id!;
+    const query = (req.query.q as string) || (req.query.search as string) || '';
+    const data = await MentorService.searchMentees(facultyId, query);
+    return res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
