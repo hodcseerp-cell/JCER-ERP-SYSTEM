@@ -14,6 +14,8 @@ import otpService from '../services/otp.service';
 import emailService from '../services/email.service';
 import Otp from '../models/Otp';
 import SystemConfiguration from '../models/SystemConfiguration';
+import FacultyAssignment from '../models/FacultyAssignment';
+import MentorAssignment from '../models/MentorAssignment';
 import path from 'path';
 import fs from 'fs';
 import * as r2Service from '../services/r2.service';
@@ -63,6 +65,17 @@ const getUserPayload = async (user: User) => {
     }
   }
 
+  const isHod = user.role === 'HOD' || (await HOD.findOne({ where: { userId: user.id, isActive: true } })) !== null;
+  const isTeacher = user.role === 'TEACHER' || (user.role as string) === 'FACULTY';
+  const hasFacultyAssignment = (await FacultyAssignment.count({ where: { userId: user.id, status: 'ACTIVE' } })) > 0;
+  const isFaculty = isTeacher || isHod || hasFacultyAssignment;
+  const isMentor = (await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } })) > 0;
+
+  const workspaces: string[] = [];
+  if (isHod) workspaces.push('hod');
+  if (isFaculty) workspaces.push('faculty');
+  if (isMentor) workspaces.push('mentor');
+
   return {
     id: user.id,
     email: user.email,
@@ -75,6 +88,10 @@ const getUserPayload = async (user: User) => {
     mustChangePassword: (user.role === 'TEACHER' || (user.role as string) === 'HOD' || (user.role as string) === 'FACULTY') ? false : user.mustChangePassword,
     department,
     system,
+    isHod,
+    isFaculty,
+    isMentor,
+    workspaces,
   };
 };
 

@@ -13,6 +13,7 @@ import {
   Building2,
   Calendar,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   X,
   Edit2,
@@ -65,6 +66,10 @@ export const HodStudentsSectionPage: React.FC = () => {
   const [cohortData, setCohortData] = useState<HodSectionCohortData | null>(null);
   const [allocatedStudentsList, setAllocatedStudentsList] = useState<HodSectionStudentItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
+  const [cohortError, setCohortError] = useState<string | null>(null);
+  const [allocatedStudentsError, setAllocatedStudentsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -152,14 +157,17 @@ export const HodStudentsSectionPage: React.FC = () => {
   // 1. Fetch Main Branches Overview for selected semester
   const loadBranchesOverview = async () => {
     setLoading(true);
+    setOverviewError(null);
     try {
       const overviewRes = await hodService.getBranchesOverview(selectedSemester, activeAY);
       setBranchesOverview(overviewRes.branches || []);
     } catch (err: any) {
       console.error('Failed to load branches overview:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Unable to load branch overview. Please try again.';
+      setOverviewError(errMsg);
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to load branch overview numbers.',
+        message: errMsg,
       });
     } finally {
       setLoading(false);
@@ -169,14 +177,17 @@ export const HodStudentsSectionPage: React.FC = () => {
   // 2. Fetch Sections for Selected Branch
   const loadBranchSections = async (branchCode: string) => {
     setLoading(true);
+    setSectionsError(null);
     try {
       const sectionsRes = await hodService.getSections(selectedSemester, activeAY, branchCode);
       setBranchSections(sectionsRes || []);
     } catch (err: any) {
       console.error('Failed to load branch sections:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to load sections for branch.';
+      setSectionsError(errMsg);
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to load sections for branch.',
+        message: errMsg,
       });
     } finally {
       setLoading(false);
@@ -186,6 +197,7 @@ export const HodStudentsSectionPage: React.FC = () => {
   // 3. Fetch Allocation Cohort for a Section
   const loadSectionCohort = async (sectionId: string) => {
     setLoading(true);
+    setCohortError(null);
     try {
       const cohortRes = await hodService.getSectionCohort(sectionId);
       setCohortData(cohortRes);
@@ -201,9 +213,11 @@ export const HodStudentsSectionPage: React.FC = () => {
       setRangeTo(Math.min(unallocatedCount > 0 ? unallocatedCount : 60, remCap > 0 ? remCap : 60));
     } catch (err: any) {
       console.error('Failed to load section cohort:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to load students for allocation.';
+      setCohortError(errMsg);
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to load students for allocation.',
+        message: errMsg,
       });
     } finally {
       setLoading(false);
@@ -213,15 +227,18 @@ export const HodStudentsSectionPage: React.FC = () => {
   // 4. Fetch Allocated Students for Viewing
   const loadAllocatedStudents = async (sectionId: string) => {
     setLoading(true);
+    setAllocatedStudentsError(null);
     try {
       const res = await hodService.getSectionStudents(sectionId);
       setActiveSection(res.section);
       setAllocatedStudentsList(res.students || []);
     } catch (err: any) {
       console.error('Failed to load allocated students:', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to load allocated students.';
+      setAllocatedStudentsError(errMsg);
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to load allocated students.',
+        message: errMsg,
       });
     } finally {
       setLoading(false);
@@ -781,6 +798,24 @@ export const HodStudentsSectionPage: React.FC = () => {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent" />
               <p className="mt-3 text-xs font-bold text-neutral-500">Loading branch metrics for Semester {selectedSemester}...</p>
             </div>
+          ) : overviewError ? (
+            <div className="p-12 text-center rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
+              <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center mx-auto text-rose-600">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="text-base font-black text-neutral-900 dark:text-white">Unable to load branches</h3>
+                <p className="text-xs text-neutral-500">{overviewError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={loadBranchesOverview}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <RefreshCw size={14} />
+                <span>Retry</span>
+              </button>
+            </div>
           ) : branchesOverview.length === 0 ? (
             <div className="p-12 text-center rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-3">
               <Layers size={36} className="text-neutral-400 mx-auto" />
@@ -895,6 +930,24 @@ export const HodStudentsSectionPage: React.FC = () => {
             <div className="p-16 text-center rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent" />
               <p className="mt-3 text-xs font-bold text-neutral-500">Loading {selectedBranch} sections...</p>
+            </div>
+          ) : sectionsError ? (
+            <div className="p-12 text-center rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
+              <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center mx-auto text-rose-600">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="text-base font-black text-neutral-900 dark:text-white">Unable to load sections</h3>
+                <p className="text-xs text-neutral-500">{sectionsError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => selectedBranch && loadBranchSections(selectedBranch)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <RefreshCw size={14} />
+                <span>Retry</span>
+              </button>
             </div>
           ) : branchSections.length === 0 ? (
             /* No sections created yet state */

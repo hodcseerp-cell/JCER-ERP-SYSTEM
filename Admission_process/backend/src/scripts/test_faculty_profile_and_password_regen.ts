@@ -6,7 +6,6 @@ import Subject from '../models/Subject';
 import Teacher from '../models/Teacher';
 import FacultyAssignment from '../models/FacultyAssignment';
 import AttendanceSession from '../models/AttendanceSession';
-import Assessment from '../models/Assessment';
 import AuditLog from '../models/AuditLog';
 
 async function runTest() {

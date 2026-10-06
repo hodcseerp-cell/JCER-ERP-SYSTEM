@@ -22,8 +22,6 @@ import Notification from '../models/Notification';
 import SystemConfiguration from '../models/SystemConfiguration';
 import AttendanceSession from '../models/AttendanceSession';
 import AttendanceRecord from '../models/AttendanceRecord';
-import Assessment from '../models/Assessment';
-import StudentMarks from '../models/StudentMarks';
 import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import logger from '../utils/logger.util';
 
@@ -1154,13 +1152,15 @@ export const getHodHistory = async (req: AuthenticatedRequest, res: Response, ne
 export const getFacultyList = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const { search, departmentId, status } = req.query;
+    logger.info(`[DEAN FACULTY] request user=${req.user?.id} filters=${JSON.stringify({ departmentId: departmentId || 'ALL', status: status || 'ALL', search: search || '' })}`);
 
     const whereUser: any = {};
-    if (search) {
+    if (search && typeof search === 'string' && search.trim()) {
+      const term = search.trim();
       whereUser[Op.or] = [
-        { firstName: { [Op.iLike]: `%${search}%` } },
-        { lastName: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
+        { firstName: { [Op.iLike]: `%${term}%` } },
+        { lastName: { [Op.iLike]: `%${term}%` } },
+        { email: { [Op.iLike]: `%${term}%` } },
       ];
     }
     if (status && status !== 'ALL' && status !== 'ARCHIVED') {
@@ -1173,10 +1173,19 @@ export const getFacultyList = async (req: AuthenticatedRequest, res: Response, n
 
     if (status === 'ARCHIVED') {
       whereTeacher.status = 'ARCHIVED';
+    } else if (status && status !== 'ALL') {
+      whereTeacher.status = status;
     } else {
-      // Exclude archived faculty by default from active directory
-      whereTeacher.status = { [Op.ne]: 'ARCHIVED' };
+      // Active Directory: exclude ARCHIVED faculty, include ACTIVE or legacy null status
+      whereTeacher.status = {
+        [Op.or]: [
+          { [Op.ne]: 'ARCHIVED' },
+          { [Op.is]: null },
+        ],
+      };
     }
+
+    logger.info(`[DEAN FACULTY] querying database with safe filters`);
 
     const teachers = await Teacher.findAll({
       where: whereTeacher,
@@ -1185,53 +1194,71 @@ export const getFacultyList = async (req: AuthenticatedRequest, res: Response, n
           model: User,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'profileImage', 'status', 'createdAt'],
-          where: whereUser,
+          where: Object.keys(whereUser).length > 0 ? whereUser : undefined,
+          required: Object.keys(whereUser).length > 0,
         },
         {
           model: Department,
           as: 'department',
           attributes: ['id', 'name', 'code'],
+          required: false,
         },
       ],
       order: [['createdAt', 'DESC']],
     });
 
-    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true } });
-    const currentYear = currentYearRecord?.year || '2026-27';
+    let currentYear = '2026-27';
+    try {
+      const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true } })
+        || await AcademicYear.findOne({ where: { status: 'ACTIVE' } });
+      if (currentYearRecord?.year) {
+        currentYear = currentYearRecord.year;
+      }
+    } catch (ayErr) {
+      logger.warn('[DEAN FACULTY] Warning resolving current academic year:', ayErr);
+    }
 
     const formatted = await Promise.all(
       teachers.map(async (t: any) => {
-        const assignments = await FacultyAssignment.findAll({
-          where: { userId: t.userId, status: 'ACTIVE' },
-          include: [{ model: Subject, as: 'subject', attributes: ['name', 'code'] }],
-        });
+        let subjectNames: string[] = [];
+        try {
+          const assignments = await FacultyAssignment.findAll({
+            where: { userId: t.userId, status: 'ACTIVE' },
+            include: [{ model: Subject, as: 'subject', attributes: ['name', 'code'], required: false }],
+          });
+          subjectNames = assignments.map((a: any) => a.subject?.name).filter(Boolean);
+        } catch (assignErr) {
+          logger.warn(`[DEAN FACULTY] Could not fetch assignments for faculty userId=${t.userId}:`, assignErr);
+        }
 
-        const subjectNames = assignments.map((a: any) => a.subject?.name).filter(Boolean);
+        const facultyName = `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() || t.user?.email || 'Faculty Member';
 
         return {
           id: t.id,
           userId: t.userId,
-          name: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim(),
-          email: t.user?.email,
-          phone: t.user?.phone,
-          profileImage: t.user?.profileImage,
+          name: facultyName,
+          email: t.user?.email || '',
+          phone: t.user?.phone || null,
+          profileImage: t.user?.profileImage || null,
           departmentId: t.departmentId,
-          departmentName: t.department?.name,
-          departmentCode: t.department?.code,
-          designation: t.designation,
+          departmentName: t.department?.name || 'Department',
+          departmentCode: t.department?.code || 'N/A',
+          designation: t.designation || 'Faculty',
           status: t.status || t.user?.status || 'ACTIVE',
-          userStatus: t.user?.status,
+          userStatus: t.user?.status || 'ACTIVE',
           subjects: subjectNames.length > 0 ? subjectNames.join(', ') : 'General Faculty',
           academicYear: currentYear,
           joiningDate: t.joiningDate,
-          archivedAt: t.archivedAt,
+          archivedAt: t.archivedAt || null,
           createdAt: t.createdAt,
         };
       })
     );
 
+    logger.info(`[DEAN FACULTY] success count=${formatted.length}`);
     return res.json({ success: true, data: formatted });
-  } catch (error) {
+  } catch (error: any) {
+    logger.error(`[DEAN FACULTY] FAILED errorName=${error?.name} message=${error?.message}`);
     return next(error);
   }
 };
@@ -2466,7 +2493,7 @@ export const importBulkFaculty = async (req: AuthenticatedRequest, res: Response
  * - Sets Teacher.archivedAt = new Date()
  * - Sets Teacher.archivedBy = req.user.id
  * - Sets User.status = 'INACTIVE'
- * - Preserves all academic records (FacultyAssignment, AttendanceSession, AttendanceRecord, StudentMarks) intact.
+ * - Preserves all academic records (FacultyAssignment, AttendanceSession, AttendanceRecord) intact.
  * - Records audit log FACULTY_ARCHIVED.
  */
 export const archiveFaculty = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
@@ -2787,38 +2814,7 @@ export const getFacultyProfile = async (req: AuthenticatedRequest, res: Response
     }
 
     // 3. Marks / Assessment History
-    let marksHistory: any[] = [];
-    if (assignmentIds.length > 0) {
-      try {
-        const subjectIds = Array.from(new Set(assignments.map((a) => a.subjectId)));
-        const departmentIds = Array.from(new Set(assignments.map((a) => a.departmentId)));
-
-        const assessments = await Assessment.findAll({
-          where: {
-            subjectId: { [Op.in]: subjectIds },
-            departmentId: { [Op.in]: departmentIds },
-          },
-          include: [
-            { model: Subject, as: 'subject', attributes: ['name', 'code'] },
-            { model: Department, as: 'department', attributes: ['name', 'code'] },
-          ],
-          limit: 30,
-        });
-
-        marksHistory = assessments.map((m: any) => ({
-          id: m.id,
-          subject: m.subject?.name || 'N/A',
-          subjectCode: m.subject?.code || '',
-          section: m.section || 'All',
-          assessment: m.name,
-          maxMarks: m.maxMarks,
-          academicYear: m.academicYear,
-          status: m.status,
-        }));
-      } catch (err) {
-        logger.warn('Assessment/Marks history lookup non-fatal error:', err);
-      }
-    }
+    const marksHistory: any[] = [];
 
     // 4. Audit History (Safely queried)
     let auditLogs: any[] = [];

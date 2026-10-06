@@ -5,7 +5,6 @@ import { RootState } from '../../store';
 import {
   BookOpen,
   CalendarCheck,
-  Award,
   Filter,
   Sparkles,
   Lock,
@@ -79,7 +78,7 @@ export const FacultyOverviewPage: React.FC = () => {
               Welcome, {facultyName} 👋
             </h2>
             <p className="text-sm text-blue-100/90 max-w-2xl font-medium">
-              Faculty Academic Workspace for <span className="font-bold text-white">{deptName}</span>. Manage assigned course curriculum, take student attendance, and evaluate continuous bitwise marks.
+              Faculty Academic Workspace for <span className="font-bold text-white">{deptName}</span>. Manage assigned course curriculum, take student attendance, and track academic records.
             </p>
           </div>
 
@@ -99,19 +98,12 @@ export const FacultyOverviewPage: React.FC = () => {
               <CalendarCheck className="w-4 h-4" />
               <span>Take Attendance</span>
             </Link>
-            <Link
-              to="/faculty/bitwise-marks"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs transition-all backdrop-blur-md"
-            >
-              <Award className="w-4 h-4" />
-              <span>Bitwise Marks</span>
-            </Link>
           </div>
         </div>
       </div>
 
       {/* ── Summary Metric Cards ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Card 1: Assigned Subjects */}
         <div className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border border-neutral-200/80 dark:border-neutral-800 shadow-xs hover:border-blue-400/40 transition-all">
           <div className="flex items-center justify-between">
@@ -142,22 +134,6 @@ export const FacultyOverviewPage: React.FC = () => {
             {data?.stats?.attendanceCoursesCount ?? 0}
           </div>
           <p className="text-[11px] text-neutral-400 mt-1">Section-wise active rosters</p>
-        </div>
-
-        {/* Card 3: Continuous Marks Courses */}
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border border-neutral-200/80 dark:border-neutral-800 shadow-xs hover:border-violet-400/40 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-              Marks & Bitwise
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-              <Award className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-3xl font-black text-neutral-900 dark:text-white mt-2">
-            {data?.stats?.marksCoursesCount ?? 0}
-          </div>
-          <p className="text-[11px] text-neutral-400 mt-1">Authorized CIE evaluation courses</p>
         </div>
       </div>
 
@@ -216,15 +192,15 @@ export const FacultyOverviewPage: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/75 dark:bg-neutral-800/40 text-[11px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                  <th className="py-3.5 px-6">Subject Name</th>
-                  <th className="py-3.5 px-6">Subject Code</th>
-                  <th className="py-3.5 px-6 text-center">Semester</th>
-                  <th className="py-3.5 px-6 text-center">Section</th>
-                  <th className="py-3.5 px-6 text-center">Attendance Access</th>
-                  <th className="py-3.5 px-6 text-center">Marks Access</th>
-                  <th className="py-3.5 px-6 text-right">Action</th>
+              <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800 text-[11px]">
+                <tr>
+                  <th className="py-3.5 px-6 text-white font-extrabold">Subject Name</th>
+                  <th className="py-3.5 px-6 text-white font-extrabold">Subject Code</th>
+                  <th className="py-3.5 px-6 text-center text-white font-extrabold">Semester</th>
+                  <th className="py-3.5 px-6 text-center text-white font-extrabold">Section</th>
+                  <th className="py-3.5 px-6 text-center text-white font-extrabold">Attendance Access</th>
+                  <th className="py-3.5 px-6 text-center text-white font-extrabold">Marks Access</th>
+                  <th className="py-3.5 px-6 text-right text-white font-extrabold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200/60 dark:divide-neutral-800/60 text-xs">
@@ -287,15 +263,6 @@ export const FacultyOverviewPage: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold text-xs transition-colors border border-blue-200 dark:border-blue-800"
                           >
                             <span>Attendance</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </Link>
-                        )}
-                        {sub.marksAccess && (
-                          <Link
-                            to="/faculty/bitwise-marks"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 font-bold text-xs transition-colors border border-violet-200 dark:border-violet-800"
-                          >
-                            <span>Marks</span>
                             <ArrowRight className="w-3 h-3" />
                           </Link>
                         )}

@@ -29,6 +29,9 @@ import promotionRoutes from './routes/promotion.routes';
 import deanRoutes from './routes/dean.routes';
 import hodRoutes from './routes/hod.routes';
 import facultyRoutes from './routes/faculty.routes';
+import bitwiseMarksRoutes from './routes/bitwiseMarks.routes';
+import googleDriveRoutes from './routes/googleDrive.routes';
+import { hodMentorRouter, facultyMentorRouter } from './routes/mentor.routes';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -132,26 +135,75 @@ app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
-    status: 'success',
+    success: true,
+    status: 'healthy',
     message: 'College ERP API Server is running',
-    timestamp: new Date()
-  });
-});
-
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'JCER Admission Backend',
     timestamp: new Date().toISOString(),
   });
 });
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'JCER Admission Backend',
-    timestamp: new Date().toISOString(),
-  });
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const { default: sequelize } = await import('./config/database');
+    await sequelize.authenticate();
+    return res.status(200).json({
+      success: true,
+      status: 'healthy',
+      database: 'connected',
+      service: 'JCER ERP Backend',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      database: 'disconnected',
+      service: 'JCER ERP Backend',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    const { default: sequelize } = await import('./config/database');
+    await sequelize.authenticate();
+    return res.status(200).json({
+      success: true,
+      status: 'healthy',
+      database: 'connected',
+      service: 'JCER ERP Backend',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      database: 'disconnected',
+      service: 'JCER ERP Backend',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.get('/api/health/db', async (_req: Request, res: Response) => {
+  try {
+    const { default: sequelize } = await import('./config/database');
+    await sequelize.authenticate();
+    return res.status(200).json({
+      success: true,
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      database: 'disconnected',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 // ── API Routes ────────────────────────────────────────────────────────────────
 
@@ -293,10 +345,17 @@ v1Router.use('/principal', principalRoutes);
 v1Router.use('/dean', deanRoutes);
 
 // HOD Dashboard routes
+v1Router.use('/hod/mentors', hodMentorRouter);
 v1Router.use('/hod', hodRoutes);
 
 // Faculty Dashboard routes
+v1Router.use('/faculty/mentor', facultyMentorRouter);
 v1Router.use('/faculty', facultyRoutes);
+v1Router.use('/faculty/marks', bitwiseMarksRoutes);
+v1Router.use('/faculty/bitwise-marks', bitwiseMarksRoutes);
+
+// Google Drive Integration & Attendance Backup routes
+v1Router.use('/', googleDriveRoutes);
 
 // Explicit bulletproof routes for Existing Student Onboarding
 const existingOnboardingUpload = multer({ storage: multer.memoryStorage() });

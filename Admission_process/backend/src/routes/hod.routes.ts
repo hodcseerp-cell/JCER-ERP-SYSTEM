@@ -9,8 +9,8 @@ const router = express.Router();
 // ─── Base Security Pipeline ──────────────────────────────────────────────────
 // 1. Authenticate JWT session
 router.use(authMiddleware as any);
-// 2. Authorize HOD / Admin roles
-router.use(authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN') as any);
+// 2. Authorize HOD / Admin / Dean / Principal roles
+router.use(authorizeRoles('HOD', 'ADMIN', 'SUPER_ADMIN', 'DEAN', 'PRINCIPAL') as any);
 // 3. Resolve and enforce strict departmental scope
 router.use(resolveHodDepartmentScope as any);
 
@@ -105,6 +105,9 @@ router.get('/attendance/subject', hodController.getHodAttendanceSubject as any);
 router.get('/attendance/section', hodController.getHodAttendanceSection as any);
 router.get('/attendance/defaulters', hodController.getHodAttendanceDefaulters as any);
 router.get('/attendance/sessions', hodController.getHodAttendanceSessions as any);
+router.get('/attendance/consolidated-report', hodController.getConsolidatedAttendanceReport as any);
+router.post('/attendance/consolidated-sync', hodController.syncConsolidatedAttendance as any);
+router.get('/attendance/consolidated-download', hodController.downloadConsolidatedAttendance as any);
 
 // ─── 6. Academics Module ─────────────────────────────────────────────────────
 router.get('/academics', hodController.getHodAcademicsOverview as any);

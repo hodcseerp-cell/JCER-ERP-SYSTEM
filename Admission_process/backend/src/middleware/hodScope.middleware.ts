@@ -37,13 +37,22 @@ export const resolveHodDepartmentScope = async (
     }
 
     if (role === 'HOD') {
-      const hod = await HOD.findOne({
+      let hod = await HOD.findOne({
         where: { userId, isActive: true },
         include: [{ model: Department, as: 'department' }],
       });
 
       if (!hod || !(hod as any).department) {
-        logger.warn(`HOD_SCOPE_DENIED: User ${userId} (${req.user?.email}) has no active department assignment.`);
+        // Resilient fallback: Check latest HOD record if active flag was not updated
+        hod = await HOD.findOne({
+          where: { userId },
+          include: [{ model: Department, as: 'department' }],
+          order: [['updatedAt', 'DESC']],
+        });
+      }
+
+      if (!hod || !(hod as any).department) {
+        logger.warn(`HOD_SCOPE_DENIED: User ${userId} (${req.user?.email}) has no assigned department.`);
         return res.status(403).json({
           error: 'Forbidden. No active department assigned to this HOD account.',
         });
@@ -58,21 +67,36 @@ export const resolveHodDepartmentScope = async (
       return next();
     }
 
-    // For ADMIN and SUPER_ADMIN viewing HOD portal in administrative mode
-    if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
-      const explicitDeptId = (req.query.departmentId as string) || (req.headers['x-department-id'] as string);
-      let dept: Department | null = null;
-      if (explicitDeptId) {
-        dept = await Department.findByPk(explicitDeptId);
-      }
-      if (!dept) {
-        dept = (await Department.findOne({ where: { code: 'CSE' } })) || (await Department.findOne());
+    // For ADMIN, SUPER_ADMIN, DEAN, and PRINCIPAL viewing HOD portal in administrative mode
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'DEAN' || role === 'PRINCIPAL') {
+      const explicitDeptId = (req.query.departmentId as string) || (req.headers['x-department-id'] as string) || (req.body?.departmentId as string);
+      
+      if (!explicitDeptId || explicitDeptId === 'ALL') {
+        // If route is generic or lists all departments, allow without department lock, but if department scope is strictly required:
+        // Check if route requires department context or if a default query is needed
+        const activeDept = await Department.findOne({ order: [['code', 'ASC']] });
+        if (!activeDept) {
+          return res.status(404).json({ error: 'No academic departments exist in the system.' });
+        }
+        // Note: For overview/list routes that do not filter by dept, attach first valid department only if explicitly needed
+        req.departmentId = activeDept.id;
+        req.department = activeDept;
+        req.isSemesterHandling = activeDept.type === 'SEMESTER_HANDLING';
+        req.handlingSemesters = activeDept.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
+        return next();
       }
 
-      req.departmentId = dept?.id;
+      const dept = await Department.findByPk(explicitDeptId);
+      if (!dept) {
+        return res.status(404).json({
+          error: `Department not found for ID '${explicitDeptId}'. Please specify a valid department context.`,
+        });
+      }
+
+      req.departmentId = dept.id;
       req.department = dept;
-      req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
-      req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
+      req.isSemesterHandling = dept.type === 'SEMESTER_HANDLING';
+      req.handlingSemesters = dept.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
       return next();
     }
 
@@ -90,6 +114,7 @@ export const resolveHodDepartmentScope = async (
         req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
         return next();
       }
+
       const assignment = await FacultyAssignment.findOne({
         where: { userId },
         include: [{ model: Department, as: 'department' }],
@@ -102,12 +127,10 @@ export const resolveHodDepartmentScope = async (
         req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
         return next();
       }
-      const dept = (await Department.findOne({ where: { code: 'CSE' } })) || (await Department.findOne());
-      req.departmentId = dept?.id;
-      req.department = dept;
-      req.isSemesterHandling = dept?.type === 'SEMESTER_HANDLING';
-      req.handlingSemesters = dept?.handlingSemesters || (req.isSemesterHandling ? [1, 2] : null);
-      return next();
+
+      return res.status(403).json({
+        error: 'Forbidden. No teaching department or subject assignment found for this faculty account.',
+      });
     }
 
     return res.status(403).json({

@@ -1027,6 +1027,24 @@ export const hodService = {
     return res.data.data;
   },
 
+  getConsolidatedAttendanceReport: async (params: { academicYear?: string; semester: number }): Promise<any> => {
+    const res = await API.get('/hod/attendance/consolidated-report', { params });
+    return res.data.data;
+  },
+
+  syncConsolidatedAttendance: async (data: { academicYear?: string; semester: number }): Promise<any> => {
+    const res = await API.post('/hod/attendance/consolidated-sync', data);
+    return res.data;
+  },
+
+  downloadConsolidatedAttendanceUrl: (params: { academicYear?: string; semester: number }): string => {
+    const query = new URLSearchParams({
+      academicYear: params.academicYear || '2026-27',
+      semester: String(params.semester || 1),
+    });
+    return `/api/hod/attendance/consolidated-download?${query.toString()}`;
+  },
+
   // 6. Academics
   getAcademicsOverview: async (): Promise<any> => {
     const res = await API.get('/hod/academics/overview');

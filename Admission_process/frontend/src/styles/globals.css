@@ -28,6 +28,47 @@ body {
   transition: background-color 0.3s ease;
 }
 
+/* High-Visibility Large Scrollbar for Data Entry Grids */
+.marks-grid-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.marks-grid-scroll::-webkit-scrollbar {
+  width: 14px;
+  height: 16px; /* prominent, easy to click and drag horizontal scrollbar */
+}
+
+.marks-grid-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 8px;
+}
+
+.dark .marks-grid-scroll::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 8px;
+}
+
+.marks-grid-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 8px;
+  border: 3px solid #e2e8f0;
+}
+
+.dark .marks-grid-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+  border: 3px solid #1e293b;
+}
+
+.marks-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.dark .marks-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Custom Modern Pastel Mesh Gradient Background - Dark Mode */
 .dark body {
   background-color: #0b0f19;
@@ -264,6 +305,18 @@ a.bg-white *,
 .dark a.bg-white * {
   color: #000000 !important;
 }
+
+/* Explicit dark badge override to preserve crisp white text */
+.badge-dark,
+.badge-dark *,
+.dark .badge-dark,
+.dark .badge-dark *,
+span.badge-dark,
+span.badge-dark * {
+  color: #ffffff !important;
+  background-color: #0f172a !important;
+}
+
 
 
 /* Explicit Dark Icon override for inputs in login card */

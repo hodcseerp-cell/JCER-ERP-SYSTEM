@@ -15,15 +15,17 @@ const facultyAuthGuard = [
 router.get('/dashboard', ...facultyAuthGuard, facultyController.getFacultyDashboard as any);
 router.get('/assignments', ...facultyAuthGuard, facultyController.getFacultyAssignments as any);
 
-// ── Faculty Attendance Workspace ─────────────────────────────────────────────
+// ── Faculty Attendance Workspace & Corrections ───────────────────────────────
 router.get('/attendance', ...facultyAuthGuard, facultyController.getFacultyAttendanceList as any);
+router.get('/attendance/students/search', ...facultyAuthGuard, facultyController.searchFacultyStudents as any);
+router.get('/attendance/students/:studentId', ...facultyAuthGuard, facultyController.getFacultyStudentAttendance as any);
 router.get('/attendance/:assignmentId', ...facultyAuthGuard, facultyController.getFacultyAttendanceWorkspace as any);
+router.get('/attendance/:assignmentId/export', ...facultyAuthGuard, facultyController.exportFacultyAttendanceExcel as any);
 router.post('/attendance/:assignmentId', ...facultyAuthGuard, facultyController.saveFacultyAttendance as any);
-
-// ── Faculty Bitwise Marks Workspace ──────────────────────────────────────────
-router.get('/bitwise-marks', ...facultyAuthGuard, facultyController.getFacultyMarksList as any);
-router.get('/bitwise-marks/:assignmentId', ...facultyAuthGuard, facultyController.getFacultyMarksWorkspace as any);
-router.post('/bitwise-marks/:assignmentId', ...facultyAuthGuard, facultyController.saveFacultyMarks as any);
+router.get('/attendance/history/:assignmentId', ...facultyAuthGuard, facultyController.getFacultyAttendanceHistory as any);
+router.get('/attendance/session/:sessionId', ...facultyAuthGuard, facultyController.getFacultyAttendanceSessionDetail as any);
+router.post('/attendance/session/:sessionId/correction', ...facultyAuthGuard, facultyController.correctFacultyAttendance as any);
+router.get('/attendance/corrections/:assignmentId', ...facultyAuthGuard, facultyController.getFacultyAttendanceCorrections as any);
 
 // ── Faculty Analytics ────────────────────────────────────────────────────────
 router.get('/analytics', ...facultyAuthGuard, facultyController.getFacultyAnalytics as any);

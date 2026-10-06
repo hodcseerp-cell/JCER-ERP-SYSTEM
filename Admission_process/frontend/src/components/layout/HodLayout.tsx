@@ -31,12 +31,14 @@ import {
   GraduationCap,
   CheckCircle2,
   Lock,
+  UserCheck,
 } from 'lucide-react';
 import hodService, { HodDashboardData } from '../../services/hod.service';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import AcademicYearSelector from '../common/AcademicYearSelector';
 import { useAcademicYear } from '../../context/AcademicYearContext';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface MenuItem {
   name: string;
@@ -66,13 +68,23 @@ export const HodLayout: React.FC = () => {
 
   const fetchMetadata = () => {
     hodService.getDashboardData()
-      .then((data) => setDashboardMeta(data))
+      .then((data) => {
+        if (data) setDashboardMeta(data);
+      })
       .catch((err) => console.warn('Could not load HOD metadata:', err));
   };
 
   useEffect(() => {
     fetchMetadata();
-  }, [location.pathname]);
+
+    const handleYearChanged = () => {
+      fetchMetadata();
+    };
+    window.addEventListener('academic-year-changed', handleYearChanged);
+    return () => {
+      window.removeEventListener('academic-year-changed', handleYearChanged);
+    };
+  }, []);
 
   // Click outside listener for dropdowns
   useEffect(() => {
@@ -145,6 +157,7 @@ export const HodLayout: React.FC = () => {
         { name: 'Students', path: '/hod/students', icon: Users },
         { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
         { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
+        { name: 'Mentor Management', path: '/hod/mentors', icon: UserCheck },
       ],
     },
     {
@@ -200,6 +213,7 @@ export const HodLayout: React.FC = () => {
         { name: 'Students', path: '/hod/students', icon: Users },
         { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
         { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
+        { name: 'Mentor Management', path: '/hod/mentors', icon: UserCheck },
       ],
     },
     {
@@ -238,6 +252,7 @@ export const HodLayout: React.FC = () => {
   const subNavTabs = [
     { name: 'Dashboard', path: '/hod/dashboard' },
     { name: 'Students', path: '/hod/students' },
+    { name: 'Mentors', path: '/hod/mentors' },
     { name: 'Faculty', path: '/hod/faculty' },
   ];
 
@@ -246,6 +261,9 @@ export const HodLayout: React.FC = () => {
     '/hod/students': 'Student Management',
     '/hod/students/semesters': 'Semester Student Breakdown',
     '/hod/students/sections': 'Section Allocation',
+    '/hod/mentors': 'Mentor Management',
+    '/hod/mentors/assign': 'Assign Student Mentors',
+    '/hod/mentors/allocations': 'Mentor Allocations Directory',
     '/hod/semester-transition': 'Semester 2 → Semester 3 Transition',
     '/hod/faculty': 'Faculty Management',
     '/hod/faculty/assignments': 'Teaching Allocation',
@@ -262,6 +280,15 @@ export const HodLayout: React.FC = () => {
   };
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/hod/mentors/assign')) {
+      return 'Assign Student Mentors';
+    }
+    if (location.pathname.startsWith('/hod/mentors/allocations')) {
+      return 'Mentor Allocations Directory';
+    }
+    if (location.pathname.startsWith('/hod/mentors')) {
+      return 'Mentor Management';
+    }
     if (location.pathname.startsWith('/hod/students/semesters/')) {
       const sem = location.pathname.split('/').pop();
       return `Semester ${sem} Cohort`;
@@ -434,6 +461,9 @@ export const HodLayout: React.FC = () => {
             </div>
           </div>
 
+          {/* Database-Driven Workspace Switcher */}
+          <WorkspaceSwitcher currentWorkspace="hod" />
+
           <Link
             to="/hod/faculty"
             className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0 text-[#0c1a40] dark:text-blue-400"
@@ -492,9 +522,9 @@ export const HodLayout: React.FC = () => {
           </div>
 
           {/* Right Controls */}
-          <div className="flex items-center space-x-2.5 flex-shrink-0">
+          <div className="flex items-center space-x-2 flex-shrink-0">
             {/* Department Context Badge */}
-            <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
+            <div className="hidden lg:flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
               <Building2 className="w-3.5 h-3.5 text-neutral-500" />
               <span>Dept: <strong>{deptCode}</strong></span>
             </div>

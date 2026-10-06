@@ -1,0 +1,469 @@
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Cloud,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Power,
+  HardDrive,
+  FolderTree,
+  ShieldCheck,
+  AlertTriangle,
+  FileSpreadsheet,
+  Clock,
+  Database,
+  Info,
+} from 'lucide-react';
+import { toast } from 'react-toastify';
+import googleDriveService, { GoogleDriveStatus } from '../../../services/googleDrive.service';
+
+export const DeanGoogleDriveBackupPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [loading, setLoading] = useState<boolean>(true);
+  const [testingConnection, setTestingConnection] = useState<boolean>(false);
+  const [retryingBackups, setRetryingBackups] = useState<boolean>(false);
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState<boolean>(false);
+  const [disconnecting, setDisconnecting] = useState<boolean>(false);
+  const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
+
+  const fetchStatus = async () => {
+    try {
+      setLoading(true);
+      const data = await googleDriveService.getStatus();
+      setStatus(data);
+    } catch (err: any) {
+      console.error('Failed to load Google Drive status:', err);
+      toast.error('Failed to load Google Drive connection status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+
+    // Check URL parameters for OAuth redirect callback status
+    const statusParam = searchParams.get('status');
+    const emailParam = searchParams.get('email');
+    const messageParam = searchParams.get('message');
+
+    if (statusParam === 'success') {
+      toast.success(`Google Drive connected successfully${emailParam ? ` (${emailParam})` : ''}!`);
+      setSearchParams({});
+    } else if (statusParam === 'error') {
+      toast.error(messageParam || 'Failed to connect Google Drive.');
+      setSearchParams({});
+    }
+  }, []);
+
+  const handleConnect = async () => {
+    try {
+      const authUrl = await googleDriveService.getAuthUrl();
+      if (authUrl) {
+        window.location.href = authUrl;
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to initiate Google authorization.');
+    }
+  };
+
+  const handleTestConnection = async () => {
+    try {
+      setTestingConnection(true);
+      const res = await googleDriveService.testConnection();
+      if (res.success) {
+        toast.success(res.message || 'Google Drive connection is healthy and verified!');
+      } else {
+        toast.error(res.message || 'Google Drive connection test failed.');
+      }
+      await fetchStatus();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Connection test failed.');
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleToggleAutoBackup = async () => {
+    if (!status || !isConnected) return;
+    const newEnabled = !status.autoBackupEnabled;
+    try {
+      await googleDriveService.toggleAutoBackup(newEnabled);
+      setStatus({ ...status, autoBackupEnabled: newEnabled });
+      toast.success(`Automatic Google Drive backup is now ${newEnabled ? 'ENABLED' : 'DISABLED'}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update auto-backup setting.');
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    try {
+      setRetryingBackups(true);
+      const res = await googleDriveService.retryFailedBackups();
+      const retriedCount = Number(res?.retriedCount ?? 0) || 0;
+      toast.success(retriedCount > 0 ? `Queued ${retriedCount} backup(s) for retry.` : 'No pending/failed backups to retry.');
+      await fetchStatus();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to trigger backup retries.');
+    } finally {
+      setRetryingBackups(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      const res = await googleDriveService.disconnect();
+      toast.info(res.message || 'Google Drive disconnected.');
+      setDisconnectModalOpen(false);
+      await fetchStatus();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to disconnect.');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  // Safe normalized variables
+  const isConnected = Boolean(
+    (status?.connected || status?.isConnected) &&
+    (status?.accountEmail || status?.googleAccountEmail)
+  );
+
+  const isError = Boolean(status?.status === 'ERROR' || (status?.lastError && isConnected));
+  const authorizedEmail = (status?.accountEmail || status?.googleAccountEmail || '').trim();
+  const rootFolderName = isConnected ? (status?.rootFolderName || status?.rootFolder || 'JCER ERP Attendance') : 'Not created yet';
+
+  const pendingBackups = Number(status?.pendingBackups ?? status?.pendingJobsCount ?? status?.stats?.pendingBackups ?? 0) || 0;
+  const failedBackups = Number(status?.failedBackups ?? status?.failedJobsCount ?? status?.stats?.failedBackups ?? 0) || 0;
+  const activeWorkbooks = Number(status?.activeWorkbooks ?? status?.totalSyncedFiles ?? status?.stats?.activeWorkbooks ?? 0) || 0;
+  const totalRetryCount = pendingBackups + failedBackups;
+
+  return (
+    <div className="space-y-8 animate-fadeIn max-w-7xl mx-auto pb-12">
+      {/* ── Header Banner ── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-8 text-white shadow-2xl">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold tracking-wide uppercase border border-white/15 text-blue-200">
+              <ShieldCheck className="size-3.5 text-blue-300" />
+              <span>College-Wide Academic Archive System</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Google Drive Attendance Backup</h1>
+            <p className="text-blue-200/80 text-sm max-w-2xl">
+              Automatic asynchronous backup of faculty attendance registers to official college Google Drive spreadsheets. PostgreSQL remains the authoritative primary source of truth.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchStatus}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-sm font-medium border border-white/20 transition-all duration-200 shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh Status</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Integration Card ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left 2 Cols: Main Status & Actions */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="rounded-3xl border border-slate-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-6 md:p-8 shadow-sm backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-neutral-800">
+              <div className="flex items-center gap-4">
+                <div className={`size-14 rounded-2xl flex items-center justify-center shadow-md transition-colors ${
+                  isConnected && !isError
+                    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/50'
+                    : isError
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-200/50'
+                    : 'bg-slate-100 text-slate-500 dark:bg-neutral-800 dark:text-neutral-400 border border-slate-200 dark:border-neutral-700'
+                }`}>
+                  <Cloud className="size-7" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-neutral-100">Integration Status</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    {loading ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        <RefreshCw className="size-3 animate-spin" />
+                        Verifying...
+                      </span>
+                    ) : isConnected && !isError ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Connected & Active
+                      </span>
+                    ) : isError ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                        <span className="size-2 rounded-full bg-rose-500" />
+                        Connection Error
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300">
+                        <span className="size-2 rounded-full bg-slate-400" />
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Automatic Backup Switch (Only interactive when connected) */}
+              {isConnected && (
+                <div className="flex items-center gap-3 bg-slate-50 dark:bg-neutral-800/60 px-4 py-2.5 rounded-2xl border border-slate-200/60 dark:border-neutral-700/60">
+                  <div className="text-left">
+                    <p className="text-xs font-semibold text-slate-900 dark:text-neutral-200">Auto Backup</p>
+                    <p className="text-[11px] text-slate-500 dark:text-neutral-400">On attendance save</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleAutoBackup}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      status?.autoBackupEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-neutral-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        status?.autoBackupEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Connection Details */}
+            <div className="py-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800">
+                  <span className="text-xs font-medium text-slate-500 dark:text-neutral-400">Authorized Google Account</span>
+                  <p className={`text-sm font-semibold mt-1 truncate ${
+                    isConnected ? 'text-slate-900 dark:text-neutral-100' : 'text-slate-500 dark:text-neutral-400 italic'
+                  }`}>
+                    {isConnected ? authorizedEmail : 'Not connected'}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800">
+                  <span className="text-xs font-medium text-slate-500 dark:text-neutral-400">Target Root Folder</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <FolderTree className={`size-4 ${isConnected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                    <p className={`text-sm font-semibold truncate ${
+                      isConnected ? 'text-slate-900 dark:text-neutral-100' : 'text-slate-500 dark:text-neutral-400 italic'
+                    }`}>
+                      {rootFolderName}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800">
+                  <span className="text-xs font-medium text-slate-500 dark:text-neutral-400">Last Successful Sync</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Clock className={`size-4 ${isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+                    <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">
+                      {status?.lastSuccessfulSync || status?.lastSyncAt
+                        ? new Date(status.lastSuccessfulSync || status.lastSyncAt!).toLocaleString('en-GB')
+                        : 'No files synced yet'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800">
+                  <span className="text-xs font-medium text-slate-500 dark:text-neutral-400">OAuth Refresh Token</span>
+                  <div className={`flex items-center gap-1.5 mt-1 ${
+                    isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                  }`}>
+                    <ShieldCheck className="size-4" />
+                    <p className="text-sm font-semibold">
+                      {isConnected ? 'Stored Securely (AES-256-GCM)' : 'Not configured'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {status?.lastError && (
+                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-3 text-rose-800 dark:text-rose-200">
+                  <AlertTriangle className="size-5 flex-shrink-0 mt-0.5 text-rose-600" />
+                  <div className="text-xs">
+                    <p className="font-semibold">Last Backup Notice:</p>
+                    <p className="mt-0.5 opacity-90">{status.lastError}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="pt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 dark:border-neutral-800">
+              {!isConnected ? (
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  className="inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-sm shadow-md transition-all duration-200"
+                >
+                  <Cloud className="size-4" />
+                  <span>Connect Google Drive</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 active:scale-95 text-slate-800 dark:text-neutral-200 font-medium text-sm transition-all duration-200 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`size-4 ${testingConnection ? 'animate-spin' : ''}`} />
+                    <span>{testingConnection ? 'Testing Connection...' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRetryFailed}
+                    disabled={retryingBackups || totalRetryCount === 0}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-medium text-sm border border-amber-200/60 dark:border-amber-900/40 transition-all duration-200 disabled:opacity-40"
+                  >
+                    <RefreshCw className={`size-4 ${retryingBackups ? 'animate-spin' : ''}`} />
+                    <span>Retry Backups ({totalRetryCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDisconnectModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-medium text-sm border border-rose-200/60 dark:border-rose-900/40 transition-all duration-200 ml-auto"
+                  >
+                    <Power className="size-4" />
+                    <span>Disconnect</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Architecture & Flow Banner */}
+          <div className="rounded-3xl border border-slate-200/70 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/60 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-neutral-100 flex items-center gap-2">
+              <Database className="size-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Architectural Guarantees & Fault Tolerance</span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-xs text-slate-600 dark:text-neutral-400">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800 space-y-1">
+                <p className="font-semibold text-slate-900 dark:text-neutral-200">1. Instant Faculty Response</p>
+                <p>PostgreSQL transaction commits first. Faculty never waits for Excel generation or Google Drive network latency.</p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800 space-y-1">
+                <p className="font-semibold text-slate-900 dark:text-neutral-200">2. Non-Blocking Resilience</p>
+                <p>If Google Drive is unavailable, attendance in PostgreSQL remains 100% intact and the backup queue automatically retries.</p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/40 border border-slate-100 dark:border-neutral-800 space-y-1">
+                <p className="font-semibold text-slate-900 dark:text-neutral-200">3. Single Subject Workbook</p>
+                <p>One workbook per subject cohort is updated continuously with dynamic session columns (e.g. 02-10-2026 P1).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right 1 Col: Metrics & Structure */}
+        <div className="space-y-6">
+          {/* Sync Metrics Card */}
+          <div className="rounded-3xl border border-slate-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-neutral-100 mb-4 flex items-center gap-2">
+              <FileSpreadsheet className="size-4 text-blue-600" />
+              <span>Backup Metrics</span>
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/50">
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Active Workbooks</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-neutral-100">
+                  {activeWorkbooks}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/50">
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Pending Backups</span>
+                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                  {pendingBackups}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-neutral-800/50">
+                <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Failed / Retrying</span>
+                <span className={`text-sm font-bold ${failedBackups > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-neutral-100'}`}>
+                  {failedBackups}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Folder Hierarchy Preview Card */}
+          <div className="rounded-3xl border border-slate-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-neutral-100 mb-3 flex items-center gap-2">
+              <FolderTree className="size-4 text-emerald-600" />
+              <span>Automatic Folder Hierarchy</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-neutral-400 mb-4">
+              Workbooks are organized automatically by Academic Year, Department, Semester, and Section:
+            </p>
+
+            <div className="p-4 rounded-2xl bg-slate-900 text-slate-200 font-mono text-xs space-y-1 overflow-x-auto shadow-inner">
+              <p className="text-blue-400 font-bold">JCER ERP Attendance/</p>
+              <p className="pl-3 text-slate-300">└── 2026-27/</p>
+              <p className="pl-6 text-slate-300">├── CSE/</p>
+              <p className="pl-9 text-slate-400">└── Semester 3/</p>
+              <p className="pl-12 text-slate-400">└── Section A/</p>
+              <p className="pl-15 text-emerald-400 font-semibold">├── DBMS.xlsx</p>
+              <p className="pl-15 text-emerald-400 font-semibold">└── Java.xlsx</p>
+              <p className="pl-6 text-slate-300">├── ECE/</p>
+              <p className="pl-6 text-slate-300">└── ME/</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Disconnect Confirmation Dialog ── */}
+      {disconnectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 p-6 shadow-2xl border border-slate-200 dark:border-neutral-800 space-y-5 animate-scaleUp">
+            <div className="size-12 rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 flex items-center justify-center">
+              <AlertTriangle className="size-6" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-neutral-100">
+                Disconnect Google Drive?
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-neutral-400">
+                Automatic attendance backup will stop until a Google account is connected again. Existing Excel files in Google Drive and backup records in PostgreSQL will <strong>remain intact</strong>.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDisconnectModalOpen(false)}
+                disabled={disconnecting}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-slate-700 dark:text-neutral-300 text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                {disconnecting ? 'Disconnecting...' : 'Yes, Disconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DeanGoogleDriveBackupPage;

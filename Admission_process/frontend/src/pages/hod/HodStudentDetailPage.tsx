@@ -63,10 +63,10 @@ export const HodStudentDetailPage: React.FC = () => {
       <div>
         <Link
           to="/hod/students"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:border-neutral-200 border-2 border-slate-800 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Students Directory</span>
+          <ArrowLeft className="w-4 h-4 text-slate-700 dark:text-neutral-200" />
+          <span>Back to Students</span>
         </Link>
       </div>
 

@@ -17,14 +17,31 @@ import PrincipalLayout from './components/layout/PrincipalLayout';
 import DeanLayout from './components/layout/DeanLayout';
 import HodLayout from './components/layout/HodLayout';
 import FacultyLayout from './components/layout/FacultyLayout';
+import MentorLayout from './components/layout/MentorLayout';
 import TopLoadingBar from './components/common/TopLoadingBar';
 import PwaManager from './components/PwaManager';
+
+// ─── Dedicated Mentor Workspace Pages ─────────────────────────────────────────
+import MentorAttendancePage from './pages/mentor/MentorAttendancePage';
+import MentorPerformancePage from './pages/mentor/MentorPerformancePage';
+import MentorNotesPage from './pages/mentor/MentorNotesPage';
+import MentorReportsPage from './pages/mentor/MentorReportsPage';
 
 // ─── Faculty Pages ────────────────────────────────────────────────────────────
 import FacultyOverviewPage from './pages/faculty/FacultyOverviewPage';
 import FacultyAttendancePage from './pages/faculty/FacultyAttendancePage';
-import FacultyBitwiseMarksPage from './pages/faculty/FacultyBitwiseMarksPage';
+import FacultyStudentAttendancePage from './pages/faculty/FacultyStudentAttendancePage';
 import FacultyAnalyticsPage from './pages/faculty/FacultyAnalyticsPage';
+
+// ─── Faculty Bitwise Marks Pages ──────────────────────────────────────────────
+import FacultyMarksDashboardPage from './pages/faculty/marks/FacultyMarksDashboardPage';
+import FacultyMarksSubjectSelectPage from './pages/faculty/marks/FacultyMarksSubjectSelectPage';
+import FacultyMarksConfigPage from './pages/faculty/marks/FacultyMarksConfigPage';
+import FacultyMarksGridPage from './pages/faculty/marks/FacultyMarksGridPage';
+import FacultyAssignmentConfigPage from './pages/faculty/marks/FacultyAssignmentConfigPage';
+import FacultyAssignmentMarksPage from './pages/faculty/marks/FacultyAssignmentMarksPage';
+import FacultyFinalInternalMarksPage from './pages/faculty/marks/FacultyFinalInternalMarksPage';
+import FacultyExternalMarksPage from './pages/faculty/marks/FacultyExternalMarksPage';
 
 // ─── Common Pages ─────────────────────────────────────────────────────────────
 import LoginPage from './pages/common/LoginPage';
@@ -52,6 +69,7 @@ import FacultyAuthorizationPage from './pages/dean/faculty/FacultyAuthorizationP
 import FacultyReviewPage from './pages/dean/faculty/FacultyReviewPage';
 import FacultyAssignmentsPage from './pages/dean/faculty/FacultyAssignmentsPage';
 import DeanProfilePage from './pages/dean/DeanProfilePage';
+import DeanGoogleDriveBackupPage from './pages/dean/settings/DeanGoogleDriveBackupPage';
 
 // ─── HOD Pages ────────────────────────────────────────────────────────────────
 import HodDashboardPage from './pages/hod/HodDashboardPage';
@@ -74,6 +92,16 @@ import HodStudentPerformancePage from './pages/hod/HodStudentPerformancePage';
 import HodReportsPage from './pages/hod/HodReportsPage';
 import HodSettingsPage from './pages/hod/HodSettingsPage';
 import HodSemesterTransitionPage from './pages/hod/HodSemesterTransitionPage';
+
+// ─── HOD Mentor Pages ────────────────────────────────────────────────────────
+import HodMentorOverviewPage from './pages/hod/mentors/HodMentorOverviewPage';
+import HodAssignMentorsPage from './pages/hod/mentors/HodAssignMentorsPage';
+import HodViewAllocationsPage from './pages/hod/mentors/HodViewAllocationsPage';
+
+// ─── Faculty Mentor Pages ────────────────────────────────────────────────────
+import FacultyMentorOverviewPage from './pages/faculty/mentor/FacultyMentorOverviewPage';
+import FacultyMyMenteesPage from './pages/faculty/mentor/FacultyMyMenteesPage';
+import FacultyMenteeProfilePage from './pages/faculty/mentor/FacultyMenteeProfilePage';
 
 // ─── Admission Portal ─────────────────────────────────────────────────────────
 import { AuthProvider as AdmissionAuthProvider } from './pages/admission/src/context/AuthContext';
@@ -370,6 +398,7 @@ export const App: React.FC = () => (
 
               {/* Profile & Account Settings */}
               <Route path="profile" element={<DeanProfilePage />} />
+              <Route path="settings/google-drive" element={<DeanGoogleDriveBackupPage />} />
             </Route>
 
             {/* ── HOD Portal ── */}
@@ -382,6 +411,7 @@ export const App: React.FC = () => (
               <Route path="students/semesters" element={<HodStudentsSemesterPage />} />
               <Route path="students/semesters/:semester" element={<HodSemesterCohortPage />} />
               <Route path="students/sections" element={<HodStudentsSectionPage />} />
+              <Route path="section-allocation" element={<Navigate to="/hod/students/sections" replace />} />
               <Route path="students/sections/:sectionId" element={<HodSectionDetailPage />} />
               <Route path="students/sections/:sectionId/allocate" element={<HodSectionAllocatePage />} />
               <Route path="students/:id" element={<HodStudentDetailPage />} />
@@ -417,6 +447,11 @@ export const App: React.FC = () => (
               <Route path="settings" element={<HodSettingsPage />} />
               <Route path="profile" element={<HodSettingsPage />} />
 
+              {/* Mentor Management */}
+              <Route path="mentors" element={<HodMentorOverviewPage />} />
+              <Route path="mentors/assign" element={<HodAssignMentorsPage />} />
+              <Route path="mentors/allocations" element={<HodViewAllocationsPage />} />
+
               {/* Special Applied Science */}
               <Route path="semester-transition" element={<HodSemesterTransitionPage />} />
             </Route>
@@ -427,8 +462,39 @@ export const App: React.FC = () => (
               <Route path="dashboard" element={<FacultyOverviewPage />} />
               <Route path="overview" element={<FacultyOverviewPage />} />
               <Route path="attendance" element={<FacultyAttendancePage />} />
-              <Route path="bitwise-marks" element={<FacultyBitwiseMarksPage />} />
+              <Route path="student-attendance" element={<FacultyStudentAttendancePage />} />
               <Route path="analytics" element={<FacultyAnalyticsPage />} />
+
+              {/* ── Backward Compatibility Redirects for Mentor ── */}
+              <Route path="mentor" element={<Navigate to="/mentor/dashboard" replace />} />
+              <Route path="mentor/overview" element={<Navigate to="/mentor/dashboard" replace />} />
+              <Route path="mentor/mentees" element={<Navigate to="/mentor/mentees" replace />} />
+              <Route path="mentor/mentees/:studentId" element={<Navigate to="/mentor/mentees" replace />} />
+
+              {/* ── Bitwise Marks Entry Module ── */}
+              <Route path="marks" element={<FacultyMarksDashboardPage />} />
+              <Route path="bitwise-marks" element={<FacultyMarksDashboardPage />} />
+              <Route path="marks/semesters/:semester" element={<FacultyMarksSubjectSelectPage />} />
+              <Route path="marks/config" element={<FacultyMarksConfigPage />} />
+              <Route path="marks/grid" element={<FacultyMarksGridPage />} />
+              <Route path="marks/assignments" element={<FacultyAssignmentMarksPage />} />
+              <Route path="marks/assignments/config" element={<FacultyAssignmentConfigPage />} />
+              <Route path="marks/final-internal" element={<FacultyFinalInternalMarksPage />} />
+              <Route path="marks/external" element={<FacultyExternalMarksPage />} />
+            </Route>
+
+            {/* ── Dedicated Mentor Workspace Portal ── */}
+            <Route path="mentor" element={<MentorLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<FacultyMentorOverviewPage />} />
+              <Route path="overview" element={<FacultyMentorOverviewPage />} />
+              <Route path="mentees" element={<FacultyMyMenteesPage />} />
+              <Route path="mentees/:studentId" element={<FacultyMenteeProfilePage />} />
+              <Route path="attendance" element={<MentorAttendancePage />} />
+              <Route path="performance" element={<MentorPerformancePage />} />
+              <Route path="academics" element={<MentorPerformancePage />} />
+              <Route path="notes" element={<MentorNotesPage />} />
+              <Route path="reports" element={<MentorReportsPage />} />
             </Route>
           </Route>
 

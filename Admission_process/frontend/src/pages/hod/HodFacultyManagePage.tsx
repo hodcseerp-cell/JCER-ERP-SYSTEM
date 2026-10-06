@@ -71,14 +71,14 @@ export const HodFacultyManagePage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* ── Breadcrumb ── */}
+      {/* ── Back Button ── */}
       <div className="flex items-center justify-between">
         <Link
           to="/hod/faculty"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+          className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:border-neutral-200 border-2 border-slate-800 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Global Faculty Directory</span>
+          <ArrowLeft className="w-4 h-4 text-slate-700 dark:text-neutral-200" />
+          <span>Back to Faculty Directory</span>
         </Link>
       </div>
 

@@ -7,19 +7,21 @@ import { GlobalFooter } from '../common/GlobalFooter';
 import {
   LayoutDashboard,
   CalendarCheck,
-  Award,
   BarChart3,
+  UserCheck,
   User,
   LogOut,
   Building2,
   Menu,
   X,
   ChevronDown,
+  Award,
 } from 'lucide-react';
 import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import { useAcademicYear } from '../../context/AcademicYearContext';
 import AcademicYearSelector from '../common/AcademicYearSelector';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface MenuItem {
   name: string;
@@ -69,39 +71,68 @@ export const FacultyLayout: React.FC = () => {
   const deptCode = user?.department?.code || 'CSE';
   const { academicYear } = useAcademicYear();
 
-  // Exactly 4 main navigation menus (Faculty Scope)
+  const isHod = user?.role === 'HOD';
+
+  // Navigation menus (Faculty Teaching Scope)
   const menuItems: MenuItem[] = [
     { name: 'Overview', path: '/faculty/dashboard', icon: LayoutDashboard },
     { name: 'Attendance', path: '/faculty/attendance', icon: CalendarCheck },
-    { name: 'Bitwise Marks', path: '/faculty/bitwise-marks', icon: Award },
+    { name: 'Student Attendance', path: '/faculty/student-attendance', icon: UserCheck },
+    { name: 'Bitwise Marks Entry', path: '/faculty/marks', icon: Award },
     { name: 'Analytics', path: '/faculty/analytics', icon: BarChart3 },
   ];
 
   const subNavTabs = [
     { name: 'Overview', path: '/faculty/dashboard' },
     { name: 'Attendance', path: '/faculty/attendance' },
-    { name: 'Bitwise Marks', path: '/faculty/bitwise-marks' },
+    { name: 'Student Attendance', path: '/faculty/student-attendance' },
+    { name: 'Bitwise Marks', path: '/faculty/marks' },
     { name: 'Analytics', path: '/faculty/analytics' },
   ];
 
   const getActiveNavPath = (currentPath: string): string => {
+    if (currentPath.startsWith('/faculty/mentor')) return '/faculty/mentor';
     if (currentPath === '/faculty' || currentPath === '/faculty/overview' || currentPath.startsWith('/faculty/dashboard')) {
       return '/faculty/dashboard';
     }
+    if (currentPath.startsWith('/faculty/student-attendance')) return '/faculty/student-attendance';
     if (currentPath.startsWith('/faculty/attendance')) return '/faculty/attendance';
-    if (currentPath.startsWith('/faculty/bitwise-marks')) return '/faculty/bitwise-marks';
+    if (currentPath.startsWith('/faculty/marks') || currentPath.startsWith('/faculty/bitwise-marks')) return '/faculty/marks';
     if (currentPath.startsWith('/faculty/analytics')) return '/faculty/analytics';
     return '/faculty/dashboard';
   };
 
   const activeNavPath = getActiveNavPath(location.pathname);
+  const isFullScreenGrid =
+    location.pathname === '/faculty/marks/grid' ||
+    location.pathname === '/faculty/marks/assignments';
+
+  // Dedicated Full-Screen workspace mode for Bitwise Marks & Assignment Entry Grids
+  if (isFullScreenGrid) {
+    return (
+      <div className="h-screen w-screen max-w-full overflow-hidden bg-slate-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 font-sans">
+        <Outlet />
+      </div>
+    );
+  }
 
   const getPageTitle = () => {
+    if (location.pathname.startsWith('/faculty/mentor/mentees/')) {
+      return 'Mentee Profile & Academic Overview';
+    }
+    if (location.pathname === '/faculty/mentor/mentees') {
+      return 'My Mentees';
+    }
+    if (location.pathname.startsWith('/faculty/mentor')) {
+      return 'Faculty Mentor Dashboard';
+    }
     switch (activeNavPath) {
+      case '/faculty/student-attendance':
+        return 'Student Attendance';
       case '/faculty/attendance':
         return 'Attendance';
-      case '/faculty/bitwise-marks':
-        return 'Bitwise Marks';
+      case '/faculty/marks':
+        return 'Bitwise Marks Entry';
       case '/faculty/analytics':
         return 'Analytics';
       case '/faculty/dashboard':
@@ -111,6 +142,9 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const getPageSubtitle = () => {
+    if (location.pathname.startsWith('/faculty/mentor')) {
+      return 'Mentoring, student performance tracking & follow-up actions';
+    }
     return 'Teaching, attendance, marks & academic performance';
   };
 
@@ -230,6 +264,9 @@ export const FacultyLayout: React.FC = () => {
             </div>
           </div>
 
+          {/* Database-Driven Workspace Switcher */}
+          <WorkspaceSwitcher currentWorkspace="faculty" />
+
           <button
             onClick={handleLogout}
             className="flex items-center space-x-2 text-[10px] font-bold hover:underline px-1 py-0.5 shrink-0 text-rose-600 dark:text-rose-400"
@@ -286,9 +323,9 @@ export const FacultyLayout: React.FC = () => {
           </div>
 
           {/* Right Controls */}
-          <div className="flex items-center space-x-2.5 flex-shrink-0">
+          <div className="flex items-center space-x-2 flex-shrink-0">
             {/* Department Context Badge */}
-            <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
+            <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-full border border-neutral-200/80 dark:border-neutral-800 bg-white/80 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
               <Building2 className="w-3.5 h-3.5 text-neutral-500" />
               <span>Dept: <strong>{deptCode}</strong></span>
             </div>

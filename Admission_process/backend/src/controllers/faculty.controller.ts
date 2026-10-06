@@ -118,66 +118,7 @@ export const getFacultyAttendanceWorkspace = async (
   }
 };
 
-/**
- * GET /api/faculty/bitwise-marks
- * Retrieves continuous assessment / marks authorized assignments
- */
-export const getFacultyMarksList = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<any> => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
-    }
 
-    const semester = req.query.semester as string;
-    const academicYear = req.query.academicYear as string;
-    const courses = await facultyService.getFacultyMarksList(userId, semester, academicYear);
-
-    return res.json({
-      success: true,
-      data: courses,
-    });
-  } catch (error: any) {
-    logger.error('GET_FACULTY_MARKS_LIST_ERROR:', error);
-    return next(error);
-  }
-};
-
-/**
- * GET /api/faculty/bitwise-marks/:assignmentId
- * Retrieves detailed continuous assessment / marks workspace
- */
-export const getFacultyMarksWorkspace = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<any> => {
-  try {
-    const userId = req.user?.id;
-    const assignmentId = req.params.assignmentId;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
-    }
-
-    if (!assignmentId) {
-      return res.status(400).json({ error: 'Assignment ID is required.' });
-    }
-
-    const workspace = await facultyService.getFacultyMarksWorkspace(userId, assignmentId);
-    return res.json({
-      success: true,
-      data: workspace,
-    });
-  } catch (error: any) {
-    logger.error('GET_FACULTY_MARKS_WORKSPACE_ERROR:', error);
-    return res.status(403).json({ error: error.message || 'Unauthorized marks access.' });
-  }
-};
 
 /**
  * GET /api/faculty/analytics
@@ -249,11 +190,13 @@ export const saveFacultyAttendance = async (
   }
 };
 
+
+
 /**
- * POST /api/faculty/bitwise-marks/:assignmentId
- * Saves student continuous assessment marks
+ * GET /api/faculty/attendance/:assignmentId/export
+ * Generates and downloads the official Class-wise Attendance Register Excel spreadsheet
  */
-export const saveFacultyMarks = async (
+export const exportFacultyAttendanceExcel = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -270,23 +213,225 @@ export const saveFacultyMarks = async (
       return res.status(400).json({ error: 'Assignment ID is required.' });
     }
 
-    const { marks } = req.body;
-    if (!Array.isArray(marks)) {
-      return res.status(400).json({ error: 'Invalid marks array.' });
+    const { buffer, filename } = await facultyService.exportFacultyAttendanceExcel(userId, assignmentId);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.send(buffer);
+  } catch (error: any) {
+    logger.error('EXPORT_FACULTY_ATTENDANCE_EXCEL_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to export attendance report.' });
+  }
+};
+
+/**
+ * GET /api/faculty/attendance/history/:assignmentId
+ * Retrieves past attendance sessions history for an assignment
+ */
+export const getFacultyAttendanceHistory = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    const assignmentId = req.params.assignmentId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
     }
 
-    const updatedWorkspace = await facultyService.saveFacultyMarks(userId, assignmentId, {
-      marks,
+    if (!assignmentId) {
+      return res.status(400).json({ error: 'Assignment ID is required.' });
+    }
+
+    const history = await facultyService.getFacultyAttendanceHistory(userId, assignmentId);
+    return res.json({
+      success: true,
+      data: history,
     });
+  } catch (error: any) {
+    logger.error('GET_FACULTY_ATTENDANCE_HISTORY_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to load attendance history.' });
+  }
+};
+
+/**
+ * GET /api/faculty/attendance/session/:sessionId
+ * Retrieves detailed session data with student records for correction workspace
+ */
+export const getFacultyAttendanceSessionDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    const sessionId = req.params.sessionId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required.' });
+    }
+
+    const detail = await facultyService.getFacultyAttendanceSessionDetail(userId, sessionId);
+    return res.json({
+      success: true,
+      data: detail,
+    });
+  } catch (error: any) {
+    logger.error('GET_FACULTY_ATTENDANCE_SESSION_DETAIL_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to load session details.' });
+  }
+};
+
+/**
+ * POST /api/faculty/attendance/session/:sessionId/correction
+ * Corrects attendance records for a conducted session with audit logging
+ */
+export const correctFacultyAttendance = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    const sessionId = req.params.sessionId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required.' });
+    }
+
+    const { changes } = req.body;
+    if (!Array.isArray(changes) || changes.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty changes array.' });
+    }
+
+    const reqMeta = {
+      ipAddress: req.ip || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'] as string,
+    };
+
+    const updatedDetail = await facultyService.correctFacultyAttendance(userId, sessionId, { changes }, reqMeta);
 
     return res.json({
       success: true,
-      message: 'Assessment marks saved successfully.',
-      data: updatedWorkspace,
+      message: 'Attendance corrected successfully.',
+      data: updatedDetail,
     });
   } catch (error: any) {
-    logger.error('SAVE_FACULTY_MARKS_ERROR:', error);
-    return res.status(400).json({ error: error.message || 'Failed to save marks.' });
+    logger.error('CORRECT_FACULTY_ATTENDANCE_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to correct attendance.' });
   }
 };
+
+/**
+ * GET /api/faculty/attendance/corrections/:assignmentId
+ * Retrieves all attendance correction audit logs for an assignment
+ */
+export const getFacultyAttendanceCorrections = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    const assignmentId = req.params.assignmentId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
+    }
+
+    if (!assignmentId) {
+      return res.status(400).json({ error: 'Assignment ID is required.' });
+    }
+
+    const corrections = await facultyService.getFacultyAssignmentCorrections(userId, assignmentId);
+    return res.json({
+      success: true,
+      data: corrections,
+    });
+  } catch (error: any) {
+    logger.error('GET_FACULTY_ATTENDANCE_CORRECTIONS_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to load correction history.' });
+  }
+};
+
+/**
+ * GET /api/faculty/attendance/students/search
+ * Searches students authorized under the logged-in faculty's active assignments
+ */
+export const searchFacultyStudents = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
+    }
+
+    const query = (req.query.q as string) || '';
+    const academicYear = req.query.academicYear as string;
+    const semester = req.query.semester as string;
+
+    const results = await facultyService.searchFacultyStudents(userId, query, academicYear, semester);
+    return res.json({
+      success: true,
+      data: results,
+    });
+  } catch (error: any) {
+    logger.error('SEARCH_FACULTY_STUDENTS_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * GET /api/faculty/attendance/students/:studentId
+ * Retrieves student details and authorized subject attendance
+ */
+export const getFacultyStudentAttendance = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const userId = req.user?.id;
+    const studentId = req.params.studentId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: Session missing.' });
+    }
+
+    if (!studentId) {
+      return res.status(400).json({ error: 'Student ID is required.' });
+    }
+
+    const academicYear = req.query.academicYear as string;
+    const attendanceData = await facultyService.getFacultyStudentAttendance(userId, studentId, academicYear);
+
+    return res.json({
+      success: true,
+      data: attendanceData,
+    });
+  } catch (error: any) {
+    logger.error('GET_FACULTY_STUDENT_ATTENDANCE_ERROR:', error);
+    return res.status(400).json({ error: error.message || 'Failed to retrieve student attendance.' });
+  }
+};
+
+
 

@@ -5,8 +5,6 @@ import Department from '../models/Department';
 import FacultyAssignment from '../models/FacultyAssignment';
 import AttendanceSession from '../models/AttendanceSession';
 import AttendanceRecord from '../models/AttendanceRecord';
-import StudentMarks from '../models/StudentMarks';
-import Assessment from '../models/Assessment';
 
 async function inspectFacultyData() {
   await db.authenticate();
@@ -53,10 +51,6 @@ async function inspectFacultyData() {
   // 5. Attendance Records
   const records = await AttendanceRecord.count();
   console.log(`Total Attendance Records: ${records}`);
-
-  // 6. Student Marks
-  const marks = await StudentMarks.count();
-  console.log(`Total Student Marks: ${marks}`);
 
   process.exit(0);
 }

@@ -37,6 +37,7 @@ export const FacultyListPage: React.FC = () => {
   const [faculty, setFaculty] = useState<FacultyRecord[]>([]);
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState<string>('');
@@ -69,22 +70,26 @@ export const FacultyListPage: React.FC = () => {
     try {
       const depts = await deanService.getDepartments();
       setDepartments(depts);
-    } catch (err) {
-      toast.error('Failed to load departments');
+    } catch (err: any) {
+      console.warn('Failed to load departments:', err);
     }
   };
 
   const fetchFaculty = async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const data = await deanService.getFacultyList({
-        search: search || undefined,
+        search: search.trim() || undefined,
         departmentId: selectedDept,
         status: selectedStatus,
       });
-      setFaculty(data);
-    } catch (err) {
-      toast.error('Failed to load faculty directory');
+      setFaculty(Array.isArray(data) ? data : []);
+      setFetchError(null);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Unable to load faculty directory.';
+      setFetchError(msg);
+      toast.error('Unable to load faculty directory.', { toastId: 'dean-faculty-load-error' });
     } finally {
       setLoading(false);
     }
@@ -410,6 +415,23 @@ export const FacultyListPage: React.FC = () => {
                     </td>
                   </tr>
                 ))
+              ) : fetchError ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-neutral-400 space-y-3">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <AlertCircle className="w-8 h-8 text-rose-500" />
+                      <p className="font-bold text-rose-600 dark:text-rose-400 text-sm">Unable to load faculty directory</p>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-sm">{fetchError}</p>
+                      <button
+                        onClick={fetchFaculty}
+                        className="mt-2 inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 <tr>
                   <td colSpan={8} className="py-10 text-center text-neutral-400">

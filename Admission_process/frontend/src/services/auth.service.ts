@@ -21,6 +21,10 @@ export interface UserSession {
     type?: 'STANDARD' | 'SEMESTER_HANDLING';
     handlingSemesters?: number[];
   };
+  isHod?: boolean;
+  isFaculty?: boolean;
+  isMentor?: boolean;
+  workspaces?: string[];
 }
 
 export interface LoginResponse {

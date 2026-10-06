@@ -27,6 +27,7 @@ import {
   FileCheck2,
   FileSpreadsheet,
   Archive,
+  Cloud,
 } from 'lucide-react';
 import deanService from '../../services/dean.service';
 import usePwa from '../../hooks/usePwa';
@@ -139,6 +140,7 @@ export const DeanLayout: React.FC = () => {
       title: 'ACCOUNT & SETTINGS',
       items: [
         { name: 'My Profile', path: '/dean/profile', icon: User },
+        { name: 'Google Drive Backup', path: '/dean/settings/google-drive', icon: Cloud },
       ],
     },
   ];
@@ -146,6 +148,7 @@ export const DeanLayout: React.FC = () => {
   const pageTitles: Record<string, string> = {
     '/dean/dashboard': 'Dean Academics Overview',
     '/dean/profile': 'Dean Profile & Security Settings',
+    '/dean/settings/google-drive': 'Google Drive Attendance Backup',
     '/dean/academic/departments': 'Departments Directory',
     '/dean/hods': 'HOD Directory & Management',
     '/dean/hods/create': 'Register New HOD',

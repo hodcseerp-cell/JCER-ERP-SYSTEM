@@ -140,7 +140,7 @@ export const FacultyAnalyticsPage: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
-              <span>Threshold: 75%</span>
+              <span>Threshold: {data?.subjectAttendanceStats?.[0]?.threshold || 85}%</span>
               <span className="font-bold text-neutral-800 dark:text-neutral-200">
                 {data?.subjectAttendanceStats?.length || 0} active rosters
               </span>
@@ -155,7 +155,7 @@ export const FacultyAnalyticsPage: React.FC = () => {
                   DEFAULTER ALERTS
                 </span>
                 <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  Below 75%
+                  Below {data?.subjectAttendanceStats?.[0]?.threshold || 85}%
                 </span>
               </div>
 
@@ -210,69 +210,7 @@ export const FacultyAnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 3: Continuous Assessment Overview */}
-          <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-neutral-200/80 dark:border-neutral-800 shadow-xs flex flex-col justify-between space-y-4">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700">
-                  EVALUATION
-                </span>
-                <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-                  CIE Active
-                </span>
-              </div>
 
-              <h3 className="text-base font-black text-neutral-900 dark:text-white mt-3">
-                Continuous Evaluation Structure
-              </h3>
-              <p className="text-xs text-neutral-400 font-semibold mt-0.5">
-                Internal assessment components and bitwise continuous evaluation marks breakdown.
-              </p>
-
-              <div className="mt-5 space-y-2.5">
-                <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-700/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold text-[11px]">
-                      1
-                    </div>
-                    <span className="font-bold text-neutral-900 dark:text-white">
-                      Internal Assessment 1 (IA-1)
-                    </span>
-                  </div>
-                  <span className="font-mono text-neutral-500 font-semibold">20 Marks</span>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-700/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold text-[11px]">
-                      2
-                    </div>
-                    <span className="font-bold text-neutral-900 dark:text-white">
-                      Internal Assessment 2 (IA-2)
-                    </span>
-                  </div>
-                  <span className="font-mono text-neutral-500 font-semibold">20 Marks</span>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-700/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold text-[11px]">
-                      3
-                    </div>
-                    <span className="font-bold text-neutral-900 dark:text-white">
-                      Assignment / Quiz Activity
-                    </span>
-                  </div>
-                  <span className="font-mono text-neutral-500 font-semibold">10 Marks</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
-              <span>Total CIE Weightage</span>
-              <span className="font-bold text-neutral-800 dark:text-neutral-200">50 Marks</span>
-            </div>
-          </div>
 
           {/* Section 4: Course Outcomes & Scope */}
           <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-neutral-200/80 dark:border-neutral-800 shadow-xs flex flex-col justify-between space-y-4">

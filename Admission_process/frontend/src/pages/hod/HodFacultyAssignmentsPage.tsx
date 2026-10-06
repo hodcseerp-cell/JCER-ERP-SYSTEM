@@ -1025,11 +1025,30 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                     ) : (
                       <div className="space-y-4">
                         {Array.from(selectedTeachingDepts).map((dCode) => {
-                          const secList = departmentSectionsMap[dCode] || [];
+                          const rawSecList = departmentSectionsMap[dCode] || [];
+                          
+                          // Deduplicate sections by clean code (e.g. 'Section A' and 'A' -> single 'Section A')
+                          const seenCodes = new Set<string>();
+                          const secList: HodSectionItem[] = [];
+                          rawSecList.forEach((s) => {
+                            let clean = s.name.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
+                            if (!clean) clean = s.name.trim().toUpperCase();
+                            if (!seenCodes.has(clean)) {
+                              seenCodes.add(clean);
+                              secList.push({
+                                ...s,
+                                name: `Section ${clean}`,
+                              });
+                            }
+                          });
+
                           const currentAllocations = subjectAssignmentsMap[activeModalSubject.id] || [];
                           const allocatedMap = new Map<string, string>();
                           currentAllocations.forEach((a) => {
-                            if (a.section) allocatedMap.set(a.section.toUpperCase(), a.facultyName);
+                            if (a.section) {
+                              const cleanSec = a.section.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
+                              allocatedMap.set(cleanSec, a.facultyName);
+                            }
                           });
 
                           return (
@@ -1039,7 +1058,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                                   <span>{dCode} Sections</span>
                                 </h4>
                                 <span className="text-[11px] font-semibold text-slate-500">
-                                  {secList.length} Sections Found
+                                  {secList.length} {secList.length === 1 ? 'Section' : 'Sections'} Found
                                 </span>
                               </div>
 

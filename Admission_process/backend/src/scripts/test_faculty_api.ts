@@ -36,12 +36,6 @@ async function main() {
         console.log(`  - ${s.studentName} (${s.usn}), Classes: ${s.classesConducted}, Present: ${s.presentCount}, %: ${s.attendancePercentage}%, Status: ${s.status}`);
       });
 
-      // 3. Test Marks Workspace
-      console.log(`\n3. Marks Workspace for Assignment ${assignmentId}:`);
-      const marksWs = await facultyService.getFacultyMarksWorkspace(user.id, assignmentId);
-      console.log('Course:', marksWs.assignment);
-      console.log('Evaluations:', marksWs.evaluations);
-      console.log(`Students count: ${marksWs.students.length}`);
 
       // 4. Test Analytics
       console.log(`\n4. Faculty Analytics:`);

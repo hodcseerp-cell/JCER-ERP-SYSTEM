@@ -10,11 +10,11 @@ import Teacher from '../models/Teacher';
 import AttendanceRecord from '../models/AttendanceRecord';
 import AttendanceSession from '../models/AttendanceSession';
 import AuditLog from '../models/AuditLog';
-import Assessment from '../models/Assessment';
-import AssessmentComponent from '../models/AssessmentComponent';
-import StudentMarks from '../models/StudentMarks';
 import AcademicYear from '../models/AcademicYear';
 import logger from '../utils/logger.util';
+import ExcelJS from 'exceljs';
+import attendanceExcelService from './attendanceExcel.service';
+import attendanceBackupQueueService from './attendanceBackupQueue.service';
 
 // Helper to normalize section names ('Section A', 'Section  D', 'Division A', 'A' -> 'A')
 export const normalizeSection = (sec?: string | null): string => {
@@ -22,8 +22,8 @@ export const normalizeSection = (sec?: string | null): string => {
   return sec.replace(/^(Section|Sec|Division|Div)\s+/i, '').trim().toUpperCase();
 };
 
-// Attendance threshold percentage for eligibility
-const ATTENDANCE_THRESHOLD = 75.0;
+// Authoritative attendance threshold percentage for eligibility (JCER ERP Institutional Rule: 85.0%)
+export const ATTENDANCE_THRESHOLD = 85.0;
 
 // Helper to get academic year variants for flexible DB matching ('2026-27', '2026-2027', '2026–27')
 export const getAcademicYearVariants = (ay?: string | null): string[] => {
@@ -131,6 +131,22 @@ export const getEnrolledStudentsForAssignment = async (assignment: any, matchedS
     orConditions.push({ section: rawSec });
   }
 
+  const isSemester1 = Number(assignment.semester) === 1;
+
+  const dbOrder: any[] = isSemester1
+    ? [
+        [{ model: User, as: 'user' }, 'firstName', 'ASC'],
+        [{ model: User, as: 'user' }, 'lastName', 'ASC'],
+        ['usn', 'ASC'],
+        ['enrollmentNumber', 'ASC'],
+      ]
+    : [
+        ['usn', 'ASC'],
+        ['enrollmentNumber', 'ASC'],
+        [{ model: User, as: 'user' }, 'firstName', 'ASC'],
+        [{ model: User, as: 'user' }, 'lastName', 'ASC'],
+      ];
+
   const students = await Student.findAll({
     where: {
       departmentId: targetDeptId,
@@ -142,10 +158,10 @@ export const getEnrolledStudentsForAssignment = async (assignment: any, matchedS
       { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] },
       { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
     ],
-    order: [['usn', 'ASC'], ['enrollmentNumber', 'ASC']],
+    order: dbOrder,
   });
 
-  // Ensure uniqueness by student ID
+  // Ensure uniqueness by student ID while preserving semester-specific order
   const seenIds = new Set<string>();
   const uniqueStudents: typeof students = [];
   for (const s of students) {
@@ -154,6 +170,29 @@ export const getEnrolledStudentsForAssignment = async (assignment: any, matchedS
       uniqueStudents.push(s);
     }
   }
+
+  // Authoritative sorting guarantee based on semester business rule:
+  // Semester 1: Student Name A-Z (case-insensitive), tie-breaker USN ASC
+  // Semester 2+: USN ASC (case-insensitive), tie-breaker Student Name A-Z
+  uniqueStudents.sort((a: any, b: any) => {
+    if (isSemester1) {
+      const nameA = a.user ? `${a.user.firstName || ''} ${a.user.lastName || ''}`.trim().toLowerCase() : '';
+      const nameB = b.user ? `${b.user.firstName || ''} ${b.user.lastName || ''}`.trim().toLowerCase() : '';
+      const cmp = nameA.localeCompare(nameB);
+      if (cmp !== 0) return cmp;
+      const usnA = (a.usn || a.enrollmentNumber || '').trim().toLowerCase();
+      const usnB = (b.usn || b.enrollmentNumber || '').trim().toLowerCase();
+      return usnA.localeCompare(usnB);
+    } else {
+      const usnA = (a.usn || a.enrollmentNumber || '').trim().toLowerCase();
+      const usnB = (b.usn || b.enrollmentNumber || '').trim().toLowerCase();
+      const cmp = usnA.localeCompare(usnB);
+      if (cmp !== 0) return cmp;
+      const nameA = a.user ? `${a.user.firstName || ''} ${a.user.lastName || ''}`.trim().toLowerCase() : '';
+      const nameB = b.user ? `${b.user.firstName || ''} ${b.user.lastName || ''}`.trim().toLowerCase() : '';
+      return nameA.localeCompare(nameB);
+    }
+  });
 
   return { students: uniqueStudents, matchedSection: sec };
 };
@@ -495,22 +534,6 @@ export const facultyService = {
     };
   },
 
-  /**
-   * Returns bitwise marks authorized courses list
-   */
-  async getFacultyMarksList(userId: string, semesterFilter?: string, academicYearFilter?: string) {
-    const assignments = await this.getFacultyAssignments(userId, academicYearFilter);
-    let filtered = assignments.filter((a) => a.marksAccess);
-
-    if (semesterFilter && semesterFilter !== 'ALL') {
-      const sem = parseInt(semesterFilter, 10);
-      if (!isNaN(sem)) {
-        filtered = filtered.filter((a) => a.semester === sem);
-      }
-    }
-
-    return filtered;
-  },
 
   /**
    * Records or updates attendance session for an assigned cohort
@@ -547,13 +570,7 @@ export const facultyService = {
     const sessionDate = payload.date || new Date().toISOString().split('T')[0];
     const sessionPeriod = payload.sessionPeriod || 1;
 
-    // 2. Future date check (REQUIREMENT 23)
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (sessionDate > todayStr) {
-      throw new Error('Future attendance is not allowed. Selected date exceeds current date.');
-    }
-
-    // 3. Verify section roster isolation (REQUIREMENT 9 & 11)
+    // 2. Verify section roster isolation (REQUIREMENT 9 & 11)
     const { students: validStudents, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
 
     const validStudentIds = new Set(validStudents.map((s) => s.id));
@@ -676,6 +693,11 @@ export const facultyService = {
       logger.info(
         `Attendance session saved by faculty ${userId} for assignment ${assignmentId} on ${sessionDate} (P${sessionPeriod})`
       );
+
+      // Trigger automatic background Google Drive backup (non-blocking)
+      attendanceBackupQueueService.queueAttendanceBackup(assignment.id, session.id, 'UPDATE').catch((err) => {
+        logger.warn('Google Drive backup queue notice:', err.message);
+      });
     } catch (err: any) {
       await transaction.rollback();
       logger.error('SAVE_FACULTY_ATTENDANCE_TRANSACTION_ERROR:', err);
@@ -685,288 +707,6 @@ export const facultyService = {
     return this.getFacultyAttendanceWorkspace(userId, assignmentId);
   },
 
-  /**
-   * Retrieves continuous assessment / marks workspace details
-   */
-  async getFacultyMarksWorkspace(userId: string, assignmentId: string) {
-    const assignment = await FacultyAssignment.findOne({
-      where: {
-        id: assignmentId,
-        userId,
-        status: 'ACTIVE',
-        marksAccess: true,
-      },
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: Department, as: 'department' },
-      ],
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized or inactive marks assignment. Access denied.');
-    }
-
-    const { students, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
-
-    // Ensure Assessment & AssessmentComponents exist for this subject/cohort
-    const [assessment] = await Assessment.findOrCreate({
-      where: {
-        subjectId: assignment.subjectId,
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        academicYear: assignment.academicYear || '2026-27',
-      },
-      defaults: {
-        subjectId: assignment.subjectId,
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        section: assignment.section,
-        academicYear: assignment.academicYear || '2026-27',
-        name: 'Continuous Internal Evaluation (CIE)',
-        maxMarks: 50.0,
-        status: 'ACTIVE',
-      },
-    });
-
-    // Components: IA-1, IA-2, Assignment
-    const [compIa1] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'IA-1' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'IA-1',
-        componentType: 'THEORY',
-        maxMarks: 20.0,
-        sequence: 1,
-      },
-    });
-
-    const [compIa2] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'IA-2' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'IA-2',
-        componentType: 'THEORY',
-        maxMarks: 20.0,
-        sequence: 2,
-      },
-    });
-
-    const [compAssign] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'Assignment' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'Assignment',
-        componentType: 'ASSIGNMENT',
-        maxMarks: 10.0,
-        sequence: 3,
-      },
-    });
-
-    // Fetch existing student marks
-    const studentIds = students.map((s) => s.id);
-    const existingMarks = await StudentMarks.findAll({
-      where: {
-        assessmentId: assessment.id,
-        studentId: { [Op.in]: studentIds },
-      },
-    });
-
-    const marksMap: { [studentId: string]: { ia1: number; ia2: number; assignment: number } } = {};
-    existingMarks.forEach((m) => {
-      if (!marksMap[m.studentId]) {
-        marksMap[m.studentId] = { ia1: 0, ia2: 0, assignment: 0 };
-      }
-      if (m.componentId === compIa1.id) marksMap[m.studentId].ia1 = Number(m.marks);
-      if (m.componentId === compIa2.id) marksMap[m.studentId].ia2 = Number(m.marks);
-      if (m.componentId === compAssign.id) marksMap[m.studentId].assignment = Number(m.marks);
-    });
-
-    const evaluations = [
-      { name: 'Internal Assessment 1 (IA-1)', maxMarks: 20, weightage: '20%' },
-      { name: 'Internal Assessment 2 (IA-2)', maxMarks: 20, weightage: '20%' },
-      { name: 'Continuous Assignment / Quiz', maxMarks: 10, weightage: '10%' },
-    ];
-
-    return {
-      assignment: {
-        id: assignment.id,
-        subjectId: (assignment as any).subject?.id,
-        subjectName: (assignment as any).subject?.name || 'Course',
-        subjectCode: (assignment as any).subject?.code || 'SUB001',
-        semester: assignment.semester,
-        section: assignment.section,
-        academicYear: assignment.academicYear,
-        departmentCode: (assignment as any).department?.code || 'CSE',
-      },
-      evaluations,
-      students: students.map((s: any) => {
-        const sMarks = marksMap[s.id] || { ia1: 0, ia2: 0, assignment: 0 };
-        const totalCie = Number((sMarks.ia1 + sMarks.ia2 + sMarks.assignment).toFixed(1));
-        return {
-          id: s.id,
-          usn: s.usn || s.enrollmentNumber || 'N/A',
-          enrollmentNumber: s.enrollmentNumber || '',
-          studentName: s.user ? `${s.user.firstName || ''} ${s.user.lastName || ''}`.trim() : 'Student',
-          ia1: sMarks.ia1,
-          ia2: sMarks.ia2,
-          assignment: sMarks.assignment,
-          totalCie,
-        };
-      }),
-    };
-  },
-
-  /**
-   * Saves continuous assessment / marks for students
-   */
-  async saveFacultyMarks(
-    userId: string,
-    assignmentId: string,
-    payload: {
-      marks: Array<{
-        studentId: string;
-        ia1?: number;
-        ia2?: number;
-        assignment?: number;
-      }>;
-    }
-  ) {
-    const assignment = await FacultyAssignment.findOne({
-      where: {
-        id: assignmentId,
-        userId,
-        status: 'ACTIVE',
-        marksAccess: true,
-      },
-    });
-
-    if (!assignment) {
-      throw new Error('Unauthorized or inactive marks assignment. Access denied.');
-    }
-
-    const [assessment] = await Assessment.findOrCreate({
-      where: {
-        subjectId: assignment.subjectId,
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        academicYear: assignment.academicYear || '2026-27',
-      },
-      defaults: {
-        subjectId: assignment.subjectId,
-        departmentId: assignment.departmentId,
-        semester: assignment.semester,
-        section: assignment.section,
-        academicYear: assignment.academicYear || '2026-27',
-        name: 'Continuous Internal Evaluation (CIE)',
-        maxMarks: 50.0,
-        status: 'ACTIVE',
-      },
-    });
-
-    const [compIa1] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'IA-1' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'IA-1',
-        componentType: 'THEORY',
-        maxMarks: 20.0,
-        sequence: 1,
-      },
-    });
-
-    const [compIa2] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'IA-2' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'IA-2',
-        componentType: 'THEORY',
-        maxMarks: 20.0,
-        sequence: 2,
-      },
-    });
-
-    const [compAssign] = await AssessmentComponent.findOrCreate({
-      where: { assessmentId: assessment.id, name: 'Assignment' },
-      defaults: {
-        assessmentId: assessment.id,
-        name: 'Assignment',
-        componentType: 'ASSIGNMENT',
-        maxMarks: 10.0,
-        sequence: 3,
-      },
-    });
-
-    // Upsert student marks for each component
-    for (const row of payload.marks) {
-      if (!row.studentId) continue;
-
-      if (row.ia1 !== undefined) {
-        const val = Math.min(20, Math.max(0, Number(row.ia1) || 0));
-        const [mRecord, created] = await StudentMarks.findOrCreate({
-          where: {
-            assessmentId: assessment.id,
-            componentId: compIa1.id,
-            studentId: row.studentId,
-          },
-          defaults: {
-            assessmentId: assessment.id,
-            componentId: compIa1.id,
-            studentId: row.studentId,
-            marks: val,
-          },
-        });
-        if (!created && Number(mRecord.marks) !== val) {
-          mRecord.marks = val;
-          await mRecord.save();
-        }
-      }
-
-      if (row.ia2 !== undefined) {
-        const val = Math.min(20, Math.max(0, Number(row.ia2) || 0));
-        const [mRecord, created] = await StudentMarks.findOrCreate({
-          where: {
-            assessmentId: assessment.id,
-            componentId: compIa2.id,
-            studentId: row.studentId,
-          },
-          defaults: {
-            assessmentId: assessment.id,
-            componentId: compIa2.id,
-            studentId: row.studentId,
-            marks: val,
-          },
-        });
-        if (!created && Number(mRecord.marks) !== val) {
-          mRecord.marks = val;
-          await mRecord.save();
-        }
-      }
-
-      if (row.assignment !== undefined) {
-        const val = Math.min(10, Math.max(0, Number(row.assignment) || 0));
-        const [mRecord, created] = await StudentMarks.findOrCreate({
-          where: {
-            assessmentId: assessment.id,
-            componentId: compAssign.id,
-            studentId: row.studentId,
-          },
-          defaults: {
-            assessmentId: assessment.id,
-            componentId: compAssign.id,
-            studentId: row.studentId,
-            marks: val,
-          },
-        });
-        if (!created && Number(mRecord.marks) !== val) {
-          mRecord.marks = val;
-          await mRecord.save();
-        }
-      }
-    }
-
-    logger.info(`Marks updated by faculty ${userId} for assignment ${assignmentId}`);
-    return this.getFacultyMarksWorkspace(userId, assignmentId);
-  },
 
   /**
    * Aggregates assignment-scoped analytics strictly for the authenticated faculty
@@ -1042,6 +782,760 @@ export const facultyService = {
       defaulters,
       defaultersCount: defaulters.length,
       termStatus: 'AY 2026-27 Active Term',
+    };
+  },
+
+  /**
+   * Generates official Class-wise Attendance Register Excel spreadsheet
+   */
+  async exportFacultyAttendanceExcel(userId: string, assignmentId: string): Promise<{ buffer: Buffer; filename: string }> {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const assignment = await FacultyAssignment.findOne({
+      where: {
+        id: assignmentId,
+        [Op.or]: [
+          { userId },
+          ...(teacherId ? [{ teacherId }] : []),
+        ],
+        status: 'ACTIVE',
+      },
+    });
+
+    if (!assignment) {
+      throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
+    }
+
+    const { buffer, filename } = await attendanceExcelService.generateAttendanceWorkbookBuffer(assignment.id);
+    return { buffer, filename };
+  },
+
+  async getFacultyAttendanceHistory(userId: string, assignmentId: string) {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const assignment = await FacultyAssignment.findOne({
+      where: {
+        id: assignmentId,
+        [Op.or]: [
+          { userId },
+          ...(teacherId ? [{ teacherId }] : []),
+        ],
+        status: 'ACTIVE',
+      },
+      include: [
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+      ],
+    });
+
+    if (!assignment) {
+      throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
+    }
+
+    const sessions = await AttendanceSession.findAll({
+      where: { facultyAssignmentId: assignment.id },
+      order: [
+        ['attendanceDate', 'DESC'],
+        ['sessionPeriod', 'DESC'],
+      ],
+    });
+
+    const formattedSessions = sessions.map((s) => {
+      const dStr = typeof s.attendanceDate === 'string' ? s.attendanceDate : String(s.attendanceDate);
+      const total = s.totalStudents || 0;
+      const present = s.presentCount || 0;
+      const absent = s.absentCount || 0;
+      const pct = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 100.0;
+
+      return {
+        id: s.id,
+        date: dStr,
+        sessionPeriod: s.sessionPeriod || 1,
+        status: s.status,
+        totalStudents: total,
+        presentCount: present,
+        absentCount: absent,
+        percentage: pct,
+        submittedAt: s.submittedAt || s.createdAt,
+      };
+    });
+
+    return {
+      assignment: {
+        id: assignment.id,
+        subjectId: (assignment as any).subject?.id,
+        subjectName: (assignment as any).subject?.name || 'Assigned Subject',
+        subjectCode: (assignment as any).subject?.code || 'SUB001',
+        semester: assignment.semester,
+        section: normalizeSection(assignment.section),
+        academicYear: assignment.academicYear,
+        departmentCode: (assignment as any).department?.code || 'CSE',
+      },
+      totalSessions: formattedSessions.length,
+      sessions: formattedSessions,
+    };
+  },
+
+  /**
+   * Retrieves detailed attendance session data + student records for correction workspace
+   */
+  async getFacultyAttendanceSessionDetail(userId: string, sessionId: string) {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const session = await AttendanceSession.findByPk(sessionId, {
+      include: [
+        { model: FacultyAssignment, as: 'facultyAssignment' },
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+      ],
+    });
+
+    if (!session) {
+      throw new Error('Attendance session not found.');
+    }
+
+    const rawSession = session as any;
+    const assignment = rawSession.facultyAssignment;
+    if (!assignment || assignment.status !== 'ACTIVE') {
+      throw new Error('Associated faculty assignment is inactive or missing.');
+    }
+
+    // Check ownership
+    const isOwner = assignment.userId === userId || (teacherId && assignment.teacherId === teacherId);
+    if (!isOwner) {
+      throw new Error('Unauthorized: You do not have permission to view or correct this attendance session.');
+    }
+
+    // Fetch authoritative section students
+    const { students } = await getEnrolledStudentsForAssignment(assignment);
+
+    // Fetch attendance records for this session
+    const records = await AttendanceRecord.findAll({
+      where: {
+        attendanceSessionId: session.id,
+      },
+    });
+
+    const recordMap = new Map<string, AttendanceRecord>();
+    records.forEach((r) => {
+      recordMap.set(r.studentId, r);
+    });
+
+    const studentRows = students.map((st: any, idx: number) => {
+      const rec = recordMap.get(st.id);
+      const sName = st.user ? `${st.user.firstName || ''} ${st.user.lastName || ''}`.trim() : 'Student';
+      const usn = st.usn || st.enrollmentNumber || 'N/A';
+      const currentStatus: 'PRESENT' | 'ABSENT' | 'EXCUSED' = rec ? (rec.status as any) : 'ABSENT';
+
+      return {
+        slNo: idx + 1,
+        studentId: st.id,
+        usn: usn.toUpperCase(),
+        studentName: sName,
+        section: normalizeSection(st.section || assignment.section),
+        currentStatus,
+        attendanceRecordId: rec?.id || null,
+      };
+    });
+
+    const totalStudents = studentRows.length;
+    const presentCount = studentRows.filter((s) => s.currentStatus === 'PRESENT').length;
+    const absentCount = studentRows.filter((s) => s.currentStatus === 'ABSENT').length;
+    const pct = totalStudents > 0 ? Number(((presentCount / totalStudents) * 100).toFixed(1)) : 100.0;
+
+    // Fetch recent correction audit logs for this session
+    const allLogs = await AuditLog.findAll({
+      where: { action: 'ATTENDANCE_CORRECTED' },
+      include: [{ model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email'] }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const sessionLogs = allLogs
+      .filter((l: any) => l.details?.attendanceSessionId === session.id)
+      .map((l: any) => ({
+        id: l.id,
+        studentId: l.details?.studentId,
+        studentUsn: l.details?.studentUsn,
+        studentName: l.details?.studentName,
+        oldStatus: l.details?.oldStatus,
+        newStatus: l.details?.newStatus,
+        reason: l.details?.reason,
+        remarks: l.details?.remarks,
+        correctedByFacultyName:
+          l.details?.correctedByFacultyName ||
+          (l.user ? `${l.user.firstName || ''} ${l.user.lastName || ''}`.trim() : 'Faculty'),
+        createdAt: l.createdAt,
+      }));
+
+    const sDateStr = typeof session.attendanceDate === 'string' ? session.attendanceDate : String(session.attendanceDate);
+
+    return {
+      session: {
+        id: session.id,
+        date: sDateStr,
+        sessionPeriod: session.sessionPeriod || 1,
+        status: session.status,
+        totalStudents,
+        presentCount,
+        absentCount,
+        percentage: pct,
+        isLocked: session.status === 'LOCKED',
+      },
+      assignment: {
+        id: assignment.id,
+        subjectId: (session as any).subject?.id || assignment.subjectId,
+        subjectName: (session as any).subject?.name || 'Assigned Subject',
+        subjectCode: (session as any).subject?.code || 'SUB001',
+        departmentName: (session as any).department?.name || 'Department',
+        departmentCode: (session as any).department?.code || 'CSE',
+        semester: session.semester,
+        section: normalizeSection(session.section || assignment.section),
+        academicYear: session.academicYear,
+      },
+      students: studentRows,
+      corrections: sessionLogs,
+    };
+  },
+
+  /**
+   * Transactional attendance correction handler
+   */
+  async correctFacultyAttendance(
+    userId: string,
+    sessionId: string,
+    payload: {
+      changes: Array<{
+        studentId: string;
+        newStatus: 'PRESENT' | 'ABSENT' | 'EXCUSED';
+        reason: string;
+        remarks?: string;
+      }>;
+    },
+    reqMeta?: { ipAddress?: string; userAgent?: string }
+  ) {
+    if (!payload || !Array.isArray(payload.changes) || payload.changes.length === 0) {
+      throw new Error('No attendance changes provided.');
+    }
+
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const session = await AttendanceSession.findByPk(sessionId, {
+      include: [
+        { model: FacultyAssignment, as: 'facultyAssignment' },
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+      ],
+    });
+
+    if (!session) {
+      throw new Error('Attendance session not found.');
+    }
+
+    if (session.status === 'LOCKED') {
+      throw new Error('Attendance session is locked and cannot be corrected.');
+    }
+
+    const rawSession = session as any;
+    const assignment = rawSession.facultyAssignment;
+    if (!assignment || assignment.status !== 'ACTIVE') {
+      throw new Error('Associated faculty assignment is inactive or missing.');
+    }
+
+    // Validate ownership
+    const isOwner = assignment.userId === userId || (teacherId && assignment.teacherId === teacherId);
+    if (!isOwner) {
+      throw new Error('Unauthorized: You do not have permission to correct attendance for this session.');
+    }
+
+    const facultyUser = await User.findByPk(userId);
+    const facultyName = facultyUser
+      ? `${facultyUser.firstName || ''} ${facultyUser.lastName || ''}`.trim() || facultyUser.email
+      : 'Faculty';
+
+    // Validate reasons
+    for (const change of payload.changes) {
+      if (!change.reason || !change.reason.trim()) {
+        throw new Error(`A valid reason is required for attendance correction.`);
+      }
+      if (change.reason === 'Other' && (!change.remarks || !change.remarks.trim())) {
+        throw new Error(`Remarks are required when reason is "Other".`);
+      }
+      if (!['PRESENT', 'ABSENT', 'EXCUSED'].includes(change.newStatus)) {
+        throw new Error(`Invalid attendance status: ${change.newStatus}`);
+      }
+    }
+
+    // Verify student roster isolation
+    const { students } = await getEnrolledStudentsForAssignment(assignment);
+    const studentMap = new Map<string, any>();
+    students.forEach((s: any) => studentMap.set(s.id, s));
+
+    for (const change of payload.changes) {
+      if (!studentMap.has(change.studentId)) {
+        throw new Error(`Student ${change.studentId} is not in this section roster.`);
+      }
+    }
+
+    const sDateStr = typeof session.attendanceDate === 'string' ? session.attendanceDate : String(session.attendanceDate);
+
+    // Run in a transaction
+    const transaction = await db.transaction();
+    let updatedCount = 0;
+
+    try {
+      for (const change of payload.changes) {
+        const student = studentMap.get(change.studentId);
+        const sName = student?.user ? `${student.user.firstName || ''} ${student.user.lastName || ''}`.trim() : 'Student';
+        const sUsn = student?.usn || student?.enrollmentNumber || 'N/A';
+
+        // Find existing record
+        let record = await AttendanceRecord.findOne({
+          where: {
+            attendanceSessionId: session.id,
+            studentId: change.studentId,
+          },
+          transaction,
+        });
+
+        if (!record) {
+          // Fallback lookup by assignment, date, period
+          record = await AttendanceRecord.findOne({
+            where: {
+              facultyAssignmentId: assignment.id,
+              studentId: change.studentId,
+              date: sDateStr as any,
+              sessionPeriod: session.sessionPeriod,
+            },
+            transaction,
+          });
+        }
+
+        const oldStatus = record ? record.status : 'ABSENT';
+
+        // Only update and log if status actually changes
+        if (oldStatus !== change.newStatus) {
+          if (record) {
+            record.status = change.newStatus;
+            record.attendanceSessionId = session.id;
+            await record.save({ transaction });
+          } else {
+            record = await AttendanceRecord.create(
+              {
+                attendanceSessionId: session.id,
+                studentId: change.studentId,
+                facultyAssignmentId: assignment.id,
+                departmentId: assignment.departmentId,
+                subjectId: assignment.subjectId,
+                semester: assignment.semester,
+                section: session.section || assignment.section,
+                academicYear: session.academicYear || assignment.academicYear,
+                date: sDateStr as any,
+                sessionPeriod: session.sessionPeriod,
+                status: change.newStatus,
+              },
+              { transaction }
+            );
+          }
+
+          // Create immutable AuditLog
+          await AuditLog.create(
+            {
+              userId,
+              action: 'ATTENDANCE_CORRECTED',
+              ipAddress: reqMeta?.ipAddress || null,
+              userAgent: reqMeta?.userAgent || null,
+              details: {
+                entityType: 'ATTENDANCE_RECORD',
+                entityId: record.id,
+                studentId: change.studentId,
+                studentUsn: sUsn,
+                studentName: sName,
+                attendanceSessionId: session.id,
+                facultyAssignmentId: assignment.id,
+                subjectId: assignment.subjectId,
+                subjectName: (session as any).subject?.name || (assignment as any).subject?.name,
+                subjectCode: (session as any).subject?.code || (assignment as any).subject?.code,
+                section: session.section || assignment.section,
+                semester: session.semester,
+                academicYear: session.academicYear,
+                date: sDateStr,
+                sessionPeriod: session.sessionPeriod,
+                oldStatus,
+                newStatus: change.newStatus,
+                reason: change.reason,
+                remarks: change.remarks || '',
+                correctedByFacultyName: facultyName,
+                correctedByUserId: userId,
+                timestamp: new Date().toISOString(),
+              },
+            },
+            { transaction }
+          );
+
+          updatedCount++;
+        }
+      }
+
+      // If records were updated, recalculate session present/absent counts
+      if (updatedCount > 0) {
+        const allSessionRecords = await AttendanceRecord.findAll({
+          where: { attendanceSessionId: session.id },
+          transaction,
+        });
+
+        const newPresent = allSessionRecords.filter((r) => r.status === 'PRESENT').length;
+        const newAbsent = allSessionRecords.filter((r) => r.status === 'ABSENT').length;
+
+        session.presentCount = newPresent;
+        session.absentCount = newAbsent;
+        session.totalStudents = allSessionRecords.length > 0 ? allSessionRecords.length : session.totalStudents;
+        await session.save({ transaction });
+      }
+
+      await transaction.commit();
+      logger.info(`Attendance correction committed for session ${sessionId}. ${updatedCount} records changed.`);
+    } catch (err) {
+      await transaction.rollback();
+      logger.error('CORRECT_FACULTY_ATTENDANCE_TRANSACTION_ERROR:', err);
+      throw err;
+    }
+
+    return this.getFacultyAttendanceSessionDetail(userId, sessionId);
+  },
+
+  /**
+   * Retrieves full correction history for an assignment
+   */
+  async getFacultyAssignmentCorrections(userId: string, assignmentId: string) {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const assignment = await FacultyAssignment.findOne({
+      where: {
+        id: assignmentId,
+        [Op.or]: [
+          { userId },
+          ...(teacherId ? [{ teacherId }] : []),
+        ],
+        status: 'ACTIVE',
+      },
+    });
+
+    if (!assignment) {
+      throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
+    }
+
+    const allLogs = await AuditLog.findAll({
+      where: { action: 'ATTENDANCE_CORRECTED' },
+      include: [{ model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email'] }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const assignmentLogs = allLogs
+      .filter((l: any) => l.details?.facultyAssignmentId === assignment.id)
+      .map((l: any) => ({
+        id: l.id,
+        sessionId: l.details?.attendanceSessionId,
+        date: l.details?.date,
+        sessionPeriod: l.details?.sessionPeriod,
+        studentId: l.details?.studentId,
+        studentUsn: l.details?.studentUsn,
+        studentName: l.details?.studentName,
+        oldStatus: l.details?.oldStatus,
+        newStatus: l.details?.newStatus,
+        reason: l.details?.reason,
+        remarks: l.details?.remarks,
+        correctedByFacultyName:
+          l.details?.correctedByFacultyName ||
+          (l.user ? `${l.user.firstName || ''} ${l.user.lastName || ''}`.trim() : 'Faculty'),
+        createdAt: l.createdAt,
+      }));
+
+    return assignmentLogs;
+  },
+
+  /**
+   * Searches students strictly across the logged-in faculty's authorized active assignments.
+   * Enforces backend assignment scoping and section isolation.
+   */
+  async searchFacultyStudents(
+    userId: string,
+    query: string,
+    academicYear?: string,
+    semester?: string
+  ) {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+      return [];
+    }
+
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const whereClause: any = {
+      [Op.or]: [
+        { userId },
+        ...(teacherId ? [{ teacherId }] : []),
+      ],
+      status: 'ACTIVE',
+    };
+
+    if (academicYear && academicYear !== 'ALL') {
+      let resolvedYear = academicYear;
+      if (/^[0-9a-fA-F-]{36}$/.test(academicYear)) {
+        const ayRecord = await AcademicYear.findByPk(academicYear);
+        if (ayRecord?.year) resolvedYear = ayRecord.year;
+      }
+      const ayVariants = getAcademicYearVariants(resolvedYear);
+      if (ayVariants.length > 0) {
+        whereClause.academicYear = { [Op.in]: ayVariants };
+      }
+    }
+
+    if (semester && semester !== 'ALL') {
+      const sem = parseInt(semester, 10);
+      if (!isNaN(sem)) {
+        whereClause.semester = sem;
+      }
+    }
+
+    const assignments = await FacultyAssignment.findAll({
+      where: whereClause,
+      include: [
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+      ],
+    });
+
+    if (assignments.length === 0) {
+      return [];
+    }
+
+    const studentMap = new Map<string, {
+      id: string;
+      name: string;
+      usn: string;
+      department: string;
+      departmentCode: string;
+      semester: number;
+      section: string;
+      sectionId: string | null;
+      assignedSubjectsCount: number;
+    }>();
+
+    for (const a of assignments) {
+      const { students, matchedSection } = await getEnrolledStudentsForAssignment(a);
+      for (const st of students) {
+        const u = (st as any).user;
+        const firstName = (u?.firstName || '').toLowerCase();
+        const lastName = (u?.lastName || '').toLowerCase();
+        const fullName = `${firstName} ${lastName}`.trim();
+        const usn = (st.usn || '').toLowerCase();
+        const enrollmentNumber = (st.enrollmentNumber || '').toLowerCase();
+
+        const matches =
+          usn.includes(q) ||
+          enrollmentNumber.includes(q) ||
+          fullName.includes(q) ||
+          firstName.includes(q) ||
+          lastName.includes(q);
+
+        if (matches) {
+          const sName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : 'Student';
+          const sUsn = (st.usn || st.enrollmentNumber || 'N/A').toUpperCase();
+          const sSec = normalizeSection(st.section || a.section);
+
+          if (!studentMap.has(st.id)) {
+            studentMap.set(st.id, {
+              id: st.id,
+              name: sName,
+              usn: sUsn,
+              department: (st as any).department?.name || (a as any).department?.name || 'Department',
+              departmentCode: (st as any).department?.code || (a as any).department?.code || 'CSE',
+              semester: st.semester,
+              section: sSec,
+              sectionId: matchedSection?.id || (a as any).sectionId || null,
+              assignedSubjectsCount: 1,
+            });
+          } else {
+            const existing = studentMap.get(st.id)!;
+            existing.assignedSubjectsCount++;
+          }
+        }
+      }
+    }
+
+    const results = Array.from(studentMap.values()).sort((a, b) => {
+      if (a.semester === 1 && b.semester === 1) {
+        const nameA = (a.name || '').trim().toLowerCase();
+        const nameB = (b.name || '').trim().toLowerCase();
+        const cmp = nameA.localeCompare(nameB);
+        if (cmp !== 0) return cmp;
+        return (a.usn || '').trim().toLowerCase().localeCompare((b.usn || '').trim().toLowerCase());
+      }
+      if (a.semester === 1 && b.semester !== 1) return -1;
+      if (a.semester !== 1 && b.semester === 1) return 1;
+      const usnA = (a.usn || '').trim().toLowerCase();
+      const usnB = (b.usn || '').trim().toLowerCase();
+      const cmp = usnA.localeCompare(usnB);
+      if (cmp !== 0) return cmp;
+      return (a.name || '').trim().toLowerCase().localeCompare((b.name || '').trim().toLowerCase());
+    });
+    return results;
+  },
+
+  /**
+   * Retrieves subject-wise attendance for a single student, ONLY for subjects/sections
+   * that the logged-in faculty is authorized to teach via FacultyAssignment.
+   */
+  async getFacultyStudentAttendance(
+    userId: string,
+    studentId: string,
+    academicYear?: string
+  ) {
+    const student = await Student.findByPk(studentId, {
+      include: [
+        { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+    });
+
+    if (!student) {
+      throw new Error('Student not found.');
+    }
+
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const teacherId = teacher?.id;
+
+    const whereClause: any = {
+      [Op.or]: [
+        { userId },
+        ...(teacherId ? [{ teacherId }] : []),
+      ],
+      status: 'ACTIVE',
+    };
+
+    if (academicYear && academicYear !== 'ALL') {
+      let resolvedYear = academicYear;
+      if (/^[0-9a-fA-F-]{36}$/.test(academicYear)) {
+        const ayRecord = await AcademicYear.findByPk(academicYear);
+        if (ayRecord?.year) resolvedYear = ayRecord.year;
+      }
+      const ayVariants = getAcademicYearVariants(resolvedYear);
+      if (ayVariants.length > 0) {
+        whereClause.academicYear = { [Op.in]: ayVariants };
+      }
+    }
+
+    const assignments = await FacultyAssignment.findAll({
+      where: whereClause,
+      include: [
+        { model: Subject, as: 'subject' },
+        { model: Department, as: 'department' },
+      ],
+      order: [['semester', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    const studentInfo = {
+      id: student.id,
+      name: (student as any).user ? `${(student as any).user.firstName || ''} ${(student as any).user.lastName || ''}`.trim() : 'Student',
+      usn: (student.usn || student.enrollmentNumber || 'N/A').toUpperCase(),
+      department: (student as any).department?.name || 'Department',
+      departmentCode: (student as any).department?.code || 'CSE',
+      semester: student.semester,
+      section: normalizeSection(student.section),
+    };
+
+    const matchingSubjects: any[] = [];
+
+    for (const a of assignments) {
+      const { students, matchedSection } = await getEnrolledStudentsForAssignment(a);
+      const isEnrolled = students.some((st) => st.id === student.id);
+
+      if (!isEnrolled) {
+        // Strict Authorization: If student is not in this assignment's section roster, skip!
+        continue;
+      }
+
+      // Fetch all conducted sessions for this assignment
+      const sessions = await AttendanceSession.findAll({
+        where: { facultyAssignmentId: a.id },
+        order: [['attendanceDate', 'DESC'], ['sessionPeriod', 'DESC']],
+      });
+
+      // Fetch student's attendance records for this assignment
+      const records = await AttendanceRecord.findAll({
+        where: {
+          facultyAssignmentId: a.id,
+          studentId: student.id,
+        },
+        order: [['date', 'DESC'], ['sessionPeriod', 'DESC']],
+      });
+
+      // Calculate unique conducted dates/sessions
+      const conductedCount = sessions.length > 0 ? sessions.length : records.length;
+      const attendedCount = records.filter((r) => r.status === 'PRESENT').length;
+      const absentCount = records.filter((r) => r.status === 'ABSENT').length;
+      const excusedCount = records.filter((r) => r.status === 'EXCUSED').length;
+
+      const attendancePercentage =
+        conductedCount > 0 ? Number(((attendedCount / conductedCount) * 100).toFixed(2)) : null;
+
+      const eligibilityStatus =
+        conductedCount === 0
+          ? 'No Records'
+          : attendancePercentage !== null && attendancePercentage >= ATTENDANCE_THRESHOLD
+          ? 'Eligible'
+          : 'Not Eligible';
+
+      const recentSessions = sessions.slice(0, 10).map((s) => {
+        const sDate = typeof s.attendanceDate === 'string' ? s.attendanceDate : String(s.attendanceDate);
+        const rec = records.find(
+          (r) => r.attendanceSessionId === s.id || String(r.date) === sDate
+        );
+        return {
+          sessionId: s.id,
+          date: sDate,
+          period: s.sessionPeriod || 1,
+          status: rec ? rec.status : 'ABSENT',
+        };
+      });
+
+      matchingSubjects.push({
+        facultyAssignmentId: a.id,
+        subjectId: (a as any).subject?.id || a.subjectId,
+        subjectCode: (a as any).subject?.code || 'SUB001',
+        subjectName: (a as any).subject?.name || 'Assigned Subject',
+        credits: (a as any).subject?.credits || 4,
+        type: (a as any).subject?.type || 'THEORY',
+        sectionId: matchedSection?.id || (a as any).sectionId || null,
+        sectionName: normalizeSection(a.section),
+        semester: a.semester,
+        academicYear: a.academicYear,
+        conductedClasses: conductedCount,
+        attendedClasses: attendedCount,
+        absentClasses: absentCount,
+        excusedClasses: excusedCount,
+        attendancePercentage,
+        eligibilityStatus,
+        threshold: ATTENDANCE_THRESHOLD,
+        canCorrect: a.attendanceAccess !== false,
+        latestSessionId: sessions[0]?.id || null,
+        recentSessions,
+      });
+    }
+
+    return {
+      student: studentInfo,
+      subjects: matchingSubjects,
+      message:
+        matchingSubjects.length === 0
+          ? 'No attendance available for your assigned subjects.'
+          : undefined,
     };
   },
 };

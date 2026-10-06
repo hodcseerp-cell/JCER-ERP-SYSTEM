@@ -18,14 +18,12 @@ import FacultyAuthorizationRequest from '../models/FacultyAuthorizationRequest';
 import FacultyAssignment from '../models/FacultyAssignment';
 import HodSubjectHandlingRequest from '../models/HodSubjectHandlingRequest';
 import AttendanceRecord from '../models/AttendanceRecord';
-import Assessment from '../models/Assessment';
-import AssessmentComponent from '../models/AssessmentComponent';
-import StudentMarks from '../models/StudentMarks';
 import User from '../models/User';
 import Notification from '../models/Notification';
 import AuditLog from '../models/AuditLog';
 import sectionAllocationService, { SectionAllocationService } from '../services/sectionAllocation.service';
 import facultyAuthorizationService from '../services/facultyAuthorization.service';
+import semesterAttendanceConsolidationService from '../services/semesterAttendanceConsolidation.service';
 import logger from '../utils/logger.util';
 
 /**
@@ -192,35 +190,7 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
       }
     });
 
-    // 3. Marks Analytics
-    const assessmentWhere: any = {
-      departmentId,
-      academicYear: activeAcademicYear,
-    };
-    if (isSemHandling) {
-      assessmentWhere.semester = effectiveSem && effectiveSem !== 'ALL' ? Number(effectiveSem) : { [Op.in]: [1, 2] };
-    } else if (effectiveSem && effectiveSem !== 'ALL') {
-      assessmentWhere.semester = Number(effectiveSem);
-    }
-    if (querySec && querySec !== 'ALL') assessmentWhere.section = querySec;
-
-    const marksRecords = await StudentMarks.findAll({
-      attributes: ['marks'],
-      include: [
-        {
-          model: Assessment,
-          as: 'assessment',
-          where: assessmentWhere,
-          attributes: ['id', 'departmentId', 'academicYear', 'semester', 'section'],
-        },
-        {
-          model: AssessmentComponent,
-          as: 'component',
-          attributes: ['name', 'maxMarks', 'sequence'],
-        },
-      ],
-      limit: 500,
-    });
+    const marksRecords: any[] = [];
 
     let averageMarks = 0;
     let highestMarks = 0;
@@ -1177,13 +1147,7 @@ export const getHodStudentById = async (req: AuthenticatedRequest, res: Response
     const attendancePercentage = totalSessions > 0 ? Number(((presentSessions / totalSessions) * 100).toFixed(1)) : null;
 
     // Marks records
-    const marks = await StudentMarks.findAll({
-      where: { studentId: id },
-      include: [
-        { model: Assessment, as: 'assessment', attributes: ['name', 'type', 'maxMarks'] },
-        { model: AssessmentComponent, as: 'component', attributes: ['name', 'maxMarks', 'sequence'] },
-      ],
-    });
+    const marks: any[] = [];
 
     return res.json({
       success: true,
@@ -3781,14 +3745,13 @@ export const deleteHodSubject = async (req: AuthenticatedRequest, res: Response,
       });
     }
 
-    // Check active faculty assignments, attendance records, assessments
-    const [assignmentCount, attendanceCount, assessmentCount] = await Promise.all([
+    // Check active faculty assignments, attendance records
+    const [assignmentCount, attendanceCount] = await Promise.all([
       FacultyAssignment.count({ where: { subjectId: id } }),
       AttendanceRecord.count({ where: { subjectId: id } }),
-      Assessment.count({ where: { subjectId: id } }),
     ]);
 
-    const totalAcademicRecords = assignmentCount + attendanceCount + assessmentCount;
+    const totalAcademicRecords = assignmentCount + attendanceCount;
 
     if (totalAcademicRecords > 0) {
       // Check if user requested soft-deactivate instead
@@ -3809,7 +3772,6 @@ export const deleteHodSubject = async (req: AuthenticatedRequest, res: Response,
         details: {
           assignments: assignmentCount,
           attendanceRecords: attendanceCount,
-          assessments: assessmentCount,
         }
       });
     }
@@ -4120,11 +4082,7 @@ export const getHodAcademicsOverview = async (req: AuthenticatedRequest, res: Re
   try {
     const departmentId = req.departmentId;
 
-    const assessments = await Assessment.findAll({
-      where: { departmentId },
-      include: [{ model: Subject, as: 'subject', attributes: ['name', 'code'] }],
-      order: [['createdAt', 'DESC']],
-    });
+    const assessments: any[] = [];
 
     return res.json({
       success: true,
@@ -5248,6 +5206,125 @@ export const getHodSubjectHandlingRequests = async (req: AuthenticatedRequest, r
     return next(error);
   }
 };
+
+/**
+ * GET /api/hod/attendance/consolidated-report
+ * Retrieves the consolidated semester attendance status, sections, subjects, and Drive file info
+ */
+export const getConsolidatedAttendanceReport = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    let departmentId = req.departmentId;
+    if (!departmentId && req.user?.id) {
+      const hod = await getActiveHodRecord(req.user.id);
+      if (hod) departmentId = hod.departmentId;
+    }
+
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Unauthorized: Department not found for active HOD.' });
+    }
+
+    const academicYear = (req.query.academicYear as string) || '2026-27';
+    const semester = Number(req.query.semester) || 1;
+
+    const status = await semesterAttendanceConsolidationService.getConsolidatedBackupStatus({
+      academicYear,
+      departmentId,
+      semester,
+    });
+
+    return res.json({ success: true, data: status });
+  } catch (error) {
+    logger.error('HOD_GET_CONSOLIDATED_ATTENDANCE_REPORT_ERROR:', error);
+    return next(error);
+  }
+};
+
+/**
+ * POST /api/hod/attendance/consolidated-sync
+ * Manually synchronizes the consolidated semester attendance register to Google Drive
+ */
+export const syncConsolidatedAttendance = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    let departmentId = req.departmentId;
+    if (!departmentId && req.user?.id) {
+      const hod = await getActiveHodRecord(req.user.id);
+      if (hod) departmentId = hod.departmentId;
+    }
+
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Unauthorized: Department not found for active HOD.' });
+    }
+
+    const academicYear = (req.body.academicYear as string) || '2026-27';
+    const semester = Number(req.body.semester) || 1;
+
+    const result = await semesterAttendanceConsolidationService.syncConsolidatedSemesterAttendanceToDrive({
+      academicYear,
+      departmentId,
+      semester,
+    });
+
+    await logAudit(req, 'MANUAL_CONSOLIDATED_ATTENDANCE_SYNC', {
+      academicYear,
+      departmentId,
+      semester,
+      googleDriveFileId: result.googleDriveFileId,
+      fileName: result.fileName,
+      stats: result.stats,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Consolidated semester attendance register synced to Google Drive successfully.',
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('HOD_SYNC_CONSOLIDATED_ATTENDANCE_ERROR:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Sync failed — attendance data remains safely stored in PostgreSQL.',
+    });
+  }
+};
+
+/**
+ * GET /api/hod/attendance/consolidated-download
+ * Directly generates and streams the consolidated Excel workbook
+ */
+export const downloadConsolidatedAttendance = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  try {
+    let departmentId = req.departmentId;
+    if (!departmentId && req.user?.id) {
+      const hod = await getActiveHodRecord(req.user.id);
+      if (hod) departmentId = hod.departmentId;
+    }
+
+    if (!departmentId) {
+      return res.status(403).json({ error: 'Unauthorized: Department not found for active HOD.' });
+    }
+
+    const academicYear = (req.query.academicYear as string) || '2026-27';
+    const semester = Number(req.query.semester) || 1;
+
+    const data = await semesterAttendanceConsolidationService.fetchConsolidatedSemesterData({
+      academicYear,
+      departmentId,
+      semester,
+    });
+
+    const buffer = await semesterAttendanceConsolidationService.generateConsolidatedExcelBuffer(data);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${data.fileName}"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.send(buffer);
+  } catch (error) {
+    logger.error('HOD_DOWNLOAD_CONSOLIDATED_ATTENDANCE_ERROR:', error);
+    return next(error);
+  }
+};
+
 
 
 

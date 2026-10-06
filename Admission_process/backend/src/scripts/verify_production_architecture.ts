@@ -5,7 +5,6 @@ import Department from '../models/Department';
 import Subject from '../models/Subject';
 import FacultyAssignment from '../models/FacultyAssignment';
 import AttendanceRecord from '../models/AttendanceRecord';
-import Assessment from '../models/Assessment';
 import User from '../models/User';
 import Teacher from '../models/Teacher';
 import Section from '../models/Section';
@@ -95,25 +94,15 @@ async function runTests() {
         academicYear: '2026-27',
         status: 'ACTIVE',
       });
-    } else {
-      dummyRecord = await Assessment.create({
-        subjectId: testSubject.id,
-        departmentId: eceDept?.id,
-        semester: 3,
-        academicYear: '2026-27',
-        name: 'IA-1 Test',
-        maxMarks: 50,
-      });
     }
 
     // Check academic protection rule
-    const [assignmentCount, attendanceCount, assessmentCount] = await Promise.all([
+    const [assignmentCount, attendanceCount] = await Promise.all([
       FacultyAssignment.count({ where: { subjectId: testSubject.id } }),
       AttendanceRecord.count({ where: { subjectId: testSubject.id } }),
-      Assessment.count({ where: { subjectId: testSubject.id } }),
     ]);
 
-    const totalAcademicRecords = assignmentCount + attendanceCount + assessmentCount;
+    const totalAcademicRecords = assignmentCount + attendanceCount;
     assert(totalAcademicRecords > 0, `Detected ${totalAcademicRecords} academic records linked to subject`);
 
     // In a deletion attempt with academic data:

@@ -49,6 +49,8 @@ export const HodSubjectsPage: React.FC = () => {
   // Subjects state
   const [subjects, setSubjects] = useState<HodSubjectItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [subjectsError, setSubjectsError] = useState<string | null>(null);
+  const [schemeError, setSchemeError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Applied Science 2-level filter states
@@ -106,6 +108,7 @@ export const HodSubjectsPage: React.FC = () => {
 
   const loadDepartmentSchemeAndSubjects = async () => {
     setSchemeLoading(true);
+    setSchemeError(null);
     try {
       const schemeRes = await hodService.getDepartmentScheme();
       setSchemeData(schemeRes);
@@ -118,22 +121,27 @@ export const HodSubjectsPage: React.FC = () => {
       }
 
       await fetchSubjects(schemeRes.activeSchemeId || undefined);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load department scheme info:', err);
-      toast.error('Failed to load academic scheme configuration.');
+      const errMsg = err?.response?.data?.error || err?.response?.data?.message || 'Failed to load academic scheme configuration.';
+      setSchemeError(errMsg);
+      toast.error(errMsg);
     } finally {
       setSchemeLoading(false);
     }
   };
 
-  const fetchSubjects = async (currentScheme?: string) => {
+  const fetchSubjects = async (_currentScheme?: string) => {
     setLoading(true);
+    setSubjectsError(null);
     try {
       const data = await hodService.getSubjects();
-      setSubjects(data);
-    } catch (err) {
+      setSubjects(data || []);
+    } catch (err: any) {
       console.error('Failed to load subjects:', err);
-      toast.error('Failed to load department subjects.');
+      const errMsg = err?.response?.data?.error || err?.response?.data?.message || 'Failed to load department subjects.';
+      setSubjectsError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
@@ -590,6 +598,30 @@ export const HodSubjectsPage: React.FC = () => {
                   <td colSpan={7} className="py-16 text-center text-neutral-400">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent" />
                     <p className="mt-2 text-xs font-semibold">Loading master subjects...</p>
+                  </td>
+                </tr>
+              ) : subjectsError ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center">
+                    <div className="max-w-sm mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center mx-auto text-rose-600">
+                        <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                        Unable to load subjects
+                      </h3>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                        {subjectsError}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => fetchSubjects()}
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : displayedSubjects.length > 0 ? (
