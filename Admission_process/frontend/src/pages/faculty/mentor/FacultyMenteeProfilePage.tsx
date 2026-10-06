@@ -334,8 +334,9 @@ export const FacultyMenteeProfilePage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-20">
       {/* ── HEADER ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200 dark:border-neutral-800 pb-5">
-        <div className="flex items-center gap-4">
+      <div className="space-y-3 border-b border-slate-200 dark:border-neutral-800 pb-5">
+        {/* Back Button above student name */}
+        <div>
           <Link
             to="/mentor/mentees"
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800 border border-slate-300 dark:border-neutral-700 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
@@ -344,9 +345,11 @@ export const FacultyMenteeProfilePage: React.FC = () => {
             <ArrowLeft className="size-3.5" />
             <span>Back</span>
           </Link>
+        </div>
 
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="size-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/20">
+            <div className="size-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-500/20 flex-shrink-0">
               {student?.name?.charAt(0) || 'S'}
             </div>
             <div>
@@ -373,16 +376,16 @@ export const FacultyMenteeProfilePage: React.FC = () => {
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setRecordModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition active:scale-95 cursor-pointer"
-          >
-            <Plus className="size-3.5" />
-            <span>Record Mentor Note</span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setRecordModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition active:scale-95 cursor-pointer"
+            >
+              <Plus className="size-3.5" />
+              <span>Record Mentor Note</span>
+            </button>
+          </div>
         </div>
       </div>
 

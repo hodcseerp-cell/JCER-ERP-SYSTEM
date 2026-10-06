@@ -1009,7 +1009,7 @@ export const hodService = {
     return res.data;
   },
 
-  getSubjects: async (params?: { semester?: string | number; cycle?: string; schemeId?: string; academicYear?: string; status?: string }): Promise<HodSubjectItem[]> => {
+  getSubjects: async (params?: { semester?: string | number; cycle?: string; schemeId?: string; academicYear?: string; status?: string; branch?: string }): Promise<HodSubjectItem[]> => {
     const res = await API.get('/hod/subjects', { params });
     return res.data.data;
   },

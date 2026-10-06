@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   X,
+  Check,
   CheckCircle2,
   XCircle,
   Clock,
@@ -122,19 +123,14 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
             <div className="size-11 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 text-white flex items-center justify-center font-bold shadow-inner flex-shrink-0">
               <CalendarIcon className="size-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+              <div>
                 <h3 className="text-base font-black uppercase tracking-wider text-white">
                   Attendance Calendar
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 backdrop-blur-md border border-white/30 text-indigo-100">
-                  Live Records
-                </span>
+                <p className="text-xs text-indigo-100/90 mt-0.5 font-medium">
+                  Interactive session inspection across recorded dates
+                </p>
               </div>
-              <p className="text-xs text-indigo-100/90 mt-0.5 font-medium">
-                Interactive session inspection across recorded dates
-              </p>
-            </div>
           </div>
 
           {/* Month Navigation (< Month Year >, Today) */}
@@ -174,21 +170,21 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           Click any date cell to view session details:
         </span>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold shadow-2xs">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Present</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold shadow-2xs">
+            <span className="size-2.5 rounded-sm bg-emerald-500 shadow-xs" />
+            <span>Green = Present</span>
           </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold shadow-2xs">
-            <span className="size-2 rounded-full bg-rose-500" />
-            <span>Absent</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold shadow-2xs">
+            <span className="size-2.5 rounded-sm bg-rose-500 shadow-xs" />
+            <span>Red = Absent</span>
           </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold shadow-2xs">
-            <span className="size-2 rounded-full bg-amber-500" />
-            <span>Multiple / Mixed</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold shadow-2xs">
+            <span className="size-2.5 rounded-sm bg-amber-500 shadow-xs" />
+            <span>Amber = Mixed</span>
           </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-400 border border-slate-200 dark:border-neutral-700 font-semibold shadow-2xs">
-            <span className="size-2 rounded-full bg-slate-300 dark:bg-neutral-600" />
-            <span>No Classes</span>
+            <span className="size-2.5 rounded-sm bg-slate-300 dark:bg-neutral-600 shadow-xs" />
+            <span>White = No Classes</span>
           </span>
         </div>
       </div>
@@ -213,7 +209,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
           {Array.from({ length: leadingBlanks }).map((_, i) => (
             <div
               key={`blank-${i}`}
-              className="min-h-[78px] p-2 bg-slate-50/50 dark:bg-neutral-950/30"
+              className="min-h-[84px] p-2 bg-slate-50/50 dark:bg-neutral-950/30"
             />
           ))}
 
@@ -225,65 +221,75 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
             const hasSessions = Boolean(entry && entry.sessions && entry.sessions.length > 0);
             const isAllPresent = hasSessions && entry.absentCount === 0;
             const isAllAbsent = hasSessions && entry.presentCount === 0;
-
+            const isMixed = hasSessions && !isAllPresent && !isAllAbsent;
             const isToday =
               today.getFullYear() === currentYear &&
               today.getMonth() === currentMonth &&
               today.getDate() === dayNum;
 
+            // Box styling based on attendance status: green for present, red for absent
+            let boxClass = 'bg-white dark:bg-neutral-900';
+            if (hasSessions) {
+              if (isAllPresent) {
+                boxClass = 'bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white cursor-pointer shadow-xs hover:shadow-md';
+              } else if (isAllAbsent) {
+                boxClass = 'bg-rose-500 hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-500 text-white cursor-pointer shadow-xs hover:shadow-md';
+              } else if (isMixed) {
+                boxClass = 'bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 text-white cursor-pointer shadow-xs hover:shadow-md';
+              }
+            }
+
             return (
               <div
                 key={dayNum}
                 onClick={() => hasSessions && setSelectedDayModal(entry)}
-                className={`min-h-[78px] p-2.5 flex flex-col justify-between transition group select-none ${
+                title={
                   hasSessions
-                    ? 'cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-neutral-800/60 hover:shadow-xs'
-                    : 'bg-white dark:bg-neutral-900'
-                }`}
+                    ? `${isAllPresent ? 'Present' : isAllAbsent ? 'Absent' : 'Mixed Attendance'} (${entry.sessions.length} ${entry.sessions.length === 1 ? 'class' : 'classes'}) — Click to inspect`
+                    : undefined
+                }
+                className={`min-h-[84px] p-2.5 flex flex-col justify-between transition-all group select-none ${boxClass}`}
               >
                 {/* Date header in cell */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
                   <span
-                    className={`inline-flex items-center justify-center size-6 rounded-full text-xs font-black transition ${
-                      isToday
-                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
-                        : 'text-slate-800 dark:text-neutral-200 group-hover:text-indigo-600 font-bold'
+                    className={`font-black text-2xl sm:text-3xl leading-none transition-colors ${
+                      hasSessions
+                        ? 'text-white'
+                        : 'text-slate-800 dark:text-neutral-100 group-hover:text-indigo-600'
                     }`}
                   >
                     {dayNum}
                   </span>
-
-                  {hasSessions && (
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-neutral-500">
-                      {entry.sessions.length} {entry.sessions.length === 1 ? 'class' : 'classes'}
-                    </span>
+                  {isToday && (
+                    <span
+                      className={`size-2 sm:size-2.5 rounded-full ring-2 ${
+                        hasSessions
+                          ? 'bg-white ring-white/40 shadow-xs'
+                          : 'bg-indigo-600 ring-indigo-200 dark:bg-indigo-400 dark:ring-indigo-900'
+                      }`}
+                      title="Today"
+                    />
                   )}
                 </div>
 
                 {/* Status Indicator in Cell */}
-                <div className="mt-1.5">
+                <div className="mt-1 flex items-center justify-center flex-1">
                   {hasSessions ? (
-                    <div className="space-y-1">
+                    <div className="flex items-center justify-center">
                       {isAllPresent ? (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100/90 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 text-[10px] font-black w-full justify-center border border-emerald-200/80 dark:border-emerald-800/80 shadow-2xs group-hover:scale-[1.02] transition">
-                          <span className="size-2 rounded-full bg-emerald-500" />
-                          <span>Present</span>
-                        </div>
+                        <Check className="size-5 stroke-[3] text-white drop-shadow-2xs group-hover:scale-110 transition-transform" />
                       ) : isAllAbsent ? (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100/90 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 text-[10px] font-black w-full justify-center border border-rose-200/80 dark:border-rose-800/80 shadow-2xs group-hover:scale-[1.02] transition">
-                          <span className="size-2 rounded-full bg-rose-500" />
-                          <span>Absent</span>
-                        </div>
+                        <X className="size-5 stroke-[3] text-white drop-shadow-2xs group-hover:scale-110 transition-transform" />
                       ) : (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100/90 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 text-[10px] font-black w-full justify-center border border-amber-200/80 dark:border-amber-800/80 shadow-2xs group-hover:scale-[1.02] transition">
-                          <span className="size-2 rounded-full bg-amber-500" />
-                          <span>{entry.presentCount}P / {entry.absentCount}A</span>
-                        </div>
+                        <span className="text-[11px] font-black text-white tracking-wide">
+                          {entry.presentCount}P / {entry.absentCount}A
+                        </span>
                       )}
                     </div>
                   ) : (
-                    <div className="h-5 flex items-center justify-center">
-                      <span className="text-[10px] text-slate-300 dark:text-neutral-700 font-medium">
+                    <div className="flex items-center justify-center">
+                      <span className="text-[11px] text-slate-300 dark:text-neutral-700 font-medium select-none">
                         —
                       </span>
                     </div>

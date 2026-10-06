@@ -157,7 +157,11 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     setLoading(true);
     try {
       const [subjectsRes, facultyRes, assignmentsRes] = await Promise.all([
-        hodService.getSubjects({ semester: selectedSemester, status: 'ACTIVE' }),
+        hodService.getSubjects({
+          semester: selectedSemester,
+          status: 'ACTIVE',
+          branch: isAppliedScience ? selectedBranch : undefined,
+        }),
         hodService.getFacultyList(),
         hodService.getFacultyAssignments({
           semester: selectedSemester,
@@ -231,20 +235,58 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     });
   }, [subjects, selectedSemester, selectedCycle, typeFilter, searchQuery, isAppliedScience]);
 
-  // Map of Subject ID -> List of active FacultyAssignments
+  // Map of Subject ID / Subject Code -> List of active FacultyAssignments
   const subjectAssignmentsMap = useMemo(() => {
     const map: Record<string, HodFacultyAssignmentItem[]> = {};
     assignments.forEach((a) => {
       if (a.status === 'ACTIVE' || !a.status) {
-        if (isAppliedScience && selectedBranch && a.branch && a.branch.toUpperCase() !== selectedBranch.toUpperCase()) {
+        const aBranch = (a.branch || '').trim().toUpperCase();
+        const selBranch = (selectedBranch || '').trim().toUpperCase();
+        if (
+          isAppliedScience &&
+          selBranch &&
+          aBranch &&
+          aBranch !== selBranch &&
+          !['AS', 'ALL', 'COMMON'].includes(aBranch)
+        ) {
           return;
         }
-        if (!map[a.subjectId]) map[a.subjectId] = [];
-        map[a.subjectId].push(a);
+
+        // Map by subjectId
+        if (a.subjectId) {
+          if (!map[a.subjectId]) map[a.subjectId] = [];
+          if (!map[a.subjectId].some((item) => item.id === a.id)) {
+            map[a.subjectId].push(a);
+          }
+        }
+
+        // Map by subjectCode (normalized)
+        if (a.subjectCode) {
+          const codeKey = `code:${a.subjectCode.trim().toUpperCase()}`;
+          if (!map[codeKey]) map[codeKey] = [];
+          if (!map[codeKey].some((item) => item.id === a.id)) {
+            map[codeKey].push(a);
+          }
+        }
       }
     });
     return map;
   }, [assignments, isAppliedScience, selectedBranch]);
+
+  // Helper to get allocations for a given subject (by ID first, fallback to code)
+  const getSubjectAllocations = (subj: HodSubjectItem): HodFacultyAssignmentItem[] => {
+    if (!subj) return [];
+    if (subjectAssignmentsMap[subj.id] && subjectAssignmentsMap[subj.id].length > 0) {
+      return subjectAssignmentsMap[subj.id];
+    }
+    if (subj.code) {
+      const codeKey = `code:${subj.code.trim().toUpperCase()}`;
+      if (subjectAssignmentsMap[codeKey] && subjectAssignmentsMap[codeKey].length > 0) {
+        return subjectAssignmentsMap[codeKey];
+      }
+    }
+    return [];
+  };
 
   // Open allocation modal (REQUIREMENT 3: ALL UNCHECKED BY DEFAULT!)
   const handleOpenModal = (subj: HodSubjectItem) => {
@@ -451,7 +493,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     const requiredSectionsCount = currentBranchSections.length;
 
     filteredSubjects.forEach((subj) => {
-      const allocs = subjectAssignmentsMap[subj.id] || [];
+      const allocs = getSubjectAllocations(subj);
       if (allocs.length === 0) {
         unassigned++;
       } else if (requiredSectionsCount > 0 && allocs.length < requiredSectionsCount) {
@@ -743,7 +785,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {filteredSubjects.map((subject) => {
-            const subjectAllocations = subjectAssignmentsMap[subject.id] || [];
+            const subjectAllocations = getSubjectAllocations(subject);
             const isAssigned = subjectAllocations.length > 0;
 
             return (
@@ -1042,7 +1084,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                             }
                           });
 
-                          const currentAllocations = subjectAssignmentsMap[activeModalSubject.id] || [];
+                          const currentAllocations = activeModalSubject ? getSubjectAllocations(activeModalSubject) : [];
                           const allocatedMap = new Map<string, string>();
                           currentAllocations.forEach((a) => {
                             if (a.section) {
