@@ -1680,11 +1680,10 @@ export class SectionAllocationService {
               status: 'ACTIVE',
               academicYearId: secAyMatch,
             },
-            required: false,
+            required: true,
           },
         ],
         transaction,
-        lock: transaction.LOCK.UPDATE,
       });
 
       const affectedCount = students.length;
@@ -1704,6 +1703,13 @@ export class SectionAllocationService {
 
       const studentIds = students.map((s) => s.id);
 
+      // Lock selected student rows directly (no outer joins with FOR UPDATE)
+      await Student.findAll({
+        where: { id: { [Op.in]: studentIds } },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
       // 4. Atomically clear section allocation on Student table
       // Preserves student records, user accounts, attendance, marks, academic data, mentors
       await Student.update(
@@ -1714,7 +1720,10 @@ export class SectionAllocationService {
         },
         {
           where: {
-            id: { [Op.in]: studentIds },
+            [Op.or]: [
+              { id: { [Op.in]: studentIds } },
+              { sectionId: section.id, departmentId: targetDeptId },
+            ],
           },
           transaction,
         }
