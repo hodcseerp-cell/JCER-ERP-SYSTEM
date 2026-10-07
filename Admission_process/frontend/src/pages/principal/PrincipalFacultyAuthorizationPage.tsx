@@ -334,16 +334,16 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Faculty Candidate</th>
-                <th className="py-3 px-6 font-semibold">Department</th>
-                <th className="py-3 px-6 font-semibold">Assigned Subject</th>
-                <th className="py-3 px-6 font-semibold text-center">Semester</th>
-                <th className="py-3 px-6 font-semibold">Authority</th>
-                <th className="py-3 px-6 font-semibold">Submitted By</th>
-                <th className="py-3 px-6 font-semibold">Submitted On</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+              <tr className="bg-[#111111] dark:bg-neutral-950 text-white font-extrabold uppercase text-[11px] tracking-wider border-b border-neutral-800">
+                <th className="py-3.5 px-6 font-semibold">Faculty Candidate</th>
+                <th className="py-3.5 px-6 font-semibold">Department</th>
+                <th className="py-3.5 px-6 font-semibold">Assigned Subject</th>
+                <th className="py-3.5 px-6 font-semibold text-center">Semester</th>
+                <th className="py-3.5 px-6 font-semibold">Authority</th>
+                <th className="py-3.5 px-6 font-semibold">Submitted By</th>
+                <th className="py-3.5 px-6 font-semibold">Submitted On</th>
+                <th className="py-3.5 px-6 font-semibold text-center">Status</th>
+                <th className="py-3.5 px-6 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

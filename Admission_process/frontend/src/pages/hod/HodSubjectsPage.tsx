@@ -89,11 +89,17 @@ export const HodSubjectsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Subject deletion & Academic data protection state
+  // Subject deletion & Dynamic Drive synchronization state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; code: string; name: string } | null>(null);
-  const [academicWarning, setAcademicWarning] = useState<{ id: string; code: string; message: string; details?: any } | null>(null);
+  const [checkingDeletion, setCheckingDeletion] = useState<boolean>(false);
+  const [deletionCheckData, setDeletionCheckData] = useState<{
+    hasAttendanceHistory: boolean;
+    sessionsCount: number;
+    recordsCount: number;
+    assignmentsCount: number;
+    backupFilesCount: number;
+  } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
 
   // Determine if this is Applied Science department
   const isAppliedScience = Boolean(
@@ -278,47 +284,52 @@ export const HodSubjectsPage: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const confirmDeleteSubject = async () => {
+  const handleInitiateDelete = async (sub: HodSubjectItem) => {
+    setDeleteTarget({ id: sub.id, code: sub.code, name: sub.name });
+    setCheckingDeletion(true);
+    setDeletionCheckData(null);
+    try {
+      const res = await hodService.checkSubjectDeletion(sub.id);
+      setDeletionCheckData(res);
+    } catch (err) {
+      console.error('Failed to check subject deletion readiness:', err);
+    } finally {
+      setCheckingDeletion(false);
+    }
+  };
+
+  const handleConfirmDelete = async (shouldDeactivate: boolean) => {
     if (!deleteTarget) return;
-    const { id, code: subCode } = deleteTarget;
+    const { id } = deleteTarget;
     setDeletingId(id);
     try {
-      await hodService.deleteSubject(id);
-      toast.success(`Subject ${subCode} deleted successfully.`);
+      const res = await hodService.deleteSubject(id, { deactivate: shouldDeactivate });
+      if (shouldDeactivate) {
+        toast.success(res?.message || 'Subject archived successfully. Historical attendance has been preserved.');
+      } else {
+        toast.success(res?.message || 'Subject deleted successfully. Associated unused attendance backup will be removed from Google Drive.');
+      }
       setDeleteTarget(null);
+      setDeletionCheckData(null);
       fetchSubjects();
     } catch (err: any) {
-      console.error('Failed to delete subject:', err);
+      console.error('Failed to delete/archive subject:', err);
       const resData = err?.response?.data;
       if (resData?.code === 'SUBJECT_HAS_ACADEMIC_DATA') {
-        setDeleteTarget(null);
-        setAcademicWarning({
-          id,
-          code: subCode,
-          message: resData.message || 'Subject cannot be deleted because academic records exist.',
-          details: resData.details,
+        setDeletionCheckData({
+          hasAttendanceHistory: true,
+          sessionsCount: resData.details?.sessions || 1,
+          recordsCount: resData.details?.attendanceRecords || 1,
+          assignmentsCount: resData.details?.assignments || 0,
+          backupFilesCount: 1,
         });
+        toast.warn('This subject contains attendance history and must be archived instead of deleted.');
       } else {
-        const msg = resData?.message || resData?.error || 'Failed to delete subject. Please try again.';
+        const msg = resData?.message || resData?.error || 'Failed to process subject deletion.';
         toast.error(msg);
       }
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const handleDeactivateSubject = async () => {
-    if (!academicWarning) return;
-    setDeactivating(true);
-    try {
-      await hodService.updateSubject(academicWarning.id, { status: 'INACTIVE' });
-      toast.success(`Subject ${academicWarning.code} marked as INACTIVE.`);
-      setAcademicWarning(null);
-      fetchSubjects();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Failed to update subject status.');
-    } finally {
-      setDeactivating(false);
     }
   };
 
@@ -584,8 +595,8 @@ export const HodSubjectsPage: React.FC = () => {
             <thead className="bg-neutral-100/70 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-300 uppercase tracking-wider font-extrabold border-b border-neutral-200 dark:border-neutral-800">
               <tr>
                 <th className="py-3.5 px-4 text-center w-12">SL</th>
-                <th className="py-3.5 px-4 w-32">COURSE CODE</th>
-                <th className="py-3.5 px-4">SUBJECT NAME</th>
+                <th className="py-3.5 px-4 text-center w-32">COURSE CODE</th>
+                <th className="py-3.5 px-4 text-center">SUBJECT NAME</th>
                 <th className="py-3.5 px-4 text-center w-28">CATEGORY</th>
                 <th className="py-3.5 px-4 text-center w-24">CREDITS</th>
                 <th className="py-3.5 px-4 text-center w-28">SCHEME</th>
@@ -634,16 +645,16 @@ export const HodSubjectsPage: React.FC = () => {
                       {idx + 1}
                     </td>
 
-                    <td className="py-3.5 px-4 font-bold text-neutral-900 dark:text-white">
+                    <td className="py-3.5 px-4 text-center font-bold text-neutral-900 dark:text-white">
                       {sub.code}
                     </td>
 
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-neutral-900 dark:text-white text-xs">
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="font-bold text-neutral-900 dark:text-white text-xs text-center">
                         {sub.name}
                       </div>
                       {sub.assignedFaculty && sub.assignedFaculty.length > 0 ? (
-                        <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 flex items-center justify-center gap-1.5 flex-wrap text-center">
                           <span className="text-neutral-400">Faculty:</span>
                           {sub.assignedFaculty.map((f, i) => (
                             <span key={i} className="font-semibold text-neutral-700 dark:text-neutral-300">
@@ -652,7 +663,7 @@ export const HodSubjectsPage: React.FC = () => {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1 text-center">
                           Unassigned
                         </div>
                       )}
@@ -688,9 +699,9 @@ export const HodSubjectsPage: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => setDeleteTarget({ id: sub.id, code: sub.code, name: sub.name })}
+                          onClick={() => handleInitiateDelete(sub)}
                           disabled={deletingId === sub.id}
-                          className="px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          className="px-2.5 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
                           title="Delete master subject"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1027,91 +1038,107 @@ export const HodSubjectsPage: React.FC = () => {
           document.body
         )}
 
-      {/* ── 7. Confirm Subject Delete Modal ─────────────────────────────────── */}
+      {/* ── 7. Dynamic Subject Delete / Archive Modal ──────────────────────── */}
       {deleteTarget &&
         createPortal(
           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
             <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl p-6 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-xl">
-                  <Trash2 className="w-5 h-5" />
+                <div
+                  className={`p-2.5 rounded-xl ${
+                    deletionCheckData?.hasAttendanceHistory
+                      ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'
+                      : 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400'
+                  }`}
+                >
+                  {deletionCheckData?.hasAttendanceHistory ? (
+                    <AlertTriangle className="w-5 h-5" />
+                  ) : (
+                    <Trash2 className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">Delete Subject</h3>
-                  <p className="text-xs text-neutral-500">{deleteTarget.code} — {deleteTarget.name}</p>
+                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                    {deletionCheckData?.hasAttendanceHistory ? 'Archive Subject' : 'Delete Subject?'}
+                  </h3>
+                  <p className="text-xs text-neutral-500 font-medium">
+                    {deleteTarget.code} — {deleteTarget.name}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                Are you sure you want to delete this master subject? If academic records or attendance exist, physical deletion will be blocked to protect records.
-              </p>
+              {checkingDeletion ? (
+                <div className="py-6 flex flex-col items-center justify-center text-center space-y-2">
+                  <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+                  <p className="text-xs text-neutral-500 font-medium">
+                    Checking attendance history & Drive backup records...
+                  </p>
+                </div>
+              ) : deletionCheckData?.hasAttendanceHistory ? (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+                    <div className="font-extrabold flex items-center gap-1.5 text-amber-700 dark:text-amber-400 uppercase tracking-wide text-[11px]">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>WARNING: Attendance History Exists</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      This subject contains attendance history. The subject will be archived and historical attendance records will be preserved.
+                    </p>
+                    {(deletionCheckData.sessionsCount > 0 || deletionCheckData.recordsCount > 0) && (
+                      <p className="text-[11px] text-amber-700/90 dark:text-amber-400/90 font-semibold pt-0.5">
+                        • {deletionCheckData.sessionsCount} session(s) and {deletionCheckData.recordsCount} attendance record(s) on file.
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                    The historical Google Drive attendance workbook(s) will be securely preserved in the archive.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-neutral-700 dark:text-neutral-200 leading-relaxed font-semibold">
+                    Delete this subject and its unused attendance backup?
+                  </p>
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                    No attendance records were found. The unused Google Drive attendance workbook(s) and database records will be removed.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
                 <button
                   type="button"
-                  onClick={() => setDeleteTarget(null)}
-                  className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
+                  disabled={Boolean(deletingId)}
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeletionCheckData(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  onClick={confirmDeleteSubject}
-                  disabled={Boolean(deletingId)}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  {deletingId ? 'Deleting...' : 'Confirm Delete'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
-      {/* ── 8. Academic Records Protection Warning Modal ────────────────────── */}
-      {academicWarning &&
-        createPortal(
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-2xl p-6 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-xl">
-                  <ShieldAlert className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">Subject Deletion Protected</h3>
-                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full">
-                    CODE: SUBJECT_HAS_ACADEMIC_DATA
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                The subject <strong className="text-neutral-900 dark:text-white">{academicWarning.code}</strong> cannot be deleted because active or historical academic records exist.
-              </p>
-
-              <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60 text-xs space-y-1">
-                <div className="font-bold text-neutral-800 dark:text-neutral-200">Recommended Action:</div>
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Marking this subject as <strong>INACTIVE</strong> safely removes it from upcoming faculty assignments while retaining all existing grade sheets and attendance logs.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
-                <button
-                  type="button"
-                  onClick={() => setAcademicWarning(null)}
-                  className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeactivateSubject}
-                  disabled={deactivating}
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors cursor-pointer"
-                >
-                  {deactivating ? 'Deactivating...' : 'Mark as INACTIVE'}
-                </button>
+                {deletionCheckData?.hasAttendanceHistory ? (
+                  <button
+                    type="button"
+                    disabled={Boolean(deletingId) || checkingDeletion}
+                    onClick={() => handleConfirmDelete(true)}
+                    className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {deletingId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                    <span>{deletingId ? 'Archiving...' : 'Archive & Remove Subject'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={Boolean(deletingId) || checkingDeletion}
+                    onClick={() => handleConfirmDelete(false)}
+                    className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {deletingId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                    <span>{deletingId ? 'Deleting...' : 'Delete Subject'}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>,

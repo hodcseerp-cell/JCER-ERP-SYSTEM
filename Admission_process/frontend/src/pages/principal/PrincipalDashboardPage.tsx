@@ -356,15 +356,15 @@ export const PrincipalDashboardPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-neutral-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Admission No</th>
-                  <th className="py-3 px-4">Student Name</th>
-                  <th className="py-3 px-4">Branch</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Verified By</th>
-                  <th className="py-3 px-4">Verified Date</th>
-                  <th className="py-3 px-4 text-center">Priority</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                <tr className="bg-[#111111] dark:bg-neutral-950 text-white font-extrabold uppercase text-[11px] tracking-wider border-b border-neutral-800">
+                  <th className="py-3.5 px-4">Admission No</th>
+                  <th className="py-3.5 px-4">Student Name</th>
+                  <th className="py-3.5 px-4">Branch</th>
+                  <th className="py-3.5 px-4">Type</th>
+                  <th className="py-3.5 px-4">Verified By</th>
+                  <th className="py-3.5 px-4">Verified Date</th>
+                  <th className="py-3.5 px-4 text-center">Priority</th>
+                  <th className="py-3.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
@@ -413,6 +413,15 @@ export const PrincipalDashboardPage: React.FC = () => {
                 })}
               </tbody>
             </table>
+
+            {/* ── Dynamic Count Summary Bar ── */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-200/90 dark:border-neutral-800 bg-slate-50/70 dark:bg-neutral-850/70 text-xs text-slate-600 dark:text-neutral-300 select-none">
+              <div className="flex items-center flex-wrap gap-2.5 sm:gap-3">
+                <span>
+                  Total: <strong className="font-extrabold text-slate-900 dark:text-white">{pendingApplications.length}</strong> student{pendingApplications.length === 1 ? '' : 's'}
+                </span>
+              </div>
+            </div>
           </div>
         )}
       </div>

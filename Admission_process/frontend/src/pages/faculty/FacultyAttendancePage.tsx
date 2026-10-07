@@ -726,11 +726,9 @@ export const FacultyAttendancePage: React.FC = () => {
         <div className="bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Faculty Attendance
+            Students Attendance Entry
             </h1>
-            <p className="text-slate-500 text-xs font-medium">
-              Manage course attendance rosters and take session attendance
-            </p>
+            
           </div>
 
           <div className="flex items-center space-x-2 bg-indigo-50/90 border border-indigo-200 rounded-lg px-2.5 py-1 shrink-0">

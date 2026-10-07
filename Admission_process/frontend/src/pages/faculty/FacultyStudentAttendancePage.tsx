@@ -198,14 +198,7 @@ export const FacultyStudentAttendancePage: React.FC = () => {
           </button>
 
           {/* Center/Main: Title + Muted Subtitle */}
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight truncate">
-              Student Attendance
-            </h1>
-            <p className="text-xs sm:text-[13px] text-slate-500 font-medium truncate mt-0.5">
-              Search a student by name or USN to view attendance for your assigned subjects.
-            </p>
-          </div>
+          
         </div>
 
         {/* Right: Academic Year Badge */}

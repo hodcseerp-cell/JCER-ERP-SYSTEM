@@ -15,8 +15,10 @@ class AttendanceBackupFile extends Model {
   public googleDriveFolderId!: string;
   public googleDriveFileId!: string;
   public fileName!: string;
-  public status!: 'SYNCED' | 'PENDING' | 'FAILED';
+  public status!: 'SYNCED' | 'PENDING' | 'FAILED' | 'ARCHIVED' | 'DELETED' | 'SYNC_FAILED';
   public lastSyncedAt!: Date | null;
+  public lastSyncAttemptAt!: Date | null;
+  public archivedAt!: Date | null;
   public lastError!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -78,11 +80,19 @@ AttendanceBackupFile.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM('SYNCED', 'PENDING', 'FAILED'),
+      type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: 'PENDING',
     },
     lastSyncedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    lastSyncAttemptAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    archivedAt: {
       type: DataTypes.DATE,
       allowNull: true,
     },
@@ -103,6 +113,7 @@ AttendanceBackupFile.init(
       },
       { fields: ['googleDriveFileId'] },
       { fields: ['facultyAssignmentId'] },
+      { fields: ['subjectId'] },
       { fields: ['status'] },
     ],
   }

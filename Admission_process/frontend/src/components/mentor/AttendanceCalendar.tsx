@@ -100,13 +100,13 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   }, [currentYear, currentMonth]);
 
   const weekdays = [
-    { label: 'SUN', bgClass: 'bg-gradient-to-b from-rose-500 to-rose-600 text-white' },
-    { label: 'MON', bgClass: 'bg-gradient-to-b from-indigo-600 to-indigo-700 text-white' },
-    { label: 'TUE', bgClass: 'bg-gradient-to-b from-indigo-600 to-indigo-700 text-white' },
-    { label: 'WED', bgClass: 'bg-gradient-to-b from-purple-600 to-purple-700 text-white' },
-    { label: 'THU', bgClass: 'bg-gradient-to-b from-purple-600 to-purple-700 text-white' },
-    { label: 'FRI', bgClass: 'bg-gradient-to-b from-violet-600 to-violet-700 text-white' },
-    { label: 'SAT', bgClass: 'bg-gradient-to-b from-amber-500 to-amber-600 text-white' },
+    { label: 'SUN', bgClass: 'bg-gradient-to-b from-neutral-900 to-neutral-950 text-white' },
+    { label: 'MON', bgClass: 'bg-gradient-to-b from-neutral-600 to-neutral-700 text-white' },
+    { label: 'TUE', bgClass: 'bg-gradient-to-b from-neutral-900 to-neutral-950 text-white' },
+    { label: 'WED', bgClass: 'bg-gradient-to-b from-neutral-600 to-neutral-700 text-white' },
+    { label: 'THU', bgClass: 'bg-gradient-to-b from-neutral-900 to-neutral-950 text-white' },
+    { label: 'FRI', bgClass: 'bg-gradient-to-b from-neutral-600 to-neutral-700 text-white' },
+    { label: 'SAT', bgClass: 'bg-gradient-to-b from-neutral-900 to-neutral-950 text-white' },
   ];
 
   return (
@@ -253,7 +253,7 @@ export const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                 {/* Date header in cell */}
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`font-black text-2xl sm:text-3xl leading-none transition-colors ${
+                    className={`font-extrabold text-lg sm:text-xl leading-none transition-colors ${
                       hasSessions
                         ? 'text-white'
                         : 'text-slate-800 dark:text-neutral-100 group-hover:text-indigo-600'

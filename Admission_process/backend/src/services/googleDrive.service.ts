@@ -647,6 +647,48 @@ export const googleDriveService = {
     }
     return false;
   },
+
+  /**
+   * Checks if a Google Drive file exists and is not trashed
+   */
+  async checkFileExists(fileId: string): Promise<boolean> {
+    if (!fileId) return false;
+    try {
+      const { drive } = await this.getAuthorizedDriveClient();
+      const res = await drive.files.get({
+        fileId,
+        fields: 'id, name, trashed',
+      });
+      return Boolean(res.data && !res.data.trashed);
+    } catch (err: any) {
+      if (err.status === 404 || err.code === 404 || err.message?.includes('File not found')) {
+        return false;
+      }
+      logger.warn(`Error checking file existence in Google Drive (${fileId}):`, err.message);
+      return false;
+    }
+  },
+
+  /**
+   * Permanently deletes a file from Google Drive idempotently
+   * If the file is already deleted or 404, returns true safely.
+   */
+  async deleteFile(fileId: string): Promise<boolean> {
+    if (!fileId) return false;
+    try {
+      const { drive } = await this.getAuthorizedDriveClient();
+      await drive.files.delete({ fileId });
+      logger.info(`Google Drive file ${fileId} successfully deleted.`);
+      return true;
+    } catch (err: any) {
+      if (err.status === 404 || err.code === 404 || err.message?.includes('File not found')) {
+        logger.info(`Google Drive file ${fileId} already absent / not found (404), treated as deleted.`);
+        return true;
+      }
+      logger.error(`Failed to delete Google Drive file ${fileId}:`, err.message);
+      throw err;
+    }
+  },
 };
 
 export default googleDriveService;

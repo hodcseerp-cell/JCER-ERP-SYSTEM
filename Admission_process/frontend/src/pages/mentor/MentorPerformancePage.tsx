@@ -206,16 +206,11 @@ export const MentorPerformancePage: React.FC = () => {
                     onClick={() => navigate(`/mentor/mentees/${st.id}`)}
                   >
                     <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-lg bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
-                          {st.name.charAt(0)}
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 transition">
+                          {st.name}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 transition">
-                            {st.name}
-                          </div>
-                          <div className="text-[10px] text-slate-400">{st.department}</div>
-                        </div>
+                        <div className="text-[10px] text-slate-400">{st.department}</div>
                       </div>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-neutral-300">

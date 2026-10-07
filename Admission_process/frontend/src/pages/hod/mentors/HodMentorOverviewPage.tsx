@@ -72,9 +72,7 @@ export const HodMentorOverviewPage: React.FC = () => {
               <UserCheck className="size-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Mentor Management
-              </h1>
+              
               <p className="text-sm text-slate-500 dark:text-neutral-400">
                 Allocate mentors, monitor student coverage, and manage departmental mentoring assignments.
               </p>

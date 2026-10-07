@@ -538,25 +538,25 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-extrabold uppercase text-[10px] tracking-wider bg-neutral-50/50 dark:bg-neutral-800/50">
-                    <th className="py-4 px-4 w-12 text-center">
+                  <tr className="bg-[#111111] dark:bg-neutral-950 text-white font-extrabold uppercase text-[11px] tracking-wider border-b border-neutral-800">
+                    <th className="py-3.5 px-4 w-12 text-center">
                       <input
                         type="checkbox"
                         checked={isAllEligibleSelected}
                         onChange={handleToggleSelectAll}
                         disabled={eligibleAppsOnPage.length === 0}
-                        className="size-4 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="size-4 rounded border-neutral-600 bg-neutral-800 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                         title={eligibleAppsOnPage.length === 0 ? 'No eligible admissions to select on this page' : 'Select all eligible on this page'}
                       />
                     </th>
-                    <th className="py-4 px-4">Admission No</th>
-                    <th className="py-4 px-6">Student Name</th>
-                    <th className="py-4 px-4">Branch</th>
-                    <th className="py-4 px-4">Quota</th>
-                    <th className="py-4 px-4">CET / DCET No</th>
-                    <th className="py-4 px-6">Status</th>
-                    <th className="py-4 px-4">Date</th>
-                    <th className="py-4 px-6 text-right">Action</th>
+                    <th className="py-3.5 px-4">Admission No</th>
+                    <th className="py-3.5 px-6">Student Name</th>
+                    <th className="py-3.5 px-4">Branch</th>
+                    <th className="py-3.5 px-4">Quota</th>
+                    <th className="py-3.5 px-4">CET / DCET No</th>
+                    <th className="py-3.5 px-6">Status</th>
+                    <th className="py-3.5 px-4">Date</th>
+                    <th className="py-3.5 px-6 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -632,6 +632,21 @@ export const PrincipalAdmissionQueuePage: React.FC<PrincipalAdmissionQueuePagePr
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* ── Dynamic Count Summary Bar (Outside & Below Table) ── */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-200/90 dark:border-neutral-800 bg-slate-50/70 dark:bg-neutral-850/70 text-xs text-slate-600 dark:text-neutral-300 shadow-2xs select-none">
+              <div className="flex items-center flex-wrap gap-2.5 sm:gap-3">
+                <span>
+                  Total: <strong className="font-extrabold text-slate-900 dark:text-white">{data.total}</strong> student{data.total === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span>
+                  Selected: <strong className="font-extrabold text-indigo-600 dark:text-indigo-400">{selectedIds.length}</strong> of {data.applications.length}
+                </span>
+              </div>
             </div>
 
             {/* ═══ PAGINATION ═══ */}

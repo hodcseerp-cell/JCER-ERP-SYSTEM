@@ -11,8 +11,6 @@ import {
   Clock,
   ArrowRight,
   RefreshCw,
-  Building2,
-  Calendar,
   AlertCircle,
   FileCheck2,
 } from 'lucide-react';
@@ -28,7 +26,6 @@ export const FacultyMarksDashboardPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const deptName = user?.department?.name || 'Computer Science & Engineering';
-  const deptCode = user?.department?.code || 'CSE';
 
   const fetchSemesters = async (isManual = false) => {
     try {
@@ -88,38 +85,9 @@ export const FacultyMarksDashboardPage: React.FC = () => {
       {/* ── HEADER ── */}
       <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
-                <Award className="w-5 h-5" />
-              </span>
-              <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 dark:text-white tracking-tight">
-                Bitwise Marks Entry
-              </h1>
-            </div>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400 pl-9">
-              Configure question patterns, enter internal assessment marks, and review final internal scores.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 pl-9 md:pl-0">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-              <Building2 className="w-4 h-4 text-neutral-500" />
-              <span>Dept: {deptCode}</span>
-            </div>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-              <Calendar className="w-4 h-4 text-neutral-500" />
-              <span>AY: {academicYear}</span>
-            </div>
-            <button
-              onClick={() => fetchSemesters(true)}
-              disabled={refreshing}
-              className="p-2 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+          <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            Semester Overview
+            </h1>
         </div>
       </div>
 

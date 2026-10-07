@@ -1024,8 +1024,28 @@ export const hodService = {
     return res.data;
   },
 
-  deleteSubject: async (id: string): Promise<any> => {
-    const res = await API.delete(`/hod/subjects/${id}`);
+  checkSubjectDeletion: async (id: string): Promise<{
+    hasAttendanceHistory: boolean;
+    sessionsCount: number;
+    recordsCount: number;
+    assignmentsCount: number;
+    backupFilesCount: number;
+    subject: {
+      id: string;
+      code: string;
+      name: string;
+      semester: number;
+      status: string;
+      credits?: number;
+      type?: string;
+    };
+  }> => {
+    const res = await API.get(`/hod/subjects/${id}/deletion-check`);
+    return res.data.data;
+  },
+
+  deleteSubject: async (id: string, options?: { deactivate?: boolean }): Promise<any> => {
+    const res = await API.delete(`/hod/subjects/${id}`, { params: options });
     return res.data;
   },
 

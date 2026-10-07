@@ -89,14 +89,7 @@ export const HodAttendanceDefaultersPage: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <h2 className="text-xl font-extrabold text-neutral-900 dark:text-white flex items-center gap-2">
-              <span>Attendance Defaulters List</span>
-            </h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Students with attendance strictly below the institutional mandatory 75% threshold.
-            </p>
-          </div>
+        
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">

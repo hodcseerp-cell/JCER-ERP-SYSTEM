@@ -42,15 +42,7 @@ export const HodAcademicsOverviewPage: React.FC = () => {
               {data?.averageMarks ?? 0}% <span className="text-xs font-semibold text-neutral-400">score</span>
             </div>
           </div>
-
-          <div>
-            <h2 className="text-xl font-extrabold text-neutral-900 dark:text-white">
-              Academic & Marks Overview
-            </h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Department internal assessments, bit-wise component scores, and pass/fail distributions.
-            </p>
-          </div>
+          
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">

@@ -92,6 +92,7 @@ router.put('/department/scheme', hodController.updateHodDepartmentScheme as any)
 
 router.get('/subjects', hodController.getHodSubjects as any);
 router.post('/subjects', hodController.createHodSubject as any);
+router.get('/subjects/:id/deletion-check', hodController.checkSubjectDeletion as any);
 router.put('/subjects/:id', hodController.updateHodSubject as any);
 router.patch('/subjects/:id', hodController.updateHodSubject as any);
 router.delete('/subjects/:id', hodController.deleteHodSubject as any);

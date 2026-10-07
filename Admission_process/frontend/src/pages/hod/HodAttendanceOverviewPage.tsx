@@ -11,7 +11,7 @@ import {
   ArrowUpRight,
   RefreshCw,
   FileSpreadsheet,
-  CloudCheck,
+  Cloud,
   ExternalLink,
   Download,
   Layers,
@@ -91,14 +91,7 @@ export const HodAttendanceOverviewPage: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <h2 className="text-xl font-extrabold text-neutral-900 dark:text-white">
-              Attendance Analytics & Registers
-            </h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Department-wide class session attendance rates, semester breakdowns, and consolidated Google Drive registers.
-            </p>
-          </div>
+         
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">

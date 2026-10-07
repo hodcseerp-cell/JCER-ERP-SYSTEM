@@ -334,13 +334,13 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
             <div className="border border-neutral-100 dark:border-neutral-800 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-[10px] uppercase font-bold text-neutral-400 border-b border-neutral-100 dark:border-neutral-800">
-                    <th className="py-3 px-6 font-semibold">Subject / Module</th>
-                    <th className="py-3 px-6 font-semibold text-center">Semester</th>
-                    <th className="py-3 px-6 font-semibold text-center">Course Type</th>
-                    <th className="py-3 px-6 font-semibold text-center">Credits</th>
-                    <th className="py-3 px-6 font-semibold text-center">Module Access Permissions</th>
-                    <th className="py-3 px-6 font-semibold text-center">Assignment Status</th>
+                  <tr className="bg-[#111111] dark:bg-neutral-950 text-white font-extrabold uppercase text-[11px] tracking-wider border-b border-neutral-800">
+                    <th className="py-3.5 px-6 font-semibold">Subject / Module</th>
+                    <th className="py-3.5 px-6 font-semibold text-center">Semester</th>
+                    <th className="py-3.5 px-6 font-semibold text-center">Course Type</th>
+                    <th className="py-3.5 px-6 font-semibold text-center">Credits</th>
+                    <th className="py-3.5 px-6 font-semibold text-center">Module Access Permissions</th>
+                    <th className="py-3.5 px-6 font-semibold text-center">Assignment Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">

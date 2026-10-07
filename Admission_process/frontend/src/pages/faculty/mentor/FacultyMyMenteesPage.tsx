@@ -440,7 +440,7 @@ export const FacultyMyMenteesPage: React.FC = () => {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs table-fixed">
-                  <thead className="bg-slate-50/90 dark:bg-neutral-800/90 text-slate-700 dark:text-neutral-200 font-bold border-b border-slate-200 dark:border-neutral-800 sticky top-0 z-10">
+                  <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800 sticky top-0 z-10">
                     <tr>
                       <th style={{ width: '70px' }} className="py-3 px-3 text-center uppercase tracking-wider text-[11px]">
                         SL NO
@@ -451,6 +451,12 @@ export const FacultyMyMenteesPage: React.FC = () => {
                       <th className="py-3 px-6 uppercase tracking-wider text-[11px]">
                         STUDENT NAME
                       </th>
+                      <th style={{ width: '130px' }} className="py-3 px-4 text-center uppercase tracking-wider text-[11px]">
+                        SEMESTER
+                      </th>
+                      <th style={{ width: '160px' }} className="py-3 px-4 uppercase tracking-wider text-[11px]">
+                        DEPARTMENT
+                      </th>
                       <th style={{ width: '140px' }} className="py-3 px-4 text-center uppercase tracking-wider text-[11px]">
                         ACTION
                       </th>
@@ -459,7 +465,7 @@ export const FacultyMyMenteesPage: React.FC = () => {
                   <tbody className="divide-y divide-slate-100 dark:divide-neutral-800 text-slate-700 dark:text-neutral-300">
                     {loadingMentees ? (
                       <tr>
-                        <td colSpan={4} className="py-16 text-center text-slate-400">
+                        <td colSpan={6} className="py-16 text-center text-slate-400">
                           <RefreshCw className="size-5 animate-spin mx-auto mb-2 text-indigo-500" />
                           <span className="font-semibold text-xs">Loading assigned mentees...</span>
                         </td>
@@ -485,15 +491,20 @@ export const FacultyMyMenteesPage: React.FC = () => {
 
                             {/* 3. STUDENT NAME (flex) */}
                             <td className="py-2.5 px-6 font-semibold text-slate-900 dark:text-neutral-100">
-                              <div className="flex items-center gap-3">
-                                <div className="size-7 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                                  {(st.name || 'S').charAt(0)}
-                                </div>
-                                <span className="truncate">{st.name}</span>
-                              </div>
+                              <span className="truncate">{st.name}</span>
                             </td>
 
-                            {/* 4. ACTION (140px) */}
+                            {/* 4. SEMESTER (130px) */}
+                            <td className="py-2.5 px-4 text-center font-bold text-slate-800 dark:text-neutral-200">
+                              <span>Sem {st.semester}{st.section ? ` - ${st.section}` : ''}</span>
+                            </td>
+
+                            {/* 5. DEPARTMENT (160px) */}
+                            <td className="py-2.5 px-4 font-bold text-slate-800 dark:text-neutral-200">
+                              <span>{st.departmentCode || st.department || '—'}</span>
+                            </td>
+
+                            {/* 6. ACTION (140px) */}
                             <td className="py-2.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                               <Link
                                 to={`/mentor/mentees/${st.id}`}
@@ -507,7 +518,7 @@ export const FacultyMyMenteesPage: React.FC = () => {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={4} className="py-14 text-center text-slate-400 dark:text-neutral-500">
+                        <td colSpan={6} className="py-14 text-center text-slate-400 dark:text-neutral-500">
                           No assigned mentees found for this selection.
                         </td>
                       </tr>

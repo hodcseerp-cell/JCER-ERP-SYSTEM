@@ -147,10 +147,13 @@ async function startServer() {
           "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           CONSTRAINT "uq_consolidated_att_backup_cohort" UNIQUE ("academicYear", "departmentId", "semester")
-        );
-
         CREATE INDEX IF NOT EXISTS "idx_consolidated_att_backup_files_status" ON "consolidated_attendance_backup_files"("status");
         CREATE INDEX IF NOT EXISTS "idx_consolidated_att_backup_files_drive_id" ON "consolidated_attendance_backup_files"("googleDriveFileId");
+
+        -- Add columns for subject deletion and archive lifecycle synchronization
+        ALTER TABLE "attendance_backup_files" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP WITH TIME ZONE NULL;
+        ALTER TABLE "attendance_backup_files" ADD COLUMN IF NOT EXISTS "lastSyncAttemptAt" TIMESTAMP WITH TIME ZONE NULL;
+        CREATE INDEX IF NOT EXISTS "idx_att_backup_files_subject" ON "attendance_backup_files"("subjectId");
       `);
       console.log('✓ Google Drive Attendance, Marks & Consolidated Backup tables verified/created.');
     } catch (gdriveDdlErr: any) {

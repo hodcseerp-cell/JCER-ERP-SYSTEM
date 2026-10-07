@@ -575,7 +575,6 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Teaching Allocation</h1>
               <p className="text-sm text-slate-500 mt-0.5">
                 Subject-to-Faculty allocation workflow • <span className="font-semibold text-indigo-600">{deptName}</span> ({activeAY})
               </p>

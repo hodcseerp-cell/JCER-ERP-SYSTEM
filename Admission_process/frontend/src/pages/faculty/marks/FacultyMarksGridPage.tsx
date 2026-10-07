@@ -16,7 +16,7 @@ import {
   RefreshCw,
   Search,
   FileSpreadsheet,
-  CloudCheck,
+  Cloud,
   CloudOff,
   Building2,
   Calendar,
@@ -507,7 +507,7 @@ export const FacultyMarksGridPage: React.FC = () => {
                 className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-xs"
                 title={workspace.summary.lastSyncedAt ? `Last synced to Google Drive: ${new Date(workspace.summary.lastSyncedAt).toLocaleString()}` : 'Google Drive Synced'}
               >
-                <CloudCheck className="w-3.5 h-3.5" />
+                <Cloud className="w-3.5 h-3.5" />
                 <span>Synced</span>
               </span>
             ) : workspace.summary.syncStatus === 'PENDING' ? (
@@ -531,7 +531,7 @@ export const FacultyMarksGridPage: React.FC = () => {
               </div>
             ) : (
               <span className="inline-flex items-center gap-1 text-neutral-500 font-medium text-xs">
-                <CloudCheck className="w-3.5 h-3.5 text-neutral-400" />
+                <Cloud className="w-3.5 h-3.5 text-neutral-400" />
                 <span>Synced</span>
               </span>
             )}

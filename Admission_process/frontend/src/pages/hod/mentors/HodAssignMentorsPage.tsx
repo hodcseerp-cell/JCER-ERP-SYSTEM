@@ -251,9 +251,7 @@ export const HodAssignMentorsPage: React.FC = () => {
               <span>Back to Mentors</span>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Assign Mentors
-              </h1>
+             
               <p className="text-sm text-slate-500 dark:text-neutral-400">
                 Select students semester-wise, pick a mentor core department and eligible faculty, then confirm.
               </p>

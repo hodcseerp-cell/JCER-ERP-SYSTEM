@@ -129,14 +129,14 @@ export const PrincipalFacultyListPage: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Faculty Name</th>
-                <th className="py-3 px-6 font-semibold">Core Department</th>
-                <th className="py-3 px-6 font-semibold">Official Email</th>
-                <th className="py-3 px-6 font-semibold">Designation</th>
-                <th className="py-3 px-6 font-semibold">Assigned Subjects</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold">Joining Date</th>
+              <tr className="bg-[#111111] dark:bg-neutral-950 text-white font-extrabold uppercase text-[11px] tracking-wider border-b border-neutral-800">
+                <th className="py-3.5 px-6 font-semibold">Faculty Name</th>
+                <th className="py-3.5 px-6 font-semibold">Core Department</th>
+                <th className="py-3.5 px-6 font-semibold">Official Email</th>
+                <th className="py-3.5 px-6 font-semibold">Designation</th>
+                <th className="py-3.5 px-6 font-semibold">Assigned Subjects</th>
+                <th className="py-3.5 px-6 font-semibold text-center">Status</th>
+                <th className="py-3.5 px-6 font-semibold">Joining Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

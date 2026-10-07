@@ -124,15 +124,6 @@ export const MentorLayout: React.FC = () => {
     { name: 'Reports', path: '/mentor/reports', icon: BarChart3 },
   ];
 
-  const subNavTabs = [
-    { name: 'Overview', path: '/mentor/dashboard' },
-    { name: 'My Mentees', path: '/mentor/mentees' },
-    { name: 'Attendance', path: '/mentor/attendance' },
-    { name: 'Academic Performance', path: '/mentor/performance' },
-    { name: 'Mentor Notes', path: '/mentor/notes' },
-    { name: 'Analytics', path: '/mentor/analytics' },
-    { name: 'Reports', path: '/mentor/reports' },
-  ];
 
   const getActiveNavPath = (currentPath: string): string => {
     if (currentPath === '/mentor' || currentPath === '/mentor/dashboard' || currentPath === '/mentor/overview') {
@@ -358,25 +349,6 @@ export const MentorLayout: React.FC = () => {
             </div>
           </div>
 
-          {/* Sub-Nav Pill Bar (visible on 2xl screens, leaving full width for core controls on standard desktops) */}
-          <div className="hidden 2xl:flex items-center glass-bar p-1 rounded-full flex-shrink-0">
-            {subNavTabs.map((tab) => {
-              const isActive = activeNavPath === tab.path || (tab.path === '/mentor/dashboard' && (location.pathname === '/mentor' || location.pathname === '/mentor/overview' || location.pathname === '/mentor/dashboard'));
-              return (
-                <Link
-                  key={tab.name}
-                  to={tab.path}
-                  className={`px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-all duration-200 whitespace-nowrap ${
-                    isActive
-                      ? 'admin-nav-pill-active shadow-sm text-white'
-                      : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-                  }`}
-                >
-                  {tab.name}
-                </Link>
-              );
-            })}
-          </div>
 
           {/* Right Controls: Context Badges + Profile */}
           <div className="flex items-center space-x-2 flex-shrink-0 ml-auto">

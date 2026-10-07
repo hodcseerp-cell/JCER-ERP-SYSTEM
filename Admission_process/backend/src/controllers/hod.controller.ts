@@ -18,12 +18,15 @@ import FacultyAuthorizationRequest from '../models/FacultyAuthorizationRequest';
 import FacultyAssignment from '../models/FacultyAssignment';
 import HodSubjectHandlingRequest from '../models/HodSubjectHandlingRequest';
 import AttendanceRecord from '../models/AttendanceRecord';
+import AttendanceSession from '../models/AttendanceSession';
+import AttendanceBackupFile from '../models/AttendanceBackupFile';
 import User from '../models/User';
 import Notification from '../models/Notification';
 import AuditLog from '../models/AuditLog';
 import sectionAllocationService, { SectionAllocationService } from '../services/sectionAllocation.service';
 import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import semesterAttendanceConsolidationService from '../services/semesterAttendanceConsolidation.service';
+import subjectDriveSyncService from '../services/subjectDriveSync.service';
 import { getAcademicYearVariants } from '../services/faculty.service';
 import logger from '../utils/logger.util';
 
@@ -3777,6 +3780,8 @@ export const updateHodSubject = async (req: AuthenticatedRequest, res: Response,
       }
     }
 
+    const prevStatus = subject.status;
+
     await subject.update({
       ...(code ? { code: code.toUpperCase().trim() } : {}),
       ...(name ? { name: name.trim() } : {}),
@@ -3786,6 +3791,24 @@ export const updateHodSubject = async (req: AuthenticatedRequest, res: Response,
       ...(type ? { type } : {}),
       ...(status ? { status } : {}),
     });
+
+    // Handle subject restoration to ACTIVE state
+    if (status === 'ACTIVE' && prevStatus === 'INACTIVE') {
+      setImmediate(() => {
+        subjectDriveSyncService
+          .syncSubjectLifecycle({
+            subjectId: id,
+            action: 'RESTORE',
+            departmentId: subject.departmentId || req.departmentId,
+            semester: subject.semester,
+            userId: req.user?.id,
+            userRole: req.user?.role,
+            subjectCode: subject.code,
+            subjectName: subject.name,
+          })
+          .catch((err) => logger.error('ASYNC_RESTORE_DRIVE_SYNC_ERROR:', err));
+      });
+    }
 
     await logAudit(req, 'HOD_UPDATE_SUBJECT', { subjectId: id, changes: req.body });
 
@@ -3797,75 +3820,255 @@ export const updateHodSubject = async (req: AuthenticatedRequest, res: Response,
 };
 
 /**
- * DELETE /api/hod/subjects/:id
+ * GET /api/hod/subjects/:id/deletion-check
+ * Dynamically determines if attendance history exists before deletion/archival
  */
-export const deleteHodSubject = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+export const checkSubjectDeletion = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departmentId = req.departmentId;
     const role = req.user?.role;
     const { id } = req.params;
 
-    // First find subject by primary key
     const subject = await Subject.findByPk(id);
     if (!subject) {
       return res.status(404).json({
         success: false,
         code: 'RESOURCE_NOT_FOUND',
-        message: 'Subject not found.'
+        message: 'Subject not found.',
+      });
+    }
+
+    if (role === 'HOD' && departmentId && subject.departmentId && subject.departmentId !== departmentId) {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_SCOPE',
+        message: 'Subject not found in your department scope.',
+      });
+    }
+
+    const [sessionsCount, recordsCount, assignmentsCount, backupFilesCount] = await Promise.all([
+      AttendanceSession.count({ where: { subjectId: id } }),
+      AttendanceRecord.count({ where: { subjectId: id } }),
+      FacultyAssignment.count({ where: { subjectId: id } }),
+      AttendanceBackupFile.count({ where: { subjectId: id } }),
+    ]);
+
+    const hasAttendanceHistory = sessionsCount > 0 || recordsCount > 0;
+
+    return res.json({
+      success: true,
+      data: {
+        hasAttendanceHistory,
+        sessionsCount,
+        recordsCount,
+        assignmentsCount,
+        backupFilesCount,
+        subject: {
+          id: subject.id,
+          code: subject.code,
+          name: subject.name,
+          semester: subject.semester,
+          status: subject.status,
+          credits: subject.credits,
+          type: subject.type,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error('HOD_CHECK_SUBJECT_DELETION_ERROR:', error);
+    return res.status(500).json({
+      success: false,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: error?.message || 'Failed to check subject deletion state.',
+    });
+  }
+};
+
+/**
+ * DELETE /api/hod/subjects/:id
+ * Safely deletes or archives a subject and synchronizes with Google Drive attendance workbooks.
+ */
+export const deleteHodSubject = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+  const t = await sequelize.transaction();
+  try {
+    const departmentId = req.departmentId;
+    const role = req.user?.role;
+    const { id } = req.params;
+    const shouldDeactivate = req.query.deactivate === 'true' || req.body?.deactivate === true;
+
+    // First find subject by primary key
+    const subject = await Subject.findByPk(id, { transaction: t });
+    if (!subject) {
+      await t.rollback();
+      return res.status(404).json({
+        success: false,
+        code: 'RESOURCE_NOT_FOUND',
+        message: 'Subject not found.',
       });
     }
 
     // Verify department scope if user is HOD
     if (role === 'HOD' && departmentId && subject.departmentId && subject.departmentId !== departmentId) {
+      await t.rollback();
       return res.status(403).json({
         success: false,
         code: 'FORBIDDEN_SCOPE',
-        message: 'Subject not found in your department scope.'
+        message: 'Subject not found in your department scope.',
       });
     }
 
-    // Check active faculty assignments, attendance records
-    const [assignmentCount, attendanceCount] = await Promise.all([
-      FacultyAssignment.count({ where: { subjectId: id } }),
-      AttendanceRecord.count({ where: { subjectId: id } }),
+    // Resolve active academic year
+    const currentYearRecord = await AcademicYear.findOne({ where: { isCurrent: true }, transaction: t });
+    const activeAcademicYear = currentYearRecord?.year || '2026-27';
+
+    // Authoritative check on attendance history in PostgreSQL
+    const [sessionsCount, attendanceRecordsCount, assignmentCount] = await Promise.all([
+      AttendanceSession.count({ where: { subjectId: id }, transaction: t }),
+      AttendanceRecord.count({ where: { subjectId: id }, transaction: t }),
+      FacultyAssignment.count({ where: { subjectId: id }, transaction: t }),
     ]);
 
-    const totalAcademicRecords = assignmentCount + attendanceCount;
+    const hasAttendanceHistory = sessionsCount > 0 || attendanceRecordsCount > 0;
 
-    if (totalAcademicRecords > 0) {
-      // Check if user requested soft-deactivate instead
-      if (req.query.deactivate === 'true' || req.body?.deactivate === true) {
-        await subject.update({ status: 'INACTIVE' });
-        await logAudit(req, 'HOD_DEACTIVATE_SUBJECT', { subjectId: id, code: subject.code, name: subject.name });
-        return res.json({
-          success: true,
-          message: 'Subject has historical academic data and has been marked as INACTIVE.',
-          data: subject
+    // CASE B: Historical attendance exists
+    if (hasAttendanceHistory) {
+      if (!shouldDeactivate) {
+        await t.rollback();
+        return res.status(409).json({
+          success: false,
+          code: 'SUBJECT_HAS_ACADEMIC_DATA',
+          message: 'This subject contains attendance history. The subject will be archived and historical attendance records will be preserved.',
+          hasAttendanceHistory: true,
+          details: {
+            sessions: sessionsCount,
+            attendanceRecords: attendanceRecordsCount,
+            assignments: assignmentCount,
+          },
         });
       }
 
-      return res.status(409).json({
-        success: false,
-        code: 'SUBJECT_HAS_ACADEMIC_DATA',
-        message: 'Subject cannot be deleted because academic records exist.',
-        details: {
-          assignments: assignmentCount,
-          attendanceRecords: attendanceCount,
-        }
+      // Safe Archival: Mark subject and faculty assignments as INACTIVE, mark backups as ARCHIVED
+      await subject.update({ status: 'INACTIVE' }, { transaction: t });
+      await FacultyAssignment.update({ status: 'INACTIVE' }, { where: { subjectId: id }, transaction: t });
+      await AttendanceBackupFile.update(
+        { status: 'ARCHIVED', archivedAt: new Date() },
+        { where: { subjectId: id }, transaction: t }
+      );
+
+      await logAudit(req, 'SUBJECT_ARCHIVED', {
+        subjectId: id,
+        code: subject.code,
+        name: subject.name,
+        action: 'ARCHIVE',
+        hasAttendanceHistory: true,
+        departmentId: subject.departmentId || departmentId,
+        academicYear: activeAcademicYear,
+      });
+
+      // COMMIT TRANSACTION
+      await t.commit();
+
+      // Enqueue asynchronous background Drive synchronization
+      setImmediate(() => {
+        subjectDriveSyncService
+          .syncSubjectLifecycle({
+            subjectId: id,
+            action: 'ARCHIVE',
+            academicYear: activeAcademicYear,
+            departmentId: subject.departmentId || departmentId,
+            semester: subject.semester,
+            userId: req.user?.id,
+            userRole: req.user?.role,
+            subjectCode: subject.code,
+            subjectName: subject.name,
+          })
+          .catch((driveErr) => {
+            logger.error('ASYNC_DRIVE_ARCHIVE_ERROR:', driveErr);
+          });
+      });
+
+      return res.json({
+        success: true,
+        message: 'Subject archived successfully. Historical attendance has been preserved.',
+        data: {
+          subjectId: id,
+          lifecycleStatus: 'ARCHIVED',
+          attendanceHistoryExists: true,
+          driveSyncStatus: 'PENDING',
+        },
       });
     }
 
-    // If zero historical records, safe to hard delete
-    await subject.destroy();
-    await logAudit(req, 'HOD_DELETE_SUBJECT', { subjectId: id, code: subject.code, name: subject.name });
+    // CASE A: Zero historical attendance records -> Safe to hard delete
+    // Clean up empty faculty assignments
+    await FacultyAssignment.destroy({ where: { subjectId: id }, transaction: t });
 
-    return res.json({ success: true, message: 'Subject deleted successfully.' });
+    // Mark or clean up backup file records in DB
+    await AttendanceBackupFile.update(
+      { status: 'DELETED' },
+      { where: { subjectId: id }, transaction: t }
+    );
+
+    const deletedSubjectInfo = {
+      id: subject.id,
+      code: subject.code,
+      name: subject.name,
+      semester: subject.semester,
+      departmentId: subject.departmentId || departmentId,
+    };
+
+    // Physically delete subject record
+    await subject.destroy({ transaction: t });
+
+    await logAudit(req, 'SUBJECT_DELETED', {
+      subjectId: id,
+      code: deletedSubjectInfo.code,
+      name: deletedSubjectInfo.name,
+      action: 'DELETE',
+      hasAttendanceHistory: false,
+      departmentId: deletedSubjectInfo.departmentId,
+      academicYear: activeAcademicYear,
+    });
+
+    // COMMIT TRANSACTION
+    await t.commit();
+
+    // Enqueue asynchronous background Drive synchronization for cleanup
+    setImmediate(() => {
+      subjectDriveSyncService
+        .syncSubjectLifecycle({
+          subjectId: id,
+          action: 'DELETE',
+          academicYear: activeAcademicYear,
+          departmentId: deletedSubjectInfo.departmentId,
+          semester: deletedSubjectInfo.semester,
+          userId: req.user?.id,
+          userRole: req.user?.role,
+          subjectCode: deletedSubjectInfo.code,
+          subjectName: deletedSubjectInfo.name,
+        })
+        .catch((driveErr) => {
+          logger.error('ASYNC_DRIVE_DELETE_ERROR:', driveErr);
+        });
+    });
+
+    return res.json({
+      success: true,
+      message: 'Subject deleted successfully. Associated unused attendance backup will be removed from Google Drive.',
+      data: {
+        subjectId: id,
+        lifecycleStatus: 'DELETED',
+        attendanceHistoryExists: false,
+        driveSyncStatus: 'PENDING',
+      },
+    });
   } catch (error: any) {
+    await t.rollback();
     logger.error('HOD_DELETE_SUBJECT_ERROR:', error);
     return res.status(500).json({
       success: false,
       code: 'INTERNAL_SERVER_ERROR',
-      message: error?.message || 'Failed to delete subject.'
+      message: error?.message || 'Failed to delete subject.',
     });
   }
 };

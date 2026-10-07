@@ -111,14 +111,7 @@ export const HodFacultyListPage: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <h2 className="text-xl font-extrabold text-neutral-900 dark:text-white">
-              Global Faculty Directory
-            </h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Institutional directory of all college teaching faculty across all departments available for teaching allocations.
-            </p>
-          </div>
+         
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -193,6 +186,7 @@ export const HodFacultyListPage: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
               <tr>
+                <th className="py-3.5 px-4 w-12 text-center">#</th>
                 <th className="py-3.5 px-4">Faculty Member</th>
                 <th className="py-3.5 px-4">Core Department</th>
                 <th className="py-3.5 px-4">Designation</th>
@@ -204,13 +198,13 @@ export const HodFacultyListPage: React.FC = () => {
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-neutral-400">
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-[#0c1a40] border-t-transparent" />
                     <p className="mt-2 text-xs font-bold">Loading global faculty directory...</p>
                   </td>
                 </tr>
               ) : filteredFaculty.length > 0 ? (
-                filteredFaculty.map((member) => {
+                filteredFaculty.map((member, idx) => {
                   const subjectsCount =
                     member.assignedSubjectsCount ??
                     member.hodAssignments?.length ??
@@ -219,18 +213,15 @@ export const HodFacultyListPage: React.FC = () => {
 
                   return (
                     <tr key={member.id} className="hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 transition-colors">
-                      {/* Faculty Name & Email */}
+                      {/* Sl. No */}
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-neutral-500 dark:text-neutral-400">
+                        {idx + 1}
+                      </td>
+
+                      {/* Faculty Name */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-2xl bg-[#0c1a40] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-                            {member.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
-                              <span>{member.name}</span>
-                            </div>
-                            <div className="text-[11px] text-neutral-400 font-mono">{member.email}</div>
-                          </div>
+                        <div className="font-bold text-neutral-900 dark:text-white">
+                          {member.name}
                         </div>
                       </td>
 
@@ -294,7 +285,7 @@ export const HodFacultyListPage: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-neutral-400">
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
                     <Users className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
                     <p className="text-sm font-bold text-neutral-700 dark:text-neutral-300">No Faculty Found in Directory</p>
                     <p className="text-xs text-neutral-400 mt-1">Faculty records are centrally registered by the Dean Academics.</p>
