@@ -7,6 +7,7 @@ import Student from '../models/Student';
 import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import Department from '../models/Department';
 import db from '../config/database';
+import { calculateStudentCohort } from '../utils/batchCohort.util';
 
 /**
  * POST /api/admin/onboarding/usn-registry
@@ -250,10 +251,20 @@ export const bulkUploadStudents = async (
             phone: s.phone,
           }, { transaction });
 
-          const batchYear = new Date().getFullYear();
+          const isSem1 = Number(s.semester || 1) === 1;
+          const isLateral = Number(s.semester || 1) === 3;
+          const cohortInfo = calculateStudentCohort({
+            academicYear: '2026-2027',
+            semester: Number(s.semester || 1),
+            initialSemester: isLateral ? 3 : 1,
+            entrySemester: isLateral ? 3 : 1,
+            admissionType: isLateral ? 'LATERAL' : 'FRESH',
+            usn: s.usn,
+          });
+          const batchYear = cohortInfo.cohortStartYear;
+          const admissionBatch = cohortInfo.batchDisplay;
           const seqStr = String(s.usn.slice(-3));
           const enrollmentNumber = s.usn;
-          const isSem1 = Number(s.semester || 1) === 1;
           const rollNumber = isSem1 ? `${batchYear}${s.departmentCode}${seqStr}` : null;
 
           const newStudent = await Student.create({
@@ -262,6 +273,7 @@ export const bulkUploadStudents = async (
             enrollmentNumber,
             rollNumber,
             batchYear,
+            admissionBatch,
             departmentId: s.departmentId,
             semester: s.semester || 1,
             dateOfBirth: s.dateOfBirth,
@@ -271,7 +283,7 @@ export const bulkUploadStudents = async (
             parentPhone: s.parentPhone,
             parentEmail: s.parentEmail,
             admissionStatus: 'APPROVED',
-            admissionType: s.semester === 3 ? 'LATERAL' : 'FRESH',
+            admissionType: isLateral ? 'LATERAL' : 'FRESH',
             initialSemester: s.semester === 3 ? 3 : 1,
             currentAcademicYear: '2026-2027',
           }, { transaction });

@@ -11,6 +11,7 @@ class Student extends Model {
   public rollNumber!: string;
   public batchYear!: number;
   public admissionBatch!: string | null;
+  public batch!: string;
   public departmentId!: string;
   public semester!: number;
   public dateOfBirth!: Date | null;
@@ -75,6 +76,20 @@ Student.init(
       type: DataTypes.STRING(30),
       allowNull: true,
       defaultValue: null,
+    },
+    batch: {
+      type: DataTypes.VIRTUAL,
+      get() {
+        const adm = this.getDataValue('admissionBatch');
+        if (adm) {
+          const match = String(adm).match(/^(\d{4})[-–](\d{4})$/);
+          if (match && parseInt(match[2], 10) - parseInt(match[1], 10) === 4) {
+            return `${match[1]}–${match[2]}`;
+          }
+        }
+        const bYear = this.getDataValue('batchYear') || 2026;
+        return `${bYear}–${bYear + 4}`;
+      },
     },
     departmentId: {
       type: DataTypes.UUID,

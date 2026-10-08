@@ -13,6 +13,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import hodService from '../../services/hod.service';
+import { getStudentCohort } from '../../utils/batchCohort.util';
 
 export const HodStudentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -87,6 +88,12 @@ export const HodStudentDetailPage: React.FC = () => {
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   USN: {student.usn}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  Batch: {getStudentCohort(student)}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                  AY: {student.currentAcademicYear || student.academicYear || '2026-2027'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">

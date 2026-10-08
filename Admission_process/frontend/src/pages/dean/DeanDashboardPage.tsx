@@ -600,26 +600,26 @@ export const DeanDashboardPage: React.FC = () => {
                   <tr key={req.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-neutral-900 dark:text-white">
-                        {req.hodUser ? `${req.hodUser.firstName} ${req.hodUser.lastName || ''}`.trim() : 'HOD User'}
+                        {req.hodUser ? `${req.hodUser.firstName} ${req.hodUser.lastName || ''}`.trim() : (req as any).hodName || 'HOD User'}
                       </div>
-                      <div className="text-[11px] text-neutral-400">{req.hodUser?.email}</div>
+                      <div className="text-[11px] text-neutral-400">{req.hodUser?.email || (req as any).email}</div>
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-neutral-700 dark:text-neutral-300">
-                      <span className="px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-bold text-[11px]">
-                        {req.department?.code || 'DEPT'}
+                      <span className="font-bold text-neutral-900 dark:text-white block">
+                        {req.department?.code || (req as any).departmentCode || 'DEPT'}
                       </span>
                       <span className="text-[11px] text-neutral-400 block truncate max-w-[120px]">
-                        {req.department?.name}
+                        {req.department?.name || (req as any).departmentName}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-bold text-neutral-800 dark:text-neutral-200">
                       Semester {req.semester}
                     </td>
                     <td className="py-3.5 px-4 font-bold text-neutral-900 dark:text-white">
-                      {req.subject?.name || 'Subject'}
+                      {req.subject?.name || (req as any).subjectName || 'Subject'}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-neutral-600 dark:text-neutral-400">
-                      {req.subject?.code || 'N/A'}
+                      {req.subject?.code || (req as any).subjectCode || 'N/A'}
                     </td>
                     <td className="py-3.5 px-4 font-medium text-neutral-600 dark:text-neutral-300">
                       {req.academicYear}
@@ -757,19 +757,19 @@ export const DeanDashboardPage: React.FC = () => {
                   <div>
                     <span className="text-[10px] text-neutral-400 uppercase font-bold block">Name</span>
                     <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                      {viewingRequest.hodUser ? `${viewingRequest.hodUser.firstName} ${viewingRequest.hodUser.lastName || ''}`.trim() : 'HOD User'}
+                      {viewingRequest.hodUser ? `${viewingRequest.hodUser.firstName} ${viewingRequest.hodUser.lastName || ''}`.trim() : (viewingRequest as any).hodName || 'HOD User'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-neutral-400 uppercase font-bold block">Email</span>
                     <span className="font-medium text-neutral-700 dark:text-neutral-300 text-xs">
-                      {viewingRequest.hodUser?.email}
+                      {viewingRequest.hodUser?.email || (viewingRequest as any).email}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-neutral-400 uppercase font-bold block">Department</span>
                     <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                      {viewingRequest.department?.name} ({viewingRequest.department?.code})
+                      {viewingRequest.department?.name || (viewingRequest as any).departmentName} ({viewingRequest.department?.code || (viewingRequest as any).departmentCode || 'DEPT'})
                     </span>
                   </div>
                 </div>
@@ -791,13 +791,13 @@ export const DeanDashboardPage: React.FC = () => {
                   <div>
                     <span className="text-[10px] text-neutral-400 uppercase font-bold block">Subject Code</span>
                     <span className="font-mono font-bold text-neutral-900 dark:text-white text-xs">
-                      {viewingRequest.subject?.code}
+                      {viewingRequest.subject?.code || (viewingRequest as any).subjectCode || 'N/A'}
                     </span>
                   </div>
                   <div className="sm:col-span-2">
                     <span className="text-[10px] text-neutral-400 uppercase font-bold block">Subject Name</span>
                     <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                      {viewingRequest.subject?.name}
+                      {viewingRequest.subject?.name || (viewingRequest as any).subjectName || 'Subject'}
                     </span>
                   </div>
                   <div>

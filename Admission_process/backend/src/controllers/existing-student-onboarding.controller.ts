@@ -21,6 +21,7 @@ import AuditLog from '../models/AuditLog';
 import ExistingStudentOnboardingBatch from '../models/ExistingStudentOnboardingBatch';
 import logger from '../utils/logger.util';
 import { normalizeAcademicYear, areAcademicYearsEqual } from '../utils/academicYear.util';
+import { calculateStudentCohort } from '../utils/batchCohort.util';
 
 interface AuthRequest extends Request {
   user?: {
@@ -683,7 +684,6 @@ export const importExistingStudents = async (
 
         // 2. Create Student Master & Academic Enrollment record
         // (application_number is NULL, no Admission entity is created)
-        const batchYear = parseInt(item.scheme || '2025', 10) || new Date().getFullYear();
         const currentSem = Number(item.currentSemester) || 3;
         const entrySem = Number(item.entrySemester) || 1;
 
@@ -694,6 +694,17 @@ export const importExistingStudents = async (
         const effectiveRollNumber = currentSem === 1 ? (item.rollNumber || null) : null;
         const targetAcademicYear = resolveAcademicYear(item.academicYear || academicYear);
 
+        const cohortInfo = calculateStudentCohort({
+          academicYear: targetAcademicYear,
+          semester: currentSem,
+          initialSemester: entrySem,
+          entrySemester: entrySem,
+          admissionType: item.admissionType || (entrySem >= 3 ? 'LATERAL' : 'EXISTING'),
+          usn: item.usn,
+        });
+        const batchYear = cohortInfo.cohortStartYear;
+        const admissionBatch = cohortInfo.batchDisplay;
+
         const newStudent = await Student.create(
           {
             userId: newUser.id,
@@ -701,6 +712,7 @@ export const importExistingStudents = async (
             enrollmentNumber: item.enrollmentNumber ? item.enrollmentNumber.toUpperCase() : (item.usn ? item.usn.toUpperCase() : null),
             rollNumber: effectiveRollNumber,
             batchYear,
+            admissionBatch,
             scheme: item.scheme || '2025',
             departmentId: dept.id,
             semester: currentSem,

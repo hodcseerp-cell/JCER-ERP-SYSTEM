@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, Filter, ChevronLeft, ChevronRight, Eye, CheckCircle2, Clock, XCircle, FileText, 
-  RefreshCw, Download, User, Phone, MapPin, Calendar, BookOpen, Loader2, ArrowRight, ShieldCheck, Mail, ClipboardList, ShieldAlert, Award, Edit, GraduationCap, X, Briefcase, FileSignature, CheckSquare, Trash2, Ban, AlertTriangle
+  RefreshCw, Download, User, Phone, MapPin, Calendar, BookOpen, Loader2, ArrowRight, ShieldCheck, Mail, ClipboardList, ShieldAlert, Award, Edit, GraduationCap, X, Briefcase, FileSignature, CheckSquare, Trash2, Ban, AlertTriangle, Layers
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAcademicYear } from '../../../utils/date.util';
@@ -86,6 +86,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
 
   const [search, setSearch] = useState('');
   const [academicYear, setAcademicYear] = useState('ALL');
+  const [batch, setBatch] = useState('ALL');
   const [branchId, setBranchId] = useState('ALL');
   const [semester, setSemester] = useState('ALL');
   const [status, setStatus] = useState('ENROLLED');
@@ -100,9 +101,20 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [showFilters, setShowFilters] = useState(true);
 
+  // Available batches list (dynamic from server + default cohorts)
+  const [availableBatches, setAvailableBatches] = useState<string[]>([
+    '2026–2030',
+    '2025–2029',
+    '2024–2028',
+    '2023–2027',
+    '2022–2026',
+    '2021–2025'
+  ]);
+
   // Pending filter state (applied only on "Apply Filters")
   const [pendingSearch, setPendingSearch] = useState('');
   const [pendingAcademicYear, setPendingAcademicYear] = useState('ALL');
+  const [pendingBatch, setPendingBatch] = useState('ALL');
   const [pendingBranchId, setPendingBranchId] = useState('ALL');
   const [pendingSemester, setPendingSemester] = useState('ALL');
   const [pendingStatus, setPendingStatus] = useState('ENROLLED');
@@ -203,16 +215,20 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
 
   const fetchStatsAndBranches = async () => {
     try {
-      const [statsData, branchData] = await Promise.all([
+      const [statsData, branchData, batchData] = await Promise.all([
         admissionService.getStats(),
-        admissionService.getBranches()
+        admissionService.getBranches(),
+        admissionService.getAvailableBatches()
       ]);
       if (statsData) {
         setStats(statsData as any);
       }
       if (branchData) setBranches(branchData);
+      if (batchData && Array.isArray(batchData) && batchData.length > 0) {
+        setAvailableBatches(batchData);
+      }
     } catch (e) {
-      console.error('Failed to load stats/branches', e);
+      console.error('Failed to load stats/branches/batches', e);
     }
   };
 
@@ -231,6 +247,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         category: category === 'ALL' ? undefined : category,
         district: district.trim() || undefined,
         academicYear: academicYear === 'ALL' ? undefined : academicYear,
+        batch: batch === 'ALL' ? undefined : batch,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         search: search.trim() || undefined,
@@ -279,7 +296,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
     fetchStudentsList();
   }, [
     page, limit, status, branchId, semester, admissionType, qualification, gender, category, 
-    district, startDate, endDate, sortBy, sortOrder, search, academicYear
+    district, startDate, endDate, sortBy, sortOrder, search, academicYear, batch
   ]);
 
   // Debounced auto-search as user types
@@ -296,6 +313,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
   const handleExecuteSearch = () => {
     setSearch(pendingSearch.trim());
     setAcademicYear(pendingAcademicYear);
+    setBatch(pendingBatch);
     setBranchId(pendingBranchId);
     setSemester(pendingSemester);
     setStatus(pendingStatus);
@@ -636,8 +654,8 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
         {showFilters && (
           <div className="px-5 pt-4 pb-5 space-y-4">
 
-            {/* Row 1: 6 primary dropdowns */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-3.5 gap-y-3">
+            {/* Row 1: Primary dropdowns */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-x-3.5 gap-y-3">
               {/* Academic Year */}
               <div className="space-y-1">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Academic Year</label>
@@ -660,6 +678,31 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
                       const opt = `${y}-${y + 1}`;
                       return <option key={opt} value={opt}>{opt}</option>;
                     })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Batch */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Batch</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
+                    <Layers size={12} />
+                  </span>
+                  <select
+                    value={batch}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPendingBatch(val);
+                      setBatch(val);
+                      setPage(1);
+                    }}
+                    className="w-full pl-7 pr-2 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                  >
+                    <option value="ALL">All Batches</option>
+                    {availableBatches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -885,12 +928,12 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
             <div className="flex items-center justify-center gap-3 pt-1">
               <button
                 onClick={() => {
-                  setPendingSearch(''); setPendingAcademicYear('ALL'); setPendingBranchId('ALL');
+                  setPendingSearch(''); setPendingAcademicYear('ALL'); setPendingBatch('ALL'); setPendingBranchId('ALL');
                   setPendingSemester('ALL'); setPendingStatus('ENROLLED'); setPendingAdmissionType('ALL'); setPendingQualification('ALL');
                   setPendingGender('ALL'); setPendingCategory('ALL'); setPendingDistrict('');
                   setPendingStartDate(''); setPendingEndDate('');
                   setPendingSortBy('date'); setPendingSortOrder('DESC');
-                  setSearch(''); setAcademicYear('ALL'); setBranchId('ALL'); setSemester('ALL');
+                  setSearch(''); setAcademicYear('ALL'); setBatch('ALL'); setBranchId('ALL'); setSemester('ALL');
                   setStatus('ENROLLED'); setAdmissionType('ALL'); setQualification('ALL');
                   setGender('ALL'); setCategory('ALL'); setDistrict('');
                   setStartDate(''); setEndDate(''); setSortBy('date'); setSortOrder('DESC'); setPage(1);
@@ -902,7 +945,7 @@ export const StudentsDashboardPage: React.FC<StudentsDashboardPageProps> = ({ re
               </button>
               <button
                 onClick={() => {
-                  setSearch(pendingSearch); setAcademicYear(pendingAcademicYear);
+                  setSearch(pendingSearch); setAcademicYear(pendingAcademicYear); setBatch(pendingBatch);
                   setBranchId(pendingBranchId); setSemester(pendingSemester); setStatus(pendingStatus);
                   setAdmissionType(pendingAdmissionType); setQualification(pendingQualification);
                   setGender(pendingGender); setCategory(pendingCategory);

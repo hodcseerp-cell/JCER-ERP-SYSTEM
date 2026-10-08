@@ -133,6 +133,11 @@ export interface HodStudentItem {
   } | null;
   section: string | null;
   batchYear: number;
+  batch?: string;
+  batchCohort?: string;
+  admissionBatch?: string | null;
+  academicYear?: string;
+  currentAcademicYear?: string;
   admissionStatus: string;
   admissionType: string;
   qualification?: string | null;

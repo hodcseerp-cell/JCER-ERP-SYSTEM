@@ -157,8 +157,11 @@ async function startServer() {
         ALTER TABLE "attendance_backup_files" ADD COLUMN IF NOT EXISTS "lastSyncAttemptAt" TIMESTAMP WITH TIME ZONE NULL;
         CREATE INDEX IF NOT EXISTS "idx_att_backup_files_subject" ON "attendance_backup_files"("subjectId");
 
-        -- Ensure student admissionBatch attribute exists
+        -- Ensure student admissionBatch attribute exists and is formatted as full 4-year cohort (e.g. 2026–2030)
         ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
+        UPDATE "students" 
+        SET "admissionBatch" = "batchYear"::text || '–' || ("batchYear" + 4)::text
+        WHERE "admissionBatch" IS NULL OR "admissionBatch" NOT LIKE '%–%';
       `);
       console.log('✓ Google Drive Attendance, Marks & Consolidated Backup tables verified/created.');
     } catch (gdriveDdlErr: any) {
@@ -839,6 +842,32 @@ async function startServer() {
         CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_user" ON "hod_subject_handling_requests" ("hodUserId");
         CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_status" ON "hod_subject_handling_requests" ("status");
         CREATE INDEX IF NOT EXISTS "idx_hod_subj_req_subj" ON "hod_subject_handling_requests" ("subjectId");
+
+        -- Ensure teacherId can be null for HOD assignments
+        DO $$
+        BEGIN
+          ALTER TABLE "faculty_assignments" ALTER COLUMN "teacherId" DROP NOT NULL;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
+
+        -- Ensure notification enums support specific user targeting
+        DO $$
+        BEGIN
+          ALTER TYPE "enum_notifications_audience" ADD VALUE IF NOT EXISTS 'SPECIFIC_USER';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
+
+        DO $$
+        BEGIN
+          ALTER TYPE "enum_notifications_type" ADD VALUE IF NOT EXISTS 'SUCCESS';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
+
+        DO $$
+        BEGIN
+          ALTER TYPE "enum_notifications_type" ADD VALUE IF NOT EXISTS 'WARNING';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END $$;
       `);
 
       const [asDept]: any = await sequelize.query(`

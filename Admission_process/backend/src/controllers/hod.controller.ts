@@ -29,6 +29,7 @@ import semesterAttendanceConsolidationService from '../services/semesterAttendan
 import subjectDriveSyncService from '../services/subjectDriveSync.service';
 import { getAcademicYearVariants } from '../services/faculty.service';
 import logger from '../utils/logger.util';
+import { calculateStudentCohort, formatBatchCohort } from '../utils/batchCohort.util';
 
 /**
  * Helper to record audit log for HOD operations
@@ -508,11 +509,13 @@ export const getHodDepartmentStudents = async (options: {
   limit?: number;
   isSemesterHandling?: boolean;
   branch?: string;
+  batch?: string;
 }) => {
   const {
     departmentId,
     academicYear,
     academicYearId,
+    batch,
     semester,
     semesterId,
     section,
@@ -790,6 +793,23 @@ export const getHodDepartmentStudents = async (options: {
     }
   }
 
+  if (batch && batch !== 'ALL') {
+    const bMatch = String(batch).match(/(\d{4})/);
+    if (bMatch) {
+      const bYear = parseInt(bMatch[1], 10);
+      const batchConditions = [
+        { batchYear: bYear },
+        { admissionBatch: { [Op.iLike]: `%${bYear}%` } },
+      ];
+      if (studentWhere[Op.or]) {
+        studentWhere[Op.and] = [...(studentWhere[Op.and] || []), { [Op.or]: studentWhere[Op.or] }, { [Op.or]: batchConditions }];
+        delete studentWhere[Op.or];
+      } else {
+        studentWhere[Op.or] = batchConditions;
+      }
+    }
+  }
+
   if (startDate && endDate) {
     studentWhere.createdAt = {
       [Op.between]: [new Date(startDate), new Date(new Date(endDate).setHours(23, 59, 59, 999))],
@@ -945,6 +965,7 @@ export const getHodStudents = async (req: AuthenticatedRequest, res: Response, n
       sortBy,
       sortOrder,
       branch,
+      batch,
     } = req.query as any;
 
     const { count, rows } = await getHodDepartmentStudents({
@@ -970,6 +991,7 @@ export const getHodStudents = async (req: AuthenticatedRequest, res: Response, n
       limit,
       isSemesterHandling: isSemHandling,
       branch,
+      batch,
     });
 
     // Attendance stats
@@ -1044,6 +1066,17 @@ export const getHodStudents = async (req: AuthenticatedRequest, res: Response, n
       const rawDeptCode = s.department?.code || null;
       const actualBranchCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
 
+      // Calculate complete 4-year engineering cohort
+      const cohortInfo = calculateStudentCohort({
+        batchYear: s.batchYear,
+        admissionBatch: s.admissionBatch,
+        admissionType: s.admissionType || s.admission?.admissionType,
+        initialSemester: s.initialSemester,
+        currentAcademicYear: s.currentAcademicYear || enc?.academicYearId,
+        semester: sem,
+        usn: s.usn,
+      });
+
       return {
         id: s.id,
         slNo,
@@ -1069,7 +1102,12 @@ export const getHodStudents = async (req: AuthenticatedRequest, res: Response, n
         sectionId: enc?.sectionId || null,
         section: cleanSection,
         rollNumber: sem === 1 ? (enc?.rollNumber || s.rollNumber || null) : null,
-        batchYear: s.batchYear || (s.currentAcademicYear ? Number(s.currentAcademicYear.split(/[-–]/)[0]) : 2026),
+        batchYear: cohortInfo.cohortStartYear,
+        batch: cohortInfo.batchDisplay,
+        batchCohort: cohortInfo.batchDisplay,
+        admissionBatch: cohortInfo.batchDisplay,
+        academicYear: enc?.academicYearId || s.currentAcademicYear || '2026-2027',
+        currentAcademicYear: s.currentAcademicYear || enc?.academicYearId || '2026-2027',
         admissionStatus: s.admission?.applicationStatus || s.admissionStatus || 'ACTIVE',
         admissionType: s.admissionType || s.admission?.admissionType || 'REGULAR',
         qualification: s.admission?.qualification || null,
@@ -1153,6 +1191,16 @@ export const getHodStudentById = async (req: AuthenticatedRequest, res: Response
     // Marks records
     const marks: any[] = [];
 
+    const studentCohort = calculateStudentCohort({
+      batchYear: student.batchYear,
+      admissionBatch: student.admissionBatch,
+      admissionType: student.admissionType,
+      initialSemester: student.initialSemester,
+      currentAcademicYear: student.currentAcademicYear,
+      semester: student.semester,
+      usn: student.usn,
+    });
+
     return res.json({
       success: true,
       data: {
@@ -1171,6 +1219,10 @@ export const getHodStudentById = async (req: AuthenticatedRequest, res: Response
           parentPhone: student.parentPhone,
           parentEmail: student.parentEmail,
           address: student.address,
+          batchYear: studentCohort.cohortStartYear,
+          batch: studentCohort.batchDisplay,
+          admissionBatch: studentCohort.batchDisplay,
+          currentAcademicYear: student.currentAcademicYear || '2026-2027',
           admissionStatus: student.admissionStatus,
           admissionType: student.admissionType,
           department: student.department,
@@ -1310,6 +1362,16 @@ export const getHodSemesterCohort = async (
       const actualBranchCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
       const fallbackDeptCode = isSemHandling ? 'CSE' : (department?.code || 'CSE');
 
+      const cohortInfo = calculateStudentCohort({
+        batchYear: s.batchYear,
+        admissionBatch: s.admissionBatch,
+        admissionType: s.admissionType,
+        initialSemester: s.initialSemester,
+        currentAcademicYear: enc?.academicYearId || s.currentAcademicYear || academicYear,
+        semester: enc?.semesterId || s.semester,
+        usn: s.usn,
+      });
+
       return {
         id: s.id,
         index: idx + 1,
@@ -1326,6 +1388,9 @@ export const getHodSemesterCohort = async (
         semester: enc?.semesterId || s.semester,
         section: cleanSec || '—',
         rollNumber: enc?.rollNumber || s.rollNumber || null,
+        batchYear: cohortInfo.cohortStartYear,
+        batch: cohortInfo.batchDisplay,
+        admissionBatch: cohortInfo.batchDisplay,
         academicYear: enc?.academicYearId || s.currentAcademicYear || academicYear,
         status: enc?.status || s.admissionStatus || 'ACTIVE',
         admissionType: s.admissionType || 'REGULAR',

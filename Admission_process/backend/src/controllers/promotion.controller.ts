@@ -9,6 +9,7 @@ import PromotionBatch from '../models/PromotionBatch';
 import StudentPromotionHistory from '../models/StudentPromotionHistory';
 import StudentAcademicEnrollment from '../models/StudentAcademicEnrollment';
 import admissionService from '../services/admission.service';
+import { calculateStudentCohort } from '../utils/batchCohort.util';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -463,8 +464,8 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
     for (const student of lockedStudents) {
       if (!finalPromoteIds.includes(student.id)) continue;
 
-      // Update student: semester increments, section reset, rollNumber set to NULL for Sem 2+
-      await student.update({
+      // Update student: semester increments, section reset, rollNumber set to NULL for Sem 2+, cohort remains fixed
+      const studentUpdates: any = {
         semester: toSem,
         currentAcademicYear: promYear,
         rollNumber: null, // Requirement 2, 3, 4: roll_number = NULL for semester >= 2
@@ -472,7 +473,21 @@ export const bulkPromoteStudents = async (req: AuthenticatedRequest, res: Respon
         section: null,
         lastPromotedAt: new Date(),
         lastPromotedBy: operatorId
-      }, { transaction });
+      };
+      if (!student.admissionBatch) {
+        const cohortInfo = calculateStudentCohort({
+          batchYear: student.batchYear,
+          admissionBatch: student.admissionBatch,
+          admissionType: student.admissionType,
+          initialSemester: student.initialSemester,
+          currentAcademicYear: student.currentAcademicYear,
+          semester: fromSem,
+          usn: student.usn,
+        });
+        studentUpdates.batchYear = cohortInfo.cohortStartYear;
+        studentUpdates.admissionBatch = cohortInfo.batchDisplay;
+      }
+      await student.update(studentUpdates, { transaction });
 
       // Update previous active academic enrollments to PROMOTED
       await StudentAcademicEnrollment.update(

@@ -61,6 +61,7 @@ import DeanArchivedFacultyPage from './pages/dean/faculty/DeanArchivedFacultyPag
 import FacultyAuthorizationPage from './pages/dean/faculty/FacultyAuthorizationPage';
 import FacultyReviewPage from './pages/dean/faculty/FacultyReviewPage';
 import FacultyAssignmentsPage from './pages/dean/faculty/FacultyAssignmentsPage';
+import DeanFacultyDetailPage from './pages/dean/faculty/DeanFacultyDetailPage';
 import DeanProfilePage from './pages/dean/DeanProfilePage';
 import DeanGoogleDriveBackupPage from './pages/dean/settings/DeanGoogleDriveBackupPage';
 
@@ -378,6 +379,7 @@ export const App: React.FC = () => (
               <Route path="faculty/authorizations" element={<FacultyAuthorizationPage />} />
               <Route path="faculty/authorizations/:id" element={<FacultyReviewPage />} />
               <Route path="faculty/assignments" element={<FacultyAssignmentsPage />} />
+              <Route path="faculty/:id" element={<DeanFacultyDetailPage />} />
 
               {/* Profile & Account Settings */}
               <Route path="profile" element={<DeanProfilePage />} />

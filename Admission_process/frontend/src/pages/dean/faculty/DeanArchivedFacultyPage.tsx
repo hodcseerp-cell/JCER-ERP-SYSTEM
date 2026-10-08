@@ -38,11 +38,6 @@ export const DeanArchivedFacultyPage: React.FC = () => {
   const [facultyToRestore, setFacultyToRestore] = useState<ArchivedFacultyRecord | null>(null);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
 
-  // View Historical Profile Modal State
-  const [facultyToView, setFacultyToView] = useState<ArchivedFacultyRecord | null>(null);
-  const [viewLoading, setViewLoading] = useState<boolean>(false);
-  const [facultyProfile, setFacultyProfile] = useState<FacultyProfileResponse | null>(null);
-
   const fetchDependencies = async () => {
     try {
       const depts = await deanService.getDepartments();
@@ -107,28 +102,6 @@ export const DeanArchivedFacultyPage: React.FC = () => {
     } finally {
       setIsRestoring(false);
     }
-  };
-
-  // Open View Historical Profile Modal
-  const handleOpenViewModal = async (fac: ArchivedFacultyRecord) => {
-    setFacultyToView(fac);
-    setViewLoading(true);
-    setFacultyProfile(null);
-    try {
-      const data = await deanService.getFacultyProfile(fac.id);
-      setFacultyProfile(data);
-    } catch (err) {
-      console.error('Failed to load archived profile:', err);
-      toast.error('Unable to load faculty historical profile. Please try again.');
-    } finally {
-      setViewLoading(false);
-    }
-  };
-
-  const handleCloseViewModal = () => {
-    setFacultyToView(null);
-    setFacultyProfile(null);
-    setViewLoading(false);
   };
 
   return (
@@ -242,8 +215,11 @@ export const DeanArchivedFacultyPage: React.FC = () => {
                 archivedFaculty.map((fac) => (
                   <tr key={fac.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="py-4 px-6">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 font-bold flex items-center justify-center text-xs overflow-hidden opacity-75">
+                      <div
+                        onClick={() => navigate(`/dean/faculty/${fac.id}`)}
+                        className="flex items-center space-x-3 cursor-pointer group"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 font-bold flex items-center justify-center text-xs overflow-hidden opacity-75 group-hover:ring-2 group-hover:ring-indigo-500 transition-all shrink-0">
                           {fac.profileImage ? (
                             <img src={fac.profileImage} alt={fac.name} className="w-full h-full object-cover" />
                           ) : (
@@ -251,7 +227,9 @@ export const DeanArchivedFacultyPage: React.FC = () => {
                           )}
                         </div>
                         <div>
-                          <span className="font-extrabold text-neutral-900 dark:text-white block">{fac.name}</span>
+                          <span className="font-extrabold text-neutral-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors block">
+                            {fac.name}
+                          </span>
                           <span className="text-[10px] text-neutral-400">{fac.phone || 'Phone not set'}</span>
                         </div>
                       </div>
@@ -285,9 +263,9 @@ export const DeanArchivedFacultyPage: React.FC = () => {
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end space-x-1.5">
                         <button
-                          onClick={() => handleOpenViewModal(fac)}
+                          onClick={() => navigate(`/dean/faculty/${fac.id}`)}
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-neutral-700 hover:text-indigo-600 dark:text-neutral-300 dark:hover:text-indigo-400 font-bold text-[11px] transition-all cursor-pointer"
-                          title="View Historical Profile & Teaching Records"
+                          title="View Full Historical Profile & Teaching Records"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>History</span>
@@ -385,242 +363,11 @@ export const DeanArchivedFacultyPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── VIEW ARCHIVED HISTORICAL PROFILE MODAL ── */}
-      {facultyToView && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="relative w-full max-w-3xl max-h-[92vh] rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 sm:p-7 overflow-y-auto space-y-6">
-            
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-neutral-100 dark:border-neutral-800 pb-4">
-              <div className="flex items-center space-x-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 font-extrabold flex items-center justify-center text-lg overflow-hidden border border-amber-500/20 shrink-0">
-                  {facultyToView.profileImage ? (
-                    <img src={facultyToView.profileImage} alt={facultyToView.name} className="w-full h-full object-cover" />
-                  ) : (
-                    facultyToView.name.charAt(0)
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-extrabold text-neutral-900 dark:text-white">
-                      {facultyToView.name}
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                      ARCHIVED
-                    </span>
-                  </div>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
-                    Archived Faculty Profile • {facultyToView.designation} • {facultyToView.departmentCode} Department
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleCloseViewModal}
-                className="p-1 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {viewLoading ? (
-              <div className="py-14 text-center space-y-3">
-                <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-neutral-400 font-medium">Loading archived faculty historical records...</p>
-              </div>
-            ) : facultyProfile ? (
-              <div className="space-y-6">
-
-                {/* 1. PERSONAL INFORMATION */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-extrabold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-                    PERSONAL INFORMATION
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-700/60 text-xs">
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">First Name</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.firstName || facultyProfile.faculty.name.split(' ')[0]}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Last Name</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.lastName || facultyProfile.faculty.name.split(' ').slice(1).join(' ') || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Official College Email</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.email}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Phone Number</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.phone || 'Phone not set'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. ACADEMIC & ARCHIVE INFORMATION */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-extrabold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-                    ACADEMIC INFORMATION
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-700/60 text-xs">
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Core Department (Permanent)</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                        {facultyProfile.faculty.coreDepartment.name} ({facultyProfile.faculty.coreDepartment.code})
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Academic Designation</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.designation}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Joining Date</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                        {facultyProfile.faculty.joiningDate ? new Date(facultyProfile.faculty.joiningDate).toLocaleDateString() : 'N/A'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Archived Date</span>
-                      <span className="font-semibold text-rose-600 dark:text-rose-400">
-                        {facultyProfile.faculty.archivedAt ? new Date(facultyProfile.faculty.archivedAt).toLocaleString() : 'N/A'}
-                      </span>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-neutral-400 block text-[10px] uppercase font-bold">Archived By</span>
-                      <span className="font-semibold text-neutral-800 dark:text-neutral-200">{facultyProfile.faculty.archivedBy || 'Dean Academics'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. LOGIN STATUS */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-extrabold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-                    LOGIN INFORMATION
-                  </h4>
-                  <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="space-y-1">
-                      <p><strong>Login Email:</strong> {facultyProfile.account.email}</p>
-                      <p><strong>Account Status:</strong> <span className="font-bold text-rose-600 dark:text-rose-400">{facultyProfile.account.status} (INACTIVE)</span></p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-300">
-                      Password regeneration is unavailable while this faculty account is archived.
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. HISTORICAL TEACHING ASSIGNMENTS */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-extrabold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider flex items-center justify-between">
-                    <span>HISTORICAL TEACHING ASSIGNMENTS</span>
-                    <span className="text-[10px] font-bold text-neutral-500 lowercase">({facultyProfile.teachingAssignments.length} total)</span>
-                  </h4>
-                  {facultyProfile.teachingAssignments.length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-neutral-200/70 dark:border-neutral-700/70">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-neutral-50 dark:bg-neutral-800/60 border-b border-neutral-200/70 dark:border-neutral-700/70 text-neutral-400 font-bold uppercase text-[10px]">
-                            <th className="py-2.5 px-3">AY</th>
-                            <th className="py-2.5 px-3">Teaching Dept</th>
-                            <th className="py-2.5 px-3">Semester</th>
-                            <th className="py-2.5 px-3">Subject</th>
-                            <th className="py-2.5 px-3 text-center">Section</th>
-                            <th className="py-2.5 px-3 text-center">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                          {facultyProfile.teachingAssignments.map((a) => (
-                            <tr key={a.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
-                              <td className="py-2.5 px-3 font-semibold text-neutral-700 dark:text-neutral-300">{a.academicYear}</td>
-                              <td className="py-2.5 px-3 font-bold text-neutral-800 dark:text-neutral-200">{a.teachingDepartmentCode || a.teachingDepartment}</td>
-                              <td className="py-2.5 px-3 text-neutral-600 dark:text-neutral-400">Semester {a.semester}</td>
-                              <td className="py-2.5 px-3 font-medium text-neutral-900 dark:text-white">{a.subject} ({a.subjectCode})</td>
-                              <td className="py-2.5 px-3 text-center font-bold">{a.section}</td>
-                              <td className="py-2.5 px-3 text-center">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                                  {a.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/30 border border-neutral-200/60 dark:border-neutral-700/60 text-center text-neutral-400 text-xs">
-                      No teaching assignments recorded in database.
-                    </div>
-                  )}
-                </div>
-
-                {/* 5. ATTENDANCE HISTORY */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[11px] font-extrabold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider flex items-center justify-between">
-                    <span>ATTENDANCE SESSIONS HANDLED</span>
-                    <span className="text-[10px] font-bold text-neutral-500 lowercase">({facultyProfile.attendanceHistory.length} sessions)</span>
-                  </h4>
-                  {facultyProfile.attendanceHistory.length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-neutral-200/70 dark:border-neutral-700/70 max-h-48">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-neutral-50 dark:bg-neutral-800/60 border-b border-neutral-200/70 dark:border-neutral-700/70 text-neutral-400 font-bold uppercase text-[10px]">
-                            <th className="py-2.5 px-3">Date</th>
-                            <th className="py-2.5 px-3">Subject</th>
-                            <th className="py-2.5 px-3 text-center">Sec</th>
-                            <th className="py-2.5 px-3 text-center">Period</th>
-                            <th className="py-2.5 px-3 text-center text-emerald-600">Present</th>
-                            <th className="py-2.5 px-3 text-center text-rose-600">Absent</th>
-                            <th className="py-2.5 px-3 text-center">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                          {facultyProfile.attendanceHistory.map((s) => (
-                            <tr key={s.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
-                              <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300 font-medium">{s.date}</td>
-                              <td className="py-2 px-3 font-semibold text-neutral-900 dark:text-white">{s.subject} ({s.subjectCode})</td>
-                              <td className="py-2 px-3 text-center font-bold">{s.section}</td>
-                              <td className="py-2 px-3 text-center font-mono">P-{s.period}</td>
-                              <td className="py-2 px-3 text-center font-bold text-emerald-600">{s.present}</td>
-                              <td className="py-2 px-3 text-center font-bold text-rose-600">{s.absent}</td>
-                              <td className="py-2 px-3 text-center font-bold text-[10px] text-neutral-500">{s.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/30 border border-neutral-200/60 dark:border-neutral-700/60 text-center text-neutral-400 text-xs">
-                      No attendance records found.
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            ) : null}
-
-            {/* Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-neutral-100 dark:border-neutral-800">
-              <button
-                onClick={() => {
-                  handleCloseViewModal();
-                  handleOpenRestoreModal(facultyToView);
-                }}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Restore This Faculty</span>
-              </button>
-              <button
-                onClick={handleCloseViewModal}
-                className="px-4 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );
 };
 
 export default DeanArchivedFacultyPage;
+

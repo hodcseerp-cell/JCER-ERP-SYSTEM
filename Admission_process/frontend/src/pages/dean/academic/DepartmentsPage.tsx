@@ -150,10 +150,8 @@ export const DepartmentsPage: React.FC = () => {
               ) : departments.length ? (
                 departments.map((dept) => (
                   <tr key={dept.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
-                    <td className="py-4 px-6 text-center font-extrabold text-neutral-900 dark:text-white">
-                      <span className="inline-block px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/60 dark:border-neutral-700/60 font-mono text-xs">
-                        {dept.code}
-                      </span>
+                    <td className="py-4 px-6 text-center font-bold text-neutral-900 dark:text-white">
+                      {dept.code}
                     </td>
                     <td className="py-4 px-6 text-left font-semibold text-neutral-800 dark:text-neutral-200">
                       {dept.name}

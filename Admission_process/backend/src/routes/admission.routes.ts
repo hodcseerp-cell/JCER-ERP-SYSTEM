@@ -97,6 +97,7 @@ adminAdmissionRouter.get('/admissions/:id/documents/zip', admissionController.ex
 
 adminAdmissionRouter.delete('/admissions/bulk-delete-cancelled', authorizeRoles('ADMIN', 'SUPER_ADMIN'), admissionController.bulkDeleteCancelledAdmissions);
 adminAdmissionRouter.delete('/admissions/:id', authorizeRoles('ADMIN', 'SUPER_ADMIN'), admissionController.deleteAdmissionById);
+adminAdmissionRouter.get('/admissions/batches', admissionController.getAvailableBatches);
 adminAdmissionRouter.get('/admissions', admissionController.listAdmissions);
 adminAdmissionRouter.get('/admissions/:id/documents/:field', admissionController.viewAdmissionDocument);
 adminAdmissionRouter.get('/admissions/:id', admissionController.getAdmissionById);

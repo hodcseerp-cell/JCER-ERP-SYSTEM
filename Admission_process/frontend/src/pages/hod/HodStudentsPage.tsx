@@ -21,6 +21,7 @@ import { RootState } from '../../store';
 import hodService, { HodStudentItem } from '../../services/hod.service';
 import usePersistentState from '../../hooks/usePersistentState';
 import { useAcademicYear } from '../../context/AcademicYearContext';
+import { getStudentCohort, formatBatchCohort } from '../../utils/batchCohort.util';
 
 export const HodStudentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -614,12 +615,16 @@ export const HodStudentsPage: React.FC = () => {
                   <option value="ALL">All Semesters</option>
                   <option value="1">1st Semester</option>
                   <option value="2">2nd Semester</option>
-                  <option value="3">3rd Semester</option>
-                  <option value="4">4th Semester</option>
-                  <option value="5">5th Semester</option>
-                  <option value="6">6th Semester</option>
-                  <option value="7">7th Semester</option>
-                  <option value="8">8th Semester</option>
+                  {!isSemesterHandling && (
+                    <>
+                      <option value="3">3rd Semester</option>
+                      <option value="4">4th Semester</option>
+                      <option value="5">5th Semester</option>
+                      <option value="6">6th Semester</option>
+                      <option value="7">7th Semester</option>
+                      <option value="8">8th Semester</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -977,8 +982,8 @@ export const HodStudentsPage: React.FC = () => {
 
                       {/* Batch (for standard HOD) */}
                       {!isSemesterHandling && (
-                        <td className="py-4 px-4 text-center text-neutral-500 font-semibold whitespace-nowrap">
-                          {student.batchYear || '2026'}
+                        <td className="py-4 px-4 text-center text-neutral-600 dark:text-neutral-300 font-semibold whitespace-nowrap">
+                          {getStudentCohort(student)}
                         </td>
                       )}
 

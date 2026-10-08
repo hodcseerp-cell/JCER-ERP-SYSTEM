@@ -527,10 +527,12 @@ export const StudentManagementPage: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase block mb-1">Batch Year *</label>
+                    <label className="text-[10px] font-bold text-neutral-500 uppercase block mb-1">Batch (Cohort) *</label>
                     <select className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-500">
-                      <option>2024</option>
-                      <option>2023</option>
+                      <option>2026–2030</option>
+                      <option>2025–2029</option>
+                      <option>2024–2028</option>
+                      <option>2023–2027</option>
                     </select>
                   </div>
                 </div>

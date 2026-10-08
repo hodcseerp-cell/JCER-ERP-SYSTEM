@@ -19,12 +19,16 @@ import {
   Layers
 } from 'lucide-react';
 import { ShowStudentsRangeSelector } from '../../../components/common/ShowStudentsRangeSelector';
+import { getStudentCohort } from '../../../utils/batchCohort.util';
 
 interface StudentData {
   id: string;
   usn: string;
   enrollmentNumber: string;
   semester: number;
+  batchYear?: number;
+  batch?: string;
+  admissionBatch?: string | null;
   admissionType: 'FRESH' | 'LATERAL';
   initialSemester: number;
   currentAcademicYear: string;
@@ -727,6 +731,7 @@ export const AdminPromotionPage: React.FC = () => {
                   <th className="p-3.5">Department</th>
                   <th className="p-3.5 text-center">Admission Type</th>
                   <th className="p-3.5 text-center">Current Sem</th>
+                  <th className="p-3.5 text-center">Batch</th>
                   <th className="p-3.5 text-center">Academic Year</th>
                   <th className="p-3.5 text-center">Status</th>
                   <th className="p-3.5 text-center">Last Promoted</th>
@@ -768,6 +773,9 @@ export const AdminPromotionPage: React.FC = () => {
                       </td>
                       <td className="p-3.5 text-center font-bold">
                         {getOrdinal(student.semester)} Sem
+                      </td>
+                      <td className="p-3.5 text-center font-bold text-neutral-600 dark:text-neutral-300 font-mono">
+                        {getStudentCohort(student)}
                       </td>
                       <td className="p-3.5 text-center font-mono">
                         {student.currentAcademicYear || '2026-2027'}

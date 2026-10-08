@@ -633,6 +633,22 @@ export const downloadHandbook = async (
 
 // ─── Admin Endpoints ─────────────────────────────────────────────────────────
 
+/** GET /api/admin/admissions/batches */
+export const getAvailableBatches = async (
+  _req: AuthRequest, res: Response, _next: NextFunction
+): Promise<any> => {
+  try {
+    const batches = await admissionService.getAvailableBatches();
+    return res.json({ success: true, data: batches });
+  } catch (err: any) {
+    logger.error('Failed to get available batches:', err);
+    return res.json({
+      success: true,
+      data: ['2026–2030', '2025–2029', '2024–2028', '2023–2027', '2022–2026', '2021–2025']
+    });
+  }
+};
+
 /** GET /api/admin/admissions */
 export const listAdmissions = async (
   req: AuthRequest, res: Response, _next: NextFunction
@@ -653,6 +669,7 @@ export const listAdmissions = async (
       category,
       district,
       academicYear,
+      batch,
       startDate,
       endDate
     } = req.query as any;
@@ -671,6 +688,7 @@ export const listAdmissions = async (
       category,
       district,
       academicYear,
+      batch,
       startDate,
       endDate,
       includeFullDetails: req.query.includeFullDetails === 'true'

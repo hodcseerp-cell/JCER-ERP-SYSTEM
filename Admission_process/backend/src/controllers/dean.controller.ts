@@ -1581,21 +1581,49 @@ export const getHodSubjectRequests = async (req: AuthenticatedRequest, res: Resp
       email: r.hodUser?.email,
       phone: r.hodUser?.phone,
       profileImage: r.hodUser?.profileImage,
+      hodUser: r.hodUser ? {
+        id: r.hodUser.id,
+        firstName: r.hodUser.firstName,
+        lastName: r.hodUser.lastName,
+        email: r.hodUser.email,
+        phone: r.hodUser.phone,
+        profileImage: r.hodUser.profileImage,
+      } : null,
       departmentId: r.departmentId,
       departmentName: r.department?.name,
       departmentCode: r.department?.code,
+      department: r.department ? {
+        id: r.department.id,
+        name: r.department.name,
+        code: r.department.code,
+        type: r.department.type,
+      } : null,
       semester: r.semester,
       subjectId: r.subjectId,
       subjectName: r.subject?.name,
       subjectCode: r.subject?.code,
       subjectType: r.subject?.type,
       credits: r.subject?.credits,
+      subject: r.subject ? {
+        id: r.subject.id,
+        name: r.subject.name,
+        code: r.subject.code,
+        credits: r.subject.credits,
+        type: r.subject.type,
+        semester: r.subject.semester,
+      } : null,
       academicYear: r.academicYear,
       reason: r.reason,
       status: r.status,
       rejectionReason: r.rejectionReason,
       reviewedBy: r.reviewedBy,
       reviewerName: r.reviewer ? `${r.reviewer.firstName || ''} ${r.reviewer.lastName || ''}`.trim() : null,
+      reviewer: r.reviewer ? {
+        id: r.reviewer.id,
+        firstName: r.reviewer.firstName,
+        lastName: r.reviewer.lastName,
+        email: r.reviewer.email,
+      } : null,
       reviewedAt: r.reviewedAt,
       teachingAssignmentId: r.teachingAssignmentId,
       teachingAssignment: r.teachingAssignment,
@@ -1673,21 +1701,49 @@ export const getHodSubjectRequestById = async (req: AuthenticatedRequest, res: R
       email: r.hodUser?.email,
       phone: r.hodUser?.phone,
       profileImage: r.hodUser?.profileImage,
+      hodUser: r.hodUser ? {
+        id: r.hodUser.id,
+        firstName: r.hodUser.firstName,
+        lastName: r.hodUser.lastName,
+        email: r.hodUser.email,
+        phone: r.hodUser.phone,
+        profileImage: r.hodUser.profileImage,
+      } : null,
       departmentId: r.departmentId,
       departmentName: r.department?.name,
       departmentCode: r.department?.code,
+      department: r.department ? {
+        id: r.department.id,
+        name: r.department.name,
+        code: r.department.code,
+        type: r.department.type,
+      } : null,
       semester: r.semester,
       subjectId: r.subjectId,
       subjectName: r.subject?.name,
       subjectCode: r.subject?.code,
       subjectType: r.subject?.type,
       credits: r.subject?.credits,
+      subject: r.subject ? {
+        id: r.subject.id,
+        name: r.subject.name,
+        code: r.subject.code,
+        credits: r.subject.credits,
+        type: r.subject.type,
+        semester: r.subject.semester,
+      } : null,
       academicYear: r.academicYear,
       reason: r.reason,
       status: r.status,
       rejectionReason: r.rejectionReason,
       reviewedBy: r.reviewedBy,
       reviewerName: r.reviewer ? `${r.reviewer.firstName || ''} ${r.reviewer.lastName || ''}`.trim() : null,
+      reviewer: r.reviewer ? {
+        id: r.reviewer.id,
+        firstName: r.reviewer.firstName,
+        lastName: r.reviewer.lastName,
+        email: r.reviewer.email,
+      } : null,
       reviewedAt: r.reviewedAt,
       teachingAssignmentId: r.teachingAssignmentId,
       teachingAssignment: r.teachingAssignment,
@@ -1710,14 +1766,9 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
   const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
+    // Query directly in transaction without lock on outer joins (avoiding PostgreSQL 0A000 feature error)
     const request: any = await HodSubjectHandlingRequest.findByPk(id, {
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: Department, as: 'department' },
-        { model: User, as: 'hodUser' },
-      ],
       transaction,
-      lock: transaction.LOCK.UPDATE,
     });
 
     if (!request) {
@@ -1729,6 +1780,13 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
       await transaction.rollback();
       return res.status(400).json({ error: `Request has already been ${request.status.toLowerCase()}.` });
     }
+
+    // Load related entities within the transaction
+    const [subject, department, teacherProfile] = await Promise.all([
+      Subject.findByPk(request.subjectId, { transaction }),
+      Department.findByPk(request.departmentId, { transaction }),
+      Teacher.findOne({ where: { userId: request.hodUserId }, transaction }),
+    ]);
 
     // 1. Check if teaching assignment already exists
     let assignment = await FacultyAssignment.findOne({
@@ -1742,15 +1800,19 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
       transaction,
     });
 
+    const targetDeptId = request.departmentId || teacherProfile?.departmentId || department?.id;
+    const targetBranch = department?.code || teacherProfile?.department?.code || null;
+
     if (!assignment) {
       assignment = await FacultyAssignment.create(
         {
+          teacherId: teacherProfile ? teacherProfile.id : null,
           userId: request.hodUserId,
-          departmentId: request.departmentId,
+          departmentId: targetDeptId,
           subjectId: request.subjectId,
           semester: request.semester,
           section: 'A',
-          branch: request.department?.code || null,
+          branch: targetBranch,
           academicYear: request.academicYear,
           attendanceAccess: true,
           marksAccess: true,
@@ -1765,6 +1827,9 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
       assignment.status = 'ACTIVE';
       assignment.attendanceAccess = true;
       assignment.marksAccess = true;
+      if (!assignment.teacherId && teacherProfile) {
+        assignment.teacherId = teacherProfile.id;
+      }
       await assignment.save({ transaction });
     }
 
@@ -1776,23 +1841,6 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
     request.rejectionReason = null;
     await request.save({ transaction });
 
-    // 3. Send Notification to HOD
-    const subjectName = request.subject?.name || 'Subject';
-    const subjectCode = request.subject?.code ? ` (${request.subject.code})` : '';
-    await Notification.create(
-      {
-        title: 'Subject Handling Request Approved',
-        content: `Your request to handle ${subjectName}${subjectCode} for Semester ${request.semester} has been approved.`,
-        type: 'SUCCESS',
-        audience: 'SPECIFIC_USER',
-        targetUserId: request.hodUserId,
-        status: 'PUBLISHED',
-        approvedByAdminId: req.user?.id || null,
-        publishedAt: new Date(),
-      },
-      { transaction }
-    );
-
     await logAudit(req, 'APPROVE_HOD_SUBJECT_REQUEST', {
       requestId: request.id,
       hodUserId: request.hodUserId,
@@ -1802,6 +1850,24 @@ export const approveHodSubjectRequest = async (req: AuthenticatedRequest, res: R
     });
 
     await transaction.commit();
+
+    // 3. Send Notification to HOD (safely dispatched post-commit so notification failures never roll back approval)
+    const subjectName = subject?.name || 'Subject';
+    const subjectCode = subject?.code ? ` (${subject.code})` : '';
+    try {
+      await Notification.create({
+        title: 'Subject Handling Request Approved',
+        content: `Your request to handle ${subjectName}${subjectCode} for Semester ${request.semester} has been approved.`,
+        type: 'SUCCESS',
+        audience: 'SPECIFIC_USER',
+        targetUserId: request.hodUserId,
+        status: 'PUBLISHED',
+        approvedByAdminId: req.user?.id || null,
+        publishedAt: new Date(),
+      });
+    } catch (notifErr) {
+      logger.warn('Failed to dispatch HOD subject approval notification:', notifErr);
+    }
 
     return res.json({
       success: true,
@@ -1834,12 +1900,7 @@ export const rejectHodSubjectRequest = async (req: AuthenticatedRequest, res: Re
     }
 
     const request: any = await HodSubjectHandlingRequest.findByPk(id, {
-      include: [
-        { model: Subject, as: 'subject' },
-        { model: User, as: 'hodUser' },
-      ],
       transaction,
-      lock: transaction.LOCK.UPDATE,
     });
 
     if (!request) {
@@ -1852,28 +1913,13 @@ export const rejectHodSubjectRequest = async (req: AuthenticatedRequest, res: Re
       return res.status(400).json({ error: `Request has already been ${request.status.toLowerCase()}.` });
     }
 
+    const subject = await Subject.findByPk(request.subjectId, { transaction });
+
     request.status = 'REJECTED';
     request.rejectionReason = rejectionReason.toString().trim();
     request.reviewedBy = req.user?.id || null;
     request.reviewedAt = new Date();
     await request.save({ transaction });
-
-    // Send Notification to HOD
-    const subjectName = request.subject?.name || 'Subject';
-    const subjectCode = request.subject?.code ? ` (${request.subject.code})` : '';
-    await Notification.create(
-      {
-        title: 'Subject Handling Request Rejected',
-        content: `Your request to handle ${subjectName}${subjectCode} has been rejected. Reason: ${rejectionReason.toString().trim()}`,
-        type: 'WARNING',
-        audience: 'SPECIFIC_USER',
-        targetUserId: request.hodUserId,
-        status: 'PUBLISHED',
-        approvedByAdminId: req.user?.id || null,
-        publishedAt: new Date(),
-      },
-      { transaction }
-    );
 
     await logAudit(req, 'REJECT_HOD_SUBJECT_REQUEST', {
       requestId: request.id,
@@ -1883,6 +1929,24 @@ export const rejectHodSubjectRequest = async (req: AuthenticatedRequest, res: Re
     });
 
     await transaction.commit();
+
+    // Send Notification to HOD (safely dispatched post-commit)
+    const subjectName = subject?.name || 'Subject';
+    const subjectCode = subject?.code ? ` (${subject.code})` : '';
+    try {
+      await Notification.create({
+        title: 'Subject Handling Request Rejected',
+        content: `Your request to handle ${subjectName}${subjectCode} has been rejected. Reason: ${rejectionReason.toString().trim()}`,
+        type: 'WARNING',
+        audience: 'SPECIFIC_USER',
+        targetUserId: request.hodUserId,
+        status: 'PUBLISHED',
+        approvedByAdminId: req.user?.id || null,
+        publishedAt: new Date(),
+      });
+    } catch (notifErr) {
+      logger.warn('Failed to dispatch HOD subject rejection notification:', notifErr);
+    }
 
     return res.json({
       success: true,

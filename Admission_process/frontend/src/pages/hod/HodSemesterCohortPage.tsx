@@ -170,6 +170,25 @@ export const HodSemesterCohortPage: React.FC = () => {
     );
   }
 
+  if (isAppliedScience && semesterNum > 2) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto text-center space-y-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm mt-8">
+        <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Applied Science Scope Restricted</h2>
+        <p className="text-sm text-slate-500 max-w-md mx-auto">
+          The Applied Science Department manages Semesters 1 &amp; 2 only. Semesters 3 to 8 are managed by their respective engineering branch departments.
+        </p>
+        <Link
+          to="/hod/students/semesters"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Semester Breakdown
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ── TOP HEADER & BREADCRUMB ── */}

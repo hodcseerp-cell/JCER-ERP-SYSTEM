@@ -272,6 +272,7 @@ const admissionService = {
     category?: string;
     district?: string;
     academicYear?: string;
+    batch?: string;
     startDate?: string;
     endDate?: string;
     includeFullDetails?: boolean;
@@ -291,6 +292,7 @@ const admissionService = {
     if (params.category) query.set('category', params.category);
     if (params.district) query.set('district', params.district);
     if (params.academicYear) query.set('academicYear', params.academicYear);
+    if (params.batch) query.set('batch', params.batch);
     if (params.startDate) query.set('startDate', params.startDate);
     if (params.endDate) query.set('endDate', params.endDate);
     if (params.includeFullDetails) query.set('includeFullDetails', 'true');
@@ -310,6 +312,19 @@ const admissionService = {
     }
     // Fallback: empty result
     return { applications: [], total: 0, page: params.page || 1, totalPages: 1 };
+  },
+
+  /** GET /api/admin/admissions/batches — available distinct cohort batches */
+  async getAvailableBatches(): Promise<string[]> {
+    try {
+      const res = await API.get('/admin/admissions/batches');
+      if (res.data?.data && Array.isArray(res.data.data)) {
+        return res.data.data;
+      }
+      return ['2026–2030', '2025–2029', '2024–2028', '2023–2027', '2022–2026', '2021–2025'];
+    } catch {
+      return ['2026–2030', '2025–2029', '2024–2028', '2023–2027', '2022–2026', '2021–2025'];
+    }
   },
 
   /** GET /api/admin/admissions/:id — full application detail */

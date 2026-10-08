@@ -20,6 +20,7 @@ import db from '../config/database';
 import { ForbiddenException } from '../utils/error.util';
 import redisService from './redis.service';
 import emailService from './email.service';
+import { calculateStudentCohort, formatBatchCohort } from '../utils/batchCohort.util';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -880,6 +881,64 @@ class AdmissionService {
     return Department.findAll({ order: [['name', 'ASC']] });
   }
 
+  async getAvailableBatches(): Promise<string[]> {
+    try {
+      const studentRows = await Student.findAll({
+        attributes: [
+          [Sequelize.fn('DISTINCT', Sequelize.col('batchYear')), 'batchYear'],
+          'admissionBatch',
+        ],
+        raw: true,
+      });
+
+      const batchSet = new Set<string>();
+
+      studentRows.forEach((s: any) => {
+        if (s.admissionBatch) {
+          batchSet.add(formatBatchCohort(s.admissionBatch));
+        }
+        if (s.batchYear) {
+          batchSet.add(formatBatchCohort(s.batchYear));
+        }
+      });
+
+      try {
+        const admissionRows = await Admission.findAll({
+          attributes: [
+            [Sequelize.fn('DISTINCT', Sequelize.col('academicYear')), 'academicYear'],
+          ],
+          raw: true,
+        });
+        admissionRows.forEach((a: any) => {
+          if (a.academicYear) {
+            batchSet.add(formatBatchCohort(a.academicYear));
+          }
+        });
+      } catch {}
+
+      // Include standard 4-year engineering cohorts around current year
+      const currentYear = new Date().getFullYear();
+      for (let y = currentYear - 4; y <= currentYear + 2; y++) {
+        batchSet.add(`${y}–${y + 4}`);
+      }
+
+      const sortedBatches = Array.from(batchSet).filter(Boolean).sort((a, b) => {
+        const yearA = parseInt(a.slice(0, 4), 10) || 0;
+        const yearB = parseInt(b.slice(0, 4), 10) || 0;
+        return yearB - yearA;
+      });
+
+      return sortedBatches;
+    } catch {
+      const currentYear = new Date().getFullYear();
+      const defaults: string[] = [];
+      for (let y = currentYear + 2; y >= currentYear - 4; y--) {
+        defaults.push(`${y}–${y + 4}`);
+      }
+      return defaults;
+    }
+  }
+
   // ── Admin: List all applications ──────────────────────────────────────────
 
   async listApplications(filters: {
@@ -897,6 +956,7 @@ class AdmissionService {
     category?: string;
     district?: string;
     academicYear?: string;
+    batch?: string;
     startDate?: string;
     endDate?: string;
     includeFullDetails?: boolean;
@@ -916,6 +976,7 @@ class AdmissionService {
       category,
       district,
       academicYear,
+      batch,
       startDate,
       endDate,
       includeFullDetails = false,
@@ -1050,7 +1111,54 @@ class AdmissionService {
       }
 
       if (academicYear && academicYear !== 'ALL') {
-        studentWhere.currentAcademicYear = academicYear;
+        const ayMatch = String(academicYear).match(/(\d{4})/);
+        if (ayMatch) {
+          const startYear = parseInt(ayMatch[1], 10);
+          const nextYear = startYear + 1;
+          const ayConditions: any[] = [
+            { currentAcademicYear: academicYear },
+            { currentAcademicYear: `${startYear}-${nextYear}` },
+            { currentAcademicYear: `${startYear}–${nextYear}` },
+            { currentAcademicYear: { [Op.iLike]: `%${startYear}%` } }
+          ];
+          if (studentWhere[Op.and]) {
+            studentWhere[Op.and].push({ [Op.or]: ayConditions });
+          } else {
+            studentWhere[Op.and] = [{ [Op.or]: ayConditions }];
+          }
+        } else {
+          studentWhere.currentAcademicYear = academicYear;
+        }
+      }
+
+      if (batch && batch !== 'ALL') {
+        const bMatch = String(batch).match(/(\d{4})/);
+        if (bMatch) {
+          const bYear = parseInt(bMatch[1], 10);
+          const rangeMatch = String(batch).match(/(\d{4})[-–](\d{4})/);
+          const endYear = rangeMatch ? parseInt(rangeMatch[2], 10) : bYear + 4;
+
+          const batchConditions: any[] = [
+            { batchYear: bYear },
+            { admissionBatch: { [Op.iLike]: `%${bYear}%` } },
+            { currentAcademicYear: { [Op.iLike]: `%${bYear}%` } },
+            { enrollmentNumber: { [Op.iLike]: `%${bYear}%` } },
+            { usn: { [Op.iLike]: `%${bYear}%` } }
+          ];
+
+          if (rangeMatch) {
+            batchConditions.push(
+              { admissionBatch: { [Op.iLike]: `%${bYear}–${endYear}%` } },
+              { admissionBatch: { [Op.iLike]: `%${bYear}-${endYear}%` } }
+            );
+          }
+
+          if (studentWhere[Op.and]) {
+            studentWhere[Op.and].push({ [Op.or]: batchConditions });
+          } else {
+            studentWhere[Op.and] = [{ [Op.or]: batchConditions }];
+          }
+        }
       }
 
       if (startDate || endDate) {
@@ -1096,7 +1204,11 @@ class AdmissionService {
           });
         }
 
-        studentWhere[Op.or] = searchOr;
+        if (studentWhere[Op.and]) {
+          studentWhere[Op.and].push({ [Op.or]: searchOr });
+        } else {
+          studentWhere[Op.or] = searchOr;
+        }
       }
 
       let order: any[] = [['createdAt', 'DESC']];
@@ -1234,6 +1346,37 @@ class AdmissionService {
       }
     }
 
+    // Batch filter
+    if (batch && batch !== 'ALL') {
+      const bMatch = String(batch).match(/(\d{4})/);
+      if (bMatch) {
+        const bYear = parseInt(bMatch[1], 10);
+        const rangeMatch = String(batch).match(/(\d{4})[-–](\d{4})/);
+        const endYear = rangeMatch ? parseInt(rangeMatch[2], 10) : bYear + 4;
+
+        const batchConditions: any[] = [
+          { '$user.student.batchYear$': bYear },
+          { '$user.student.admissionBatch$': { [Op.iLike]: `%${bYear}%` } },
+          { '$user.student.currentAcademicYear$': { [Op.iLike]: `%${bYear}%` } },
+          { '$user.student.enrollmentNumber$': { [Op.iLike]: `%${bYear}%` } },
+          { '$user.student.usn$': { [Op.iLike]: `%${bYear}%` } },
+          { academicYear: { [Op.iLike]: `%${bYear}%` } },
+          { applicationNumber: { [Op.iLike]: `%${bYear}%` } },
+          { usn: { [Op.iLike]: `%${bYear}%` } }
+        ];
+
+        if (rangeMatch) {
+          batchConditions.push(
+            { '$user.student.admissionBatch$': { [Op.iLike]: `%${bYear}–${endYear}%` } },
+            { '$user.student.admissionBatch$': { [Op.iLike]: `%${bYear}-${endYear}%` } }
+          );
+        }
+
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({ [Op.or]: batchConditions });
+      }
+    }
+
     // Date range filter
     if (startDate || endDate) {
       const start = startDate ? new Date(startDate) : new Date('2020-01-01');
@@ -1320,7 +1463,7 @@ class AdmissionService {
         required: false,
         attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'profileImage'],
         include: [
-          { model: Student, as: 'student', attributes: ['id', 'usn', 'enrollmentNumber', 'rollNumber', 'semester'], required: false }
+          { model: Student, as: 'student', attributes: ['id', 'usn', 'enrollmentNumber', 'rollNumber', 'semester', 'batchYear', 'admissionBatch', 'currentAcademicYear'], required: false }
         ]
       },
       { model: Department, as: 'branch', required: false },
@@ -1793,9 +1936,18 @@ class AdmissionService {
           }
         }
 
-        const isLateral = (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY');
+        const isLateral = (admission.admissionType === 'DCET' || admission.applicationType === 'LATERAL_ENTRY' || admission.entrySemester === 3);
         const semNum = isLateral ? 3 : 1;
         const effectiveRollNumber = semNum === 1 ? (rollNumber || null) : null;
+
+        // Calculate complete 4-year engineering cohort
+        const cohortInfo = calculateStudentCohort({
+          academicYear: admission.academicYear,
+          admissionType: isLateral ? 'LATERAL' : 'FRESH',
+          initialSemester: semNum,
+          entrySemester: semNum,
+          usn: admission.usn,
+        });
 
         const existingStudent = await Student.findOne({ where: { userId: admission.userId }, transaction });
         let createdStudent = existingStudent;
@@ -1805,7 +1957,8 @@ class AdmissionService {
             usn: admission.usn || null,
             enrollmentNumber,
             rollNumber: effectiveRollNumber,
-            batchYear,
+            batchYear: cohortInfo.cohortStartYear,
+            admissionBatch: cohortInfo.batchDisplay,
             departmentId: admission.branchId!,
             semester: semNum,
             dateOfBirth: dobDate,
@@ -1820,6 +1973,12 @@ class AdmissionService {
             currentAcademicYear: admission.academicYear || '2026-2027',
           }, { transaction });
         } else {
+          if (!existingStudent.admissionBatch) {
+            await existingStudent.update({
+              batchYear: cohortInfo.cohortStartYear,
+              admissionBatch: cohortInfo.batchDisplay,
+            }, { transaction });
+          }
           generatedUsn = existingStudent.enrollmentNumber;
         }
 
