@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '../../store';
+import { updateUser } from '../../store/authSlice';
+import { toast } from 'react-toastify';
+import API from '../../services/api';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 import {
   Settings,
   User,
@@ -9,12 +15,21 @@ import {
   AlertTriangle,
   Key,
   Clock,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import hodService from '../../services/hod.service';
 
 export const HodSettingsPage: React.FC = () => {
+  const dispatch = useDispatch();
+  const { user } = useSelector((state: RootState) => state.auth);
+
   const [settingsData, setSettingsData] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Avatar Upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Profile Form
   const [firstName, setFirstName] = useState('');
@@ -29,6 +44,49 @@ export const HodSettingsPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file (JPG, PNG, WEBP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    setUploadingImage(true);
+    try {
+      const res = await API.post('/auth/profile-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data?.success && res.data?.data?.profileImage) {
+        const newUrl = res.data.data.profileImage;
+        dispatch(updateUser({ profileImage: newUrl }));
+        toast.success('🎉 Profile picture updated successfully!');
+      } else {
+        toast.error('Failed to upload profile picture.');
+      }
+    } catch (err: any) {
+      console.error('Avatar upload error:', err);
+      toast.error(err.response?.data?.error || 'Failed to upload profile picture.');
+    } finally {
+      setUploadingImage(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   useEffect(() => {
     fetchSettings();
@@ -160,6 +218,51 @@ export const HodSettingsPage: React.FC = () => {
             <User className="w-4 h-4 text-indigo-600" />
             <span>Personal Profile</span>
           </h3>
+
+          {/* Profile Photo Upload */}
+          <div className="flex flex-col items-center justify-center p-4 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700/60 text-center gap-3">
+            <div className="relative group">
+              <ProfileAvatar
+                imageUrl={user?.profileImage}
+                name={`${firstName} ${lastName}`.trim() || user?.name || 'HOD'}
+                size="2xl"
+                className="w-24 h-24 rounded-2xl border-2 border-white dark:border-slate-700 shadow-md object-cover"
+              />
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={uploadingImage}
+                title="Change Profile Photo"
+                className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg border-2 border-white dark:border-slate-800 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {uploadingImage ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={uploadingImage}
+                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 hover:underline cursor-pointer inline-flex items-center gap-1.5"
+              >
+                {uploadingImage ? 'Uploading...' : 'Change Photo'}
+              </button>
+              <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, or WEBP (max 5MB)</p>
+            </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleAvatarChange}
+              accept="image/jpeg,image/png,image/webp,image/jpg"
+              className="hidden"
+            />
+          </div>
 
           {profileMsg && (
             <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-1.5">

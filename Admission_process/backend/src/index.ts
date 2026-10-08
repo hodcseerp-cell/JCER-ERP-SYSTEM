@@ -30,6 +30,34 @@ async function startServer() {
       console.warn('Teachers archive columns migration skipped:', teacherErr.message);
     }
 
+    // Safe migration: Add faculty transfer & validity period columns to faculty_assignments table
+    try {
+      await sequelize.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_enum WHERE enumtypid = 'enum_faculty_assignments_status'::regtype AND enumlabel = 'TRANSFERRED'
+          ) THEN
+            ALTER TYPE "enum_faculty_assignments_status" ADD VALUE 'TRANSFERRED';
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_enum WHERE enumtypid = 'enum_faculty_assignments_status'::regtype AND enumlabel = 'ENDED'
+          ) THEN
+            ALTER TYPE "enum_faculty_assignments_status" ADD VALUE 'ENDED';
+          END IF;
+        END $$;
+
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "startDate" DATE NULL;
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "endDate" DATE NULL;
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "previousFacultyAssignmentId" UUID NULL REFERENCES "faculty_assignments"("id") ON DELETE SET NULL;
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "transferReason" VARCHAR(100) NULL;
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "transferredAt" TIMESTAMP WITH TIME ZONE NULL;
+        ALTER TABLE "faculty_assignments" ADD COLUMN IF NOT EXISTS "transferredByHODId" UUID NULL REFERENCES "users"("id") ON DELETE SET NULL;
+      `);
+    } catch (faErr: any) {
+      console.warn('FacultyAssignment transfer columns migration skipped:', faErr.message);
+    }
+
     // Safe migration: Google Drive Integration & Attendance Backup tables
     try {
       await sequelize.query(`

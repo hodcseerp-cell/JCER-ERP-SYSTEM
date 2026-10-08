@@ -115,9 +115,10 @@ export default defineConfig(({ mode }) => {
       host: true,
       allowedHosts: true,
       cors: true,
-      hmr: process.env.HMR_CLIENT_PORT
-        ? { clientPort: Number(process.env.HMR_CLIENT_PORT) }
-        : undefined,
+      hmr: {
+        host: 'localhost',
+        port: 5173,
+      },
       proxy: {
         '/api': {
           target: backendTarget,

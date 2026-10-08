@@ -322,7 +322,7 @@ export const HodDashboardPage: React.FC = () => {
             >
               <option value="ALL">All Branches</option>
               <option value="CSE">CSE</option>
-              <option value="AIML">AIML</option>
+              <option value="CSE-AIML">CSE-AIML</option>
               <option value="ECE">ECE</option>
               <option value="ME">ME</option>
               <option value="CV">CV</option>

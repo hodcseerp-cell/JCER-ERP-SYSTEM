@@ -206,7 +206,7 @@ async function runComprehensiveBackupVerification() {
     const sec = (anyAssignment.section || 'A').replace(/^Section\s+/i, '').trim();
     const ay = anyAssignment.academicYear || '2026-27';
 
-    console.log(`Target Folder Path: JCER ERP Attendance -> ${ay} -> ${deptCode} -> Semester ${sem} -> Section ${sec}`);
+    console.log(`Target Folder Path: JCER ERP Attendance -> ${deptCode} -> ${ay} -> Semester ${sem} -> Section ${sec}`);
     console.log('✓ Folder hierarchy path computation verified.');
 
     console.log('\n================================================================');

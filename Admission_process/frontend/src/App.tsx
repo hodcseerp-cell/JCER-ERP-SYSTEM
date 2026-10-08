@@ -25,6 +25,7 @@ import FacultyOverviewPage from './pages/faculty/FacultyOverviewPage';
 import FacultyAttendancePage from './pages/faculty/FacultyAttendancePage';
 import FacultyStudentAttendancePage from './pages/faculty/FacultyStudentAttendancePage';
 import FacultyAnalyticsPage from './pages/faculty/FacultyAnalyticsPage';
+import FacultyProfilePage from './pages/faculty/FacultyProfilePage';
 
 // ─── Faculty Bitwise Marks Pages ──────────────────────────────────────────────
 import FacultyMarksDashboardPage from './pages/faculty/marks/FacultyMarksDashboardPage';
@@ -444,6 +445,8 @@ export const App: React.FC = () => (
               <Route path="attendance" element={<FacultyAttendancePage />} />
               <Route path="student-attendance" element={<FacultyStudentAttendancePage />} />
               <Route path="analytics" element={<FacultyAnalyticsPage />} />
+              <Route path="profile" element={<FacultyProfilePage />} />
+              <Route path="settings" element={<FacultyProfilePage />} />
 
               {/* ── Bitwise Marks Entry Module ── */}
               <Route path="marks" element={<FacultyMarksDashboardPage />} />

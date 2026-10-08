@@ -21,6 +21,7 @@ import {
 import principalService, { FacultyAuthDetailResponse } from '../../services/principal.service';
 import Skeleton from '../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 
 export const PrincipalFacultyReviewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -176,17 +177,13 @@ export const PrincipalFacultyReviewPage: React.FC = () => {
         {/* Header Profile Section */}
         <div className="p-6 md:p-8 border-b border-neutral-100 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center space-x-5">
-            <div className="w-16 h-16 rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 font-black text-2xl flex items-center justify-center overflow-hidden border border-orange-200/50 dark:border-orange-800/40">
-              {faculty?.profileImage || request.profileImage ? (
-                <img
-                  src={faculty?.profileImage || request.profileImage}
-                  alt={request.facultyName}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                request.facultyName.charAt(0)
-              )}
-            </div>
+            <ProfileAvatar
+              imageUrl={faculty?.profileImage || request.profileImage}
+              name={request.facultyName}
+              size="xl"
+              roundedClassName="rounded-2xl"
+              className="w-16 h-16 border border-orange-200/50 dark:border-orange-800/40 shadow-sm shrink-0"
+            />
             <div>
               <div className="flex items-center space-x-2.5">
                 <h2 className="text-xl font-black text-neutral-900 dark:text-white">

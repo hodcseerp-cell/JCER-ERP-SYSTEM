@@ -24,6 +24,7 @@ import AttendanceSession from '../models/AttendanceSession';
 import AttendanceRecord from '../models/AttendanceRecord';
 import facultyAuthorizationService from '../services/facultyAuthorization.service';
 import logger from '../utils/logger.util';
+import { resolveDepartmentCanonical, findDepartmentCanonical } from '../utils/departmentCanonical.util';
 
 // Helper to record audit log
 const logAudit = async (req: AuthenticatedRequest, action: string, details: any) => {
@@ -1981,22 +1982,8 @@ export const createFaculty = async (req: AuthenticatedRequest, res: Response, ne
       return res.status(400).json({ error: 'Core Department is required.' });
     }
 
-    // Resolve Core Department (UUID or code)
-    let coreDept: Department | null = null;
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(coreDepartmentId).trim());
-    if (isUuid) {
-      coreDept = await Department.findByPk(coreDepartmentId, { transaction: t });
-    } else {
-      coreDept = await Department.findOne({
-        where: {
-          [Op.or]: [
-            { code: String(coreDepartmentId).trim().toUpperCase() },
-            { name: { [Op.iLike]: `%${String(coreDepartmentId).trim()}%` } },
-          ],
-        },
-        transaction: t,
-      });
-    }
+    // Resolve Core Department canonically (UUID, code, or branch alias)
+    const coreDept = await findDepartmentCanonical(coreDepartmentId, { transaction: t });
 
     if (!coreDept) {
       await t.rollback();
@@ -2353,25 +2340,11 @@ export const validateBulkFaculty = async (req: AuthenticatedRequest, res: Respon
       }
 
       // 6. Core Department Resolution
-      let resolvedDept: Department | undefined;
+      let resolvedDept: Department | null = null;
       if (!coreDeptRaw) {
         rowErrors.push('Core Department is required.');
       } else {
-        const cleanCode = coreDeptRaw.split(/[—–-]/)[0].trim().toUpperCase();
-        resolvedDept =
-          deptMapByCode.get(cleanCode) ||
-          deptMapByName.get(coreDeptRaw.trim().toLowerCase()) ||
-          deptMapById.get(coreDeptRaw.trim());
-
-        if (!resolvedDept) {
-          resolvedDept = departments.find(
-            (d) =>
-              d.code.toUpperCase() === cleanCode ||
-              d.code.toUpperCase() === coreDeptRaw.trim().toUpperCase() ||
-              d.name.toLowerCase() === coreDeptRaw.trim().toLowerCase()
-          );
-        }
-
+        resolvedDept = resolveDepartmentCanonical(coreDeptRaw, departments);
         if (!resolvedDept) {
           rowErrors.push(
             `Invalid Core Department "${coreDeptRaw}". Must be one of: ${departments.map((d) => d.code).join(', ')}.`
@@ -2393,7 +2366,7 @@ export const validateBulkFaculty = async (req: AuthenticatedRequest, res: Respon
         phone: phone || null,
         designation: designation || 'Assistant Professor',
         joiningDate: formattedJoiningDate || joiningDateStr,
-        coreDepartment: coreDeptRaw,
+        coreDepartment: resolvedDept ? `${resolvedDept.code} — ${resolvedDept.name}` : coreDeptRaw,
         coreDepartmentInput: coreDeptRaw,
         coreDepartmentId: resolvedDept?.id,
         coreDepartmentCode: resolvedDept?.code,
@@ -2470,8 +2443,13 @@ export const importBulkFaculty = async (req: AuthenticatedRequest, res: Response
 
     for (const rec of records) {
       const email = rec.email ? rec.email.toLowerCase().trim() : '';
-      if (!email || !rec.firstName || !rec.lastName || !rec.coreDepartmentId) {
-        skipped.push({ email, reason: 'Missing required fields' });
+      let resolvedDept = rec.coreDepartmentId ? await Department.findByPk(rec.coreDepartmentId, { transaction: t }) : null;
+      if (!resolvedDept && (rec.coreDepartmentCode || rec.coreDepartment || rec.coreDepartmentInput)) {
+        resolvedDept = await findDepartmentCanonical(rec.coreDepartmentCode || rec.coreDepartment || rec.coreDepartmentInput, { transaction: t });
+      }
+
+      if (!email || !rec.firstName || !rec.lastName || !resolvedDept) {
+        skipped.push({ email, reason: !resolvedDept ? 'Invalid core department' : 'Missing required fields' });
         continue;
       }
 
@@ -2503,7 +2481,7 @@ export const importBulkFaculty = async (req: AuthenticatedRequest, res: Response
       const newTeacher = await Teacher.create(
         {
           userId: newUser.id,
-          departmentId: rec.coreDepartmentId,
+          departmentId: resolvedDept.id,
           designation: rec.designation ? String(rec.designation).trim() : 'Assistant Professor',
           joiningDate: rec.joiningDate ? new Date(rec.joiningDate) : new Date(),
         },
@@ -2519,9 +2497,9 @@ export const importBulkFaculty = async (req: AuthenticatedRequest, res: Response
         email: newUser.email,
         temporaryPassword: rawTempPassword,
         designation: newTeacher.designation,
-        coreDepartmentId: rec.coreDepartmentId,
-        coreDepartmentCode: rec.coreDepartmentCode || '',
-        coreDepartmentName: rec.coreDepartmentName || rec.coreDepartment || '',
+        coreDepartmentId: resolvedDept.id,
+        coreDepartmentCode: resolvedDept.code,
+        coreDepartmentName: resolvedDept.name,
         status: 'ACTIVE',
       });
     }

@@ -17,6 +17,7 @@ import {
 import deanService from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const FacultyReviewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -145,13 +146,13 @@ export const FacultyReviewPage: React.FC = () => {
       {/* ── HEADER BANNER ── */}
       <div className="p-6 sm:p-8 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white font-extrabold flex items-center justify-center text-2xl overflow-hidden shadow-md">
-            {faculty?.profileImage ? (
-              <img src={faculty.profileImage} alt={faculty.firstName} className="w-full h-full object-cover" />
-            ) : (
-              faculty?.firstName?.charAt(0) || 'F'
-            )}
-          </div>
+          <ProfileAvatar
+            imageUrl={faculty?.profileImage}
+            name={`${faculty?.firstName || ''} ${faculty?.lastName || ''}`.trim() || 'Faculty'}
+            size="xl"
+            roundedClassName="rounded-2xl"
+            className="w-16 h-16 shadow-md shrink-0"
+          />
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-2xl font-extrabold text-neutral-900 dark:text-white">

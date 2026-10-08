@@ -768,10 +768,16 @@ export const uploadProfileImage = async (req: Request, res: Response, next: Next
       return res.status(400).json({ success: false, error: 'No image file uploaded.' });
     }
 
+    if (!req.file.mimetype || !req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ success: false, error: 'Only image files (JPEG, PNG, WEBP) are allowed.' });
+    }
+
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found.' });
     }
+
+    const oldProfileImage = user.profileImage;
 
     let imageUrl = '';
     const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
@@ -804,6 +810,26 @@ export const uploadProfileImage = async (req: Request, res: Response, next: Next
     }
 
     await user.update({ profileImage: imageUrl });
+
+    // Cleanup previous avatar after new upload and update succeed
+    if (oldProfileImage && oldProfileImage !== imageUrl) {
+      try {
+        const r2Match = oldProfileImage.match(/avatars\/[^?#\s]+/);
+        if (r2Match) {
+          const oldR2Key = r2Match[0];
+          await r2Service.deleteFile(oldR2Key);
+        }
+        const localMatch = oldProfileImage.match(/\/uploads\/avatars\/([^?#\s]+)/);
+        if (localMatch) {
+          const localFile = path.join(process.cwd(), 'uploads', 'avatars', localMatch[1]);
+          if (fs.existsSync(localFile)) {
+            fs.unlinkSync(localFile);
+          }
+        }
+      } catch (cleanupErr) {
+        logger.warn('[ProfileImageUpload] Failed to clean up previous profile image:', cleanupErr);
+      }
+    }
 
     return res.status(200).json({
       success: true,

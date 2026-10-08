@@ -30,6 +30,7 @@ import subjectDriveSyncService from '../services/subjectDriveSync.service';
 import { getAcademicYearVariants } from '../services/faculty.service';
 import logger from '../utils/logger.util';
 import { calculateStudentCohort, formatBatchCohort } from '../utils/batchCohort.util';
+import { findDepartmentCanonical, getBranchEquivalents } from '../utils/departmentCanonical.util';
 
 /**
  * Helper to record audit log for HOD operations
@@ -293,17 +294,18 @@ export const getHodDashboard = async (req: AuthenticatedRequest, res: Response, 
           const displayCode = rawCode === 'CSE-AIML' ? 'AIML' : rawCode;
 
           const [sem1Res, sem2Res, totalRes, allocatedRes] = await Promise.all([
-            getHodDepartmentStudents({ departmentId: d.id, semester: 1, academicYear: activeAcademicYear, isSemesterHandling: true, branch: displayCode, limit: 1 }),
-            getHodDepartmentStudents({ departmentId: d.id, semester: 2, academicYear: activeAcademicYear, isSemesterHandling: true, branch: displayCode, limit: 1 }),
-            getHodDepartmentStudents({ departmentId: d.id, semester: 'ALL', academicYear: activeAcademicYear, isSemesterHandling: true, branch: displayCode, limit: 1 }),
-            getHodDepartmentStudents({ departmentId: d.id, semester: 'ALL', academicYear: activeAcademicYear, isSemesterHandling: true, branch: displayCode, hasSection: true, limit: 1 }),
+            getHodDepartmentStudents({ departmentId: d.id, semester: 1, academicYear: activeAcademicYear, isSemesterHandling: true, branch: d.code, limit: 1 }),
+            getHodDepartmentStudents({ departmentId: d.id, semester: 2, academicYear: activeAcademicYear, isSemesterHandling: true, branch: d.code, limit: 1 }),
+            getHodDepartmentStudents({ departmentId: d.id, semester: 'ALL', academicYear: activeAcademicYear, isSemesterHandling: true, branch: d.code, limit: 1 }),
+            getHodDepartmentStudents({ departmentId: d.id, semester: 'ALL', academicYear: activeAcademicYear, isSemesterHandling: true, branch: d.code, hasSection: true, limit: 1 }),
           ]);
 
           const totalCount = totalRes.count;
           const allocatedCount = allocatedRes.count;
 
           return {
-            branchCode: displayCode,
+            branchCode: d.code,
+            displayCode: displayCode,
             branchName: d.name,
             departmentId: d.id,
             sem1Count: sem1Res.count,
@@ -577,15 +579,7 @@ export const getHodDepartmentStudents = async (options: {
 
     let sectionDeptCondition: any = { departmentId };
     if (!isSemesterHandling && dept) {
-      const rawDeptCode = dept.code;
-      const displayDeptCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
-      const branchCodes = [
-        rawDeptCode,
-        displayDeptCode,
-        `CSE-${displayDeptCode}`,
-        displayDeptCode.replace(/^CSE-/, ''),
-        dept.name,
-      ];
+      const branchCodes = getBranchEquivalents(dept.code);
       sectionDeptCondition = {
         [Op.or]: [
           { departmentId },
@@ -652,26 +646,12 @@ export const getHodDepartmentStudents = async (options: {
     };
   }
 
-  // If branch is specified (e.g. 'CSE', 'AIML', 'ECE', 'ME', 'CV'), find that department
+  // If branch is specified (e.g. 'CSE', 'AIML', 'ECE', 'ME', 'CV'), find that department canonically
   let branchDeptId: string | null = null;
   let isBranchFilterActive = false;
   if (isSemesterHandling && branch && branch !== 'ALL') {
     isBranchFilterActive = true;
-    const searchCodes = [
-      branch,
-      branch === 'AIML' ? 'CSE-AIML' : branch,
-      branch === 'CSE-AIML' ? 'AIML' : branch,
-      `CSE-${branch}`,
-      branch.replace(/^CSE-/, ''),
-    ];
-    const bDept = await Department.findOne({
-      where: {
-        [Op.or]: [
-          { code: { [Op.in]: searchCodes } },
-          { name: { [Op.iLike]: `%${branch}%` } },
-        ],
-      },
-    });
+    const bDept = await findDepartmentCanonical(branch);
     if (bDept) {
       branchDeptId = bDept.id;
     }
@@ -1064,7 +1044,7 @@ export const getHodStudents = async (req: AuthenticatedRequest, res: Response, n
 
       // Actual branch derived from student's own department (joined from students.departmentId = departments.id)
       const rawDeptCode = s.department?.code || null;
-      const actualBranchCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
+      const actualBranchCode = rawDeptCode;
 
       // Calculate complete 4-year engineering cohort
       const cohortInfo = calculateStudentCohort({
@@ -1359,7 +1339,7 @@ export const getHodSemesterCohort = async (
       const fullName = `${userObj.firstName || ''} ${userObj.lastName || ''}`.trim() || 'Student';
 
       const rawDeptCode = s.department?.code || null;
-      const actualBranchCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
+      const actualBranchCode = rawDeptCode;
       const fallbackDeptCode = isSemHandling ? 'CSE' : (department?.code || 'CSE');
 
       const cohortInfo = calculateStudentCohort({
@@ -1655,15 +1635,7 @@ export const findHodSectionByIdOrIdentifier = async (
 
   let deptScope: any = { departmentId };
   if (!isSemHandling && dept) {
-    const rawDeptCode = dept.code;
-    const displayDeptCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
-    const branchCodes = [
-      rawDeptCode,
-      displayDeptCode,
-      `CSE-${displayDeptCode}`,
-      displayDeptCode.replace(/^CSE-/, ''),
-      dept.name,
-    ];
+    const branchCodes = getBranchEquivalents(dept.code);
     deptScope = {
       [Op.or]: [
         { departmentId },
@@ -2329,16 +2301,7 @@ export const getHodFacultyList = async (req: AuthenticatedRequest, res: Response
     } else if (queryDeptId && queryDeptId !== 'ALL') {
       targetCoreDeptId = queryDeptId;
     } else if (branch && branch !== 'ALL') {
-      const cleanBranch = String(branch).trim();
-      const targetDept = await Department.findOne({
-        where: {
-          [Op.or]: [
-            { code: cleanBranch },
-            { code: `CSE-${cleanBranch}` },
-            { name: { [Op.iLike]: `%${cleanBranch}%` } },
-          ],
-        },
-      });
+      const targetDept = await findDepartmentCanonical(branch);
       if (targetDept) {
         targetCoreDeptId = targetDept.id;
       }
@@ -2939,15 +2902,7 @@ export const assignFacultySubject = async (req: AuthenticatedRequest, res: Respo
     if (teachingDepartmentId) {
       targetTeachingDeptId = teachingDepartmentId;
     } else if (teachingDepartmentCode) {
-      const targetDept = await Department.findOne({
-        where: {
-          [Op.or]: [
-            { code: teachingDepartmentCode },
-            { code: `CSE-${teachingDepartmentCode}` },
-            { name: { [Op.iLike]: `%${teachingDepartmentCode}%` } },
-          ],
-        },
-      });
+      const targetDept = await findDepartmentCanonical(teachingDepartmentCode);
       if (targetDept) {
         targetTeachingDeptId = targetDept.id;
       }
@@ -3365,6 +3320,10 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
     if (facultyId && facultyId !== 'ALL') {
       whereClause.userId = facultyId;
     }
+    const { subjectId } = req.query;
+    if (subjectId && subjectId !== 'ALL') {
+      whereClause.subjectId = subjectId;
+    }
     if (semester && semester !== 'ALL') {
       whereClause.semester = Number(semester);
     }
@@ -3400,6 +3359,37 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
       order: [['semester', 'ASC'], ['section', 'ASC']],
     });
 
+    // Resolve matching section records to provide canonical sectionId
+    const semFilter = semester && semester !== 'ALL' ? Number(semester) : (isAppliedScience ? [1, 2] : undefined);
+    const secWhere: any = {};
+    if (semFilter) secWhere.semester = semFilter;
+    const allSections = await Section.findAll({
+      where: secWhere,
+      attributes: ['id', 'name', 'branch', 'semester', 'academicYear', 'departmentId'],
+    });
+
+    const cleanSecStr = (s: string) =>
+      (s || '').replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
+
+    const resolveSectionId = (a: any): string | null => {
+      const aSec = cleanSecStr(a.section);
+      const aBranch = (a.branch || a.department?.code || '').trim().toUpperCase();
+
+      const found = allSections.find((sec) => {
+        if (sec.semester !== a.semester) return false;
+        const sBranch = (sec.branch || '').trim().toUpperCase();
+        if (sBranch !== aBranch) {
+          // Normalize variations like CSE-AIML vs AIML
+          const branchMatch =
+            (aBranch === 'CSE-AIML' && sBranch === 'AIML') ||
+            (aBranch === 'AIML' && sBranch === 'CSE-AIML');
+          if (!branchMatch) return false;
+        }
+        return cleanSecStr(sec.name) === aSec;
+      });
+      return found ? found.id : null;
+    };
+
     return res.json({
       success: true,
       data: assignments.map((a: any) => ({
@@ -3416,6 +3406,7 @@ export const getHodFacultyAssignments = async (req: AuthenticatedRequest, res: R
         credits: a.subject?.credits,
         semester: a.semester,
         section: a.section,
+        sectionId: resolveSectionId(a),
         branch: a.branch || a.department?.code || ((branch as string) || department?.code || 'CSE'),
         departmentId: a.departmentId,
         departmentName: a.department?.name,
@@ -5669,6 +5660,323 @@ export const downloadConsolidatedAttendance = async (req: AuthenticatedRequest, 
   } catch (error) {
     logger.error('HOD_DOWNLOAD_CONSOLIDATED_ATTENDANCE_ERROR:', error);
     return next(error);
+  }
+};
+
+/**
+ * POST /api/hod/teaching-allocations/:allocationId/transfer
+ * POST /api/hod/faculty/assignment/:allocationId/transfer
+ * Atomically transfers a section's teaching allocation from current faculty to new faculty.
+ * Preserves historical validity periods, attendance records, student rosters, and subject mapping.
+ */
+export const transferFacultyAssignment = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<any> => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { allocationId, assignmentId, id } = req.params;
+    const targetAllocationId = allocationId || assignmentId || id;
+    if (!targetAllocationId) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'Allocation identifier is required.' });
+    }
+
+    const {
+      newFacultyCoreDepartmentId,
+      coreDepartmentId,
+      newFacultyId,
+      facultyId,
+      transferDate,
+      reason,
+    } = req.body;
+
+    const targetNewFacultyId = newFacultyId || facultyId;
+    if (!targetNewFacultyId) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'New faculty member selection is required.' });
+    }
+
+    // 1. Fetch current teaching allocation
+    const currentAllocation = await FacultyAssignment.findByPk(targetAllocationId, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'status'] },
+        { model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'semester', 'departmentId'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      transaction,
+    });
+
+    if (!currentAllocation) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Teaching allocation not found.' });
+    }
+
+    if (currentAllocation.status !== 'ACTIVE') {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Cannot transfer allocation with status "${currentAllocation.status}". Only active allocations can be transferred.`,
+      });
+    }
+
+    // 2. Validate HOD Authorization
+    const departmentId = req.departmentId;
+    const isAppliedScience = Boolean(
+      req.isSemesterHandling ||
+      (req.user as any)?.departmentCode === 'AS'
+    );
+
+    const isAuthorized =
+      isAppliedScience ||
+      currentAllocation.departmentId === departmentId ||
+      currentAllocation.createdByHODId === req.user?.id ||
+      (currentAllocation as any).subject?.departmentId === departmentId;
+
+    if (!isAuthorized) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'You are not authorized to transfer this teaching allocation.' });
+    }
+
+    // 3. Locate new faculty member across institution
+    const newTeacher = await Teacher.findOne({
+      where: {
+        [Op.or]: [{ id: targetNewFacultyId }, { userId: targetNewFacultyId }],
+      },
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'status', 'firstName', 'lastName', 'email'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+      transaction,
+    });
+
+    if (!newTeacher) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Selected new faculty member not found.' });
+    }
+
+    if (newTeacher.user?.status !== 'ACTIVE') {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'Selected new faculty member is inactive or unauthorized.' });
+    }
+
+    // Prevent transferring to the exact same faculty member
+    if (newTeacher.userId === currentAllocation.userId) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Section ${currentAllocation.section} is already actively assigned to this faculty member. Please select a different faculty member.`,
+      });
+    }
+
+    // 4. Validate Core Department matching
+    const targetCoreDeptId = newFacultyCoreDepartmentId || coreDepartmentId;
+    if (targetCoreDeptId) {
+      const facDeptId = newTeacher.departmentId;
+      const facDeptCode = newTeacher.department?.code;
+      const matchesId = facDeptId && facDeptId === targetCoreDeptId;
+      const matchesCode =
+        facDeptCode && facDeptCode.toUpperCase() === String(targetCoreDeptId).toUpperCase();
+
+      if (!matchesId && !matchesCode) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          error: `Faculty member "${newTeacher.user?.firstName} ${newTeacher.user?.lastName}" belongs to core department ${facDeptCode || 'unknown'}, not the selected core department.`,
+        });
+      }
+    }
+
+    // 5. Compute Transfer Date and Previous End Date
+    const todayStr = new Date().toISOString().split('T')[0];
+    const transferDateStr =
+      typeof transferDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(transferDate.trim())
+        ? transferDate.trim()
+        : todayStr;
+
+    // Previous allocation ends on day before transfer
+    const prevDateObj = new Date(transferDateStr);
+    prevDateObj.setDate(prevDateObj.getDate() - 1);
+    const dayBeforeTransferStr = prevDateObj.toISOString().split('T')[0];
+
+    // If existing allocation has no startDate, default to its creation date or day before
+    const prevStartDate =
+      currentAllocation.startDate ||
+      (currentAllocation.createdAt ? currentAllocation.createdAt.toISOString().split('T')[0] : dayBeforeTransferStr);
+
+    // 6. Close existing allocation
+    currentAllocation.status = 'TRANSFERRED';
+    currentAllocation.startDate = prevStartDate;
+    currentAllocation.endDate = dayBeforeTransferStr;
+    await currentAllocation.save({ transaction });
+
+    // 7. Create new active allocation with transfer lineage
+    const newAllocation = await FacultyAssignment.create(
+      {
+        teacherId: newTeacher.id,
+        userId: newTeacher.userId,
+        departmentId: currentAllocation.departmentId,
+        subjectId: currentAllocation.subjectId,
+        semester: currentAllocation.semester,
+        section: currentAllocation.section,
+        branch: currentAllocation.branch,
+        academicYear: currentAllocation.academicYear,
+        attendanceAccess: currentAllocation.attendanceAccess !== false,
+        marksAccess: currentAllocation.marksAccess !== false,
+        createdByHODId: req.user?.id || null,
+        assignmentType: currentAllocation.assignmentType || 'REGULAR',
+        status: 'ACTIVE',
+        startDate: transferDateStr,
+        endDate: null,
+        previousFacultyAssignmentId: currentAllocation.id,
+        transferReason: reason || 'FACULTY_TRANSFER',
+        transferredAt: new Date(),
+        transferredByHODId: req.user?.id || null,
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    const rawCurrent = currentAllocation as any;
+    const oldFacultyName = `${rawCurrent.user?.firstName || ''} ${rawCurrent.user?.lastName || ''}`.trim() || 'Previous Faculty';
+    const newFacultyName = `${newTeacher.user?.firstName || ''} ${newTeacher.user?.lastName || ''}`.trim() || 'New Faculty';
+
+    await logAudit(req, 'HOD_TRANSFER_FACULTY_ALLOCATION', {
+      previousAssignmentId: currentAllocation.id,
+      newAssignmentId: newAllocation.id,
+      subjectId: currentAllocation.subjectId,
+      subjectCode: rawCurrent.subject?.code,
+      section: currentAllocation.section,
+      oldFacultyUserId: currentAllocation.userId,
+      oldFacultyName,
+      newFacultyUserId: newTeacher.userId,
+      newFacultyName,
+      transferDate: transferDateStr,
+      endDateForOld: dayBeforeTransferStr,
+      reason,
+    });
+
+    logger.info(
+      `[Faculty Transfer] Section ${currentAllocation.section} of ${rawCurrent.subject?.name} transferred from ${oldFacultyName} to ${newFacultyName} effective ${transferDateStr}.`
+    );
+
+    return res.json({
+      success: true,
+      message: `Section ${currentAllocation.section} successfully transferred to ${newFacultyName}.`,
+      data: {
+        previousAssignmentId: currentAllocation.id,
+        newAssignmentId: newAllocation.id,
+        subjectName: rawCurrent.subject?.name,
+        section: currentAllocation.section,
+        oldFacultyName,
+        newFacultyName,
+        transferDate: transferDateStr,
+        newAssignment: {
+          id: newAllocation.id,
+          facultyUserId: newTeacher.userId,
+          facultyName: newFacultyName,
+          coreDepartmentCode: newTeacher.department?.code,
+          startDate: transferDateStr,
+          status: 'ACTIVE',
+        },
+      },
+    });
+  } catch (error: any) {
+    if (transaction && !(transaction as any).finished) {
+      await transaction.rollback();
+    }
+    logger.error('HOD_TRANSFER_FACULTY_ASSIGNMENT_ERROR:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to transfer faculty assignment.' });
+  }
+};
+
+/**
+ * GET /api/hod/teaching-allocations/:allocationId/history
+ * GET /api/hod/faculty/assignment/:allocationId/history
+ * Retrieves complete faculty allocation history for a subject + section cohort.
+ */
+export const getFacultyAssignmentHistory = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<any> => {
+  try {
+    const { allocationId, assignmentId, id } = req.params;
+    const targetId = allocationId || assignmentId || id;
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: 'Allocation identifier is required.' });
+    }
+
+    const current = await FacultyAssignment.findByPk(targetId, {
+      include: [
+        { model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'credits', 'semester'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'code'] },
+      ],
+    });
+
+    if (!current) {
+      return res.status(404).json({ success: false, error: 'Allocation not found.' });
+    }
+
+    // Find all allocations for the same subject + section cohort
+    const history = await FacultyAssignment.findAll({
+      where: {
+        departmentId: current.departmentId,
+        subjectId: current.subjectId,
+        semester: current.semester,
+        section: current.section,
+        academicYear: current.academicYear,
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'profileImage'],
+        },
+        {
+          model: Teacher,
+          as: 'teacher',
+          include: [{ model: Department, as: 'department', attributes: ['id', 'name', 'code'] }],
+        },
+        {
+          model: User,
+          as: 'transferredByHOD',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['createdAt', 'ASC']],
+    });
+
+    const rawCurrent = current as any;
+    return res.json({
+      success: true,
+      data: {
+        subject: {
+          id: current.subjectId,
+          name: rawCurrent.subject?.name,
+          code: rawCurrent.subject?.code,
+          credits: rawCurrent.subject?.credits,
+        },
+        section: current.section,
+        semester: current.semester,
+        academicYear: current.academicYear,
+        history: history.map((h: any) => ({
+          id: h.id,
+          facultyUserId: h.userId,
+          facultyName: `${h.user?.firstName || ''} ${h.user?.lastName || ''}`.trim() || 'Faculty',
+          facultyEmail: h.user?.email,
+          profileImage: h.user?.profileImage,
+          coreDepartmentCode: h.teacher?.department?.code || null,
+          coreDepartmentName: h.teacher?.department?.name || null,
+          status: h.status,
+          startDate: h.startDate || (h.createdAt ? h.createdAt.toISOString().split('T')[0] : null),
+          endDate: h.endDate,
+          transferReason: h.transferReason,
+          transferredAt: h.transferredAt,
+          transferredBy: h.transferredByHOD
+            ? `${h.transferredByHOD.firstName || ''} ${h.transferredByHOD.lastName || ''}`.trim()
+            : null,
+          isCurrentActive: h.status === 'ACTIVE',
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('HOD_GET_ALLOCATION_HISTORY_ERROR:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to fetch allocation history.' });
   }
 };
 

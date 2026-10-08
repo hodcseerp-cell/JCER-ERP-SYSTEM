@@ -5,6 +5,7 @@ import { Search, ShieldCheck, CheckCircle2, XCircle, Eye, AlertCircle, RefreshCw
 import deanService, { FacultyAuthRequest, DepartmentRecord, AcademicYearRecord } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const FacultyAuthorizationPage: React.FC = () => {
   const navigate = useNavigate();
@@ -218,13 +219,12 @@ export const FacultyAuthorizationPage: React.FC = () => {
                   <tr key={reqItem.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold flex items-center justify-center text-xs overflow-hidden">
-                          {reqItem.profileImage ? (
-                            <img src={reqItem.profileImage} alt={reqItem.facultyName} className="w-full h-full object-cover" />
-                          ) : (
-                            reqItem.facultyName.charAt(0)
-                          )}
-                        </div>
+                        <ProfileAvatar
+                          imageUrl={reqItem.profileImage}
+                          name={reqItem.facultyName}
+                          size="sm"
+                          className="shrink-0"
+                        />
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white block">{reqItem.facultyName}</span>
                           <span className="text-[10px] text-neutral-400">{reqItem.email}</span>

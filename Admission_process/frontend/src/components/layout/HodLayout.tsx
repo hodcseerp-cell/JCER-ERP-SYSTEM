@@ -38,6 +38,7 @@ import usePwa from '../../hooks/usePwa';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import AcademicYearSelector from '../common/AcademicYearSelector';
 import { useAcademicYear } from '../../context/AcademicYearContext';
+import { ProfileAvatar } from '../common/ProfileAvatar';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface MenuItem {
@@ -611,13 +612,12 @@ export const HodLayout: React.FC = () => {
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
                 className="flex items-center space-x-2 header-dark-btn h-9 pl-1.5 pr-3 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
               >
-                <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-violet-600 text-white font-bold text-[10px]">
-                  {user?.profileImage ? (
-                    <img src={user.profileImage} alt={hodName} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{hodName.charAt(0)}</span>
-                  )}
-                </div>
+                <ProfileAvatar
+                  imageUrl={user?.profileImage}
+                  name={hodName}
+                  size="xs"
+                  className="w-6 h-6 rounded-full shadow-xs"
+                />
                 <span className="text-xs font-semibold pr-0.5 hidden md:block">
                   {hodName.split(' ')[0]}
                 </span>

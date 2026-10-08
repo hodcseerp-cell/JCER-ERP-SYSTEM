@@ -62,16 +62,10 @@ Teacher.init(
     archivedAt: {
       type: DataTypes.DATE,
       allowNull: true,
-      defaultValue: null,
     },
     archivedBy: {
       type: DataTypes.UUID,
       allowNull: true,
-      defaultValue: null,
-      references: {
-        model: User,
-        key: 'id',
-      },
     },
     joiningDate: {
       type: DataTypes.DATE,

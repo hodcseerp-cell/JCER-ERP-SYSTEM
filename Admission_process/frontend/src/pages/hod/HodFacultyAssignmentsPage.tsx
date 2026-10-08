@@ -22,6 +22,9 @@ import {
   AlertTriangle,
   ChevronRight,
   Info,
+  ArrowRightLeft,
+  History,
+  Calendar,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, {
@@ -45,8 +48,11 @@ export interface HodFacultyAssignmentItem {
   credits?: number;
   semester: number;
   section: string;
+  sectionId?: string | null;
   branch?: string;
   departmentId?: string;
+  departmentCode?: string;
+  departmentName?: string;
   academicYear: string;
   attendanceAccess?: boolean;
   marksAccess?: boolean;
@@ -62,7 +68,7 @@ export interface HodDepartmentItem {
 
 const FALLBACK_DEPARTMENTS: HodDepartmentItem[] = [
   { id: 'CSE', code: 'CSE', name: 'Computer Science & Engineering' },
-  { id: 'AIML', code: 'AIML', name: 'AI & Machine Learning' },
+  { id: 'CSE-AIML', code: 'CSE-AIML', name: 'Computer Science & Engineering (AIML)' },
   { id: 'ECE', code: 'ECE', name: 'Electronics & Comm Engg' },
   { id: 'ME', code: 'ME', name: 'Mechanical Engineering' },
   { id: 'CV', code: 'CV', name: 'Civil Engineering' },
@@ -116,6 +122,25 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
 
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  // Transfer Faculty Modal State
+  const [transferTarget, setTransferTarget] = useState<{
+    allocation: HodFacultyAssignmentItem;
+    subject: HodSubjectItem;
+  } | null>(null);
+  const [transferDate, setTransferDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [transferCoreDeptId, setTransferCoreDeptId] = useState<string>('');
+  const [transferFacultyId, setTransferFacultyId] = useState<string>('');
+  const [transferReason, setTransferReason] = useState<string>('WORKLOAD_REBALANCING');
+  const [transferSubmitting, setTransferSubmitting] = useState<boolean>(false);
+
+  // Faculty History Modal State
+  const [historyTarget, setHistoryTarget] = useState<{
+    allocation: HodFacultyAssignmentItem;
+    subject: HodSubjectItem;
+  } | null>(null);
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+
   // Auto-dismiss notification timer
   useEffect(() => {
     if (notification) {
@@ -166,7 +191,6 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
         hodService.getFacultyAssignments({
           semester: selectedSemester,
           academicYear: activeAY,
-          branch: isAppliedScience ? selectedBranch : undefined,
         }),
       ]);
 
@@ -175,9 +199,16 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
       setAssignments(assignmentsRes || []);
 
       // Fetch Sections for all relevant departments for this semester & AY
-      const deptsToFetch = isAppliedScience
-        ? ['CSE', 'AIML', 'ME', 'ECE', 'CV']
+      const baseCodes = isAppliedScience
+        ? (departmentsList.length > 0
+            ? departmentsList.filter((d) => d.code !== 'AS').map((d) => d.code)
+            : ['CSE', 'CSE-AIML', 'ME', 'ECE', 'CV'])
         : [deptCode];
+
+      const deptsToFetch = Array.from(new Set(baseCodes));
+      if (isAppliedScience && !deptsToFetch.includes('CSE-AIML')) {
+        deptsToFetch.push('CSE-AIML');
+      }
 
       const secMap: Record<string, HodSectionItem[]> = {};
       await Promise.all(
@@ -185,6 +216,11 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
           try {
             const secList = await hodService.getSections(selectedSemester, activeAY, dCode);
             secMap[dCode] = secList || [];
+            if (dCode === 'CSE-AIML') {
+              secMap['AIML'] = secList || [];
+            } else if (dCode === 'AIML') {
+              secMap['CSE-AIML'] = secList || [];
+            }
           } catch {
             secMap[dCode] = [];
           }
@@ -235,23 +271,11 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     });
   }, [subjects, selectedSemester, selectedCycle, typeFilter, searchQuery, isAppliedScience]);
 
-  // Map of Subject ID / Subject Code -> List of active FacultyAssignments
+  // Map of Subject ID / Subject Code -> List of active FacultyAssignments (across all teaching departments)
   const subjectAssignmentsMap = useMemo(() => {
     const map: Record<string, HodFacultyAssignmentItem[]> = {};
     assignments.forEach((a) => {
       if (a.status === 'ACTIVE' || !a.status) {
-        const aBranch = (a.branch || '').trim().toUpperCase();
-        const selBranch = (selectedBranch || '').trim().toUpperCase();
-        if (
-          isAppliedScience &&
-          selBranch &&
-          aBranch &&
-          aBranch !== selBranch &&
-          !['AS', 'ALL', 'COMMON'].includes(aBranch)
-        ) {
-          return;
-        }
-
         // Map by subjectId
         if (a.subjectId) {
           if (!map[a.subjectId]) map[a.subjectId] = [];
@@ -271,7 +295,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
       }
     });
     return map;
-  }, [assignments, isAppliedScience, selectedBranch]);
+  }, [assignments]);
 
   // Helper to get allocations for a given subject (by ID first, fallback to code)
   const getSubjectAllocations = (subj: HodSubjectItem): HodFacultyAssignmentItem[] => {
@@ -482,6 +506,153 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
     }
   };
 
+  // Transfer Modal Handlers & Computed Lists
+  const handleOpenTransferModal = (alloc: HodFacultyAssignmentItem, subject: HodSubjectItem) => {
+    setTransferTarget({ allocation: alloc, subject });
+    setTransferDate(new Date().toISOString().split('T')[0]);
+    // Pre-populate core department from current faculty if known
+    const currentDeptObj = departmentsList.find(
+      (d) => d.id === alloc.departmentId || d.code === alloc.departmentCode
+    );
+    setTransferCoreDeptId(currentDeptObj?.id || '');
+    setTransferFacultyId('');
+    setTransferReason('WORKLOAD_REBALANCING');
+  };
+
+  const handleCloseTransferModal = () => {
+    setTransferTarget(null);
+    setTransferSubmitting(false);
+  };
+
+  const handleTransferCoreDeptChange = (newCoreId: string) => {
+    setTransferCoreDeptId(newCoreId);
+    setTransferFacultyId(''); // Immediately reset faculty dropdown when core dept changes
+  };
+
+  const transferTargetDeptObj = useMemo(() => {
+    if (!transferCoreDeptId) return null;
+    return departmentsList.find((d) => d.id === transferCoreDeptId || d.code === transferCoreDeptId);
+  }, [transferCoreDeptId, departmentsList]);
+
+  const transferEligibleFacultyList = useMemo(() => {
+    if (!transferCoreDeptId) return [];
+
+    const targetDeptObj = departmentsList.find(
+      (d) => d.id === transferCoreDeptId || d.code === transferCoreDeptId
+    );
+    const targetId = targetDeptObj?.id || transferCoreDeptId;
+    const targetCode = targetDeptObj?.code || transferCoreDeptId;
+
+    return facultyList.filter((fac) => {
+      // Exclude inactive / deactivated
+      const isAuthorized =
+        fac.accountStatus === 'ACTIVE' ||
+        fac.authorizationStatus === 'FULLY_APPROVED' ||
+        (fac as any).overallStatus === 'AUTHORIZED';
+      if (!isAuthorized) return false;
+      if (
+        fac.accountStatus === 'INACTIVE' ||
+        fac.accountStatus === 'DEACTIVATED' ||
+        fac.authorizationStatus === 'REJECTED'
+      ) {
+        return false;
+      }
+
+      // Match strictly by core department ID or Code (never treat CSE-AIML as CSE)
+      const facCoreId = fac.coreDepartmentId || fac.departmentId;
+      const facCoreCode = fac.coreDepartmentCode || fac.departmentCode || fac.department;
+
+      const matchesId = facCoreId && targetId && facCoreId === targetId;
+      const matchesCode =
+        facCoreCode && targetCode && facCoreCode.toUpperCase() === targetCode.toUpperCase();
+
+      if (!matchesId && !matchesCode) return false;
+
+      // Prevent selecting the same current faculty
+      if (
+        transferTarget?.allocation &&
+        (fac.id === transferTarget.allocation.facultyUserId ||
+          fac.userId === transferTarget.allocation.facultyUserId)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [facultyList, transferCoreDeptId, departmentsList, transferTarget]);
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferTarget) return;
+
+    if (!transferCoreDeptId) {
+      setNotification({ type: 'error', message: 'Please select a New Faculty Core Department.' });
+      return;
+    }
+
+    if (!transferFacultyId) {
+      setNotification({ type: 'error', message: 'Please select a New Faculty Member.' });
+      return;
+    }
+
+    if (!transferDate) {
+      setNotification({ type: 'error', message: 'Please select a Transfer Date.' });
+      return;
+    }
+
+    setTransferSubmitting(true);
+    try {
+      const coreDeptObj = departmentsList.find(
+        (d) => d.id === transferCoreDeptId || d.code === transferCoreDeptId
+      );
+
+      const res = await hodService.transferFacultyAssignment(transferTarget.allocation.id, {
+        newFacultyCoreDepartmentId: coreDeptObj?.id || transferCoreDeptId,
+        newFacultyCoreDepartmentCode: coreDeptObj?.code || transferCoreDeptId,
+        newFacultyId: transferFacultyId,
+        transferDate: transferDate,
+        reason: transferReason,
+      });
+
+      setNotification({
+        type: 'success',
+        message: res.message || `Successfully transferred Section ${transferTarget.allocation.section} faculty.`,
+      });
+      handleCloseTransferModal();
+      await loadData();
+    } catch (err: any) {
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.error || 'Failed to transfer faculty assignment.',
+      });
+    } finally {
+      setTransferSubmitting(false);
+    }
+  };
+
+  const handleOpenHistoryModal = async (alloc: HodFacultyAssignmentItem, subject: HodSubjectItem) => {
+    setHistoryTarget({ allocation: alloc, subject });
+    setHistoryLoading(true);
+    try {
+      const records = await hodService.getFacultyAssignmentHistory(alloc.id);
+      setHistoryRecords(records || []);
+    } catch (err: any) {
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.error || 'Failed to load faculty history.',
+      });
+      setHistoryRecords([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleCloseHistoryModal = () => {
+    setHistoryTarget(null);
+    setHistoryRecords([]);
+  };
+
+
   // Calculate Statistics Overview with accurate coverage
   const totalSubjectsCount = filteredSubjects.length;
   const { assignedSubjectsCount, partialSubjectsCount, unassignedSubjectsCount } = useMemo(() => {
@@ -600,10 +771,10 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                   ))
                 ) : (
                   <>
-                    <option value="CSE">CSE - Computer Science</option>
-                    <option value="AIML">AIML - AI & Machine Learning</option>
-                    <option value="ME">ME - Mechanical Engg</option>
-                    <option value="ECE">ECE - Electronics & Comm</option>
+                    <option value="CSE">CSE - Computer Science & Engineering</option>
+                    <option value="CSE-AIML">CSE-AIML - Computer Science & Engineering (AIML)</option>
+                    <option value="ME">ME - Mechanical Engineering</option>
+                    <option value="ECE">ECE - Electronics & Communication</option>
                     <option value="CV">CV - Civil Engineering</option>
                   </>
                 )}
@@ -845,7 +1016,7 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Active Section Allocations Preview Badges (REQUIREMENT 15) */}
+                  {/* Active Section Allocations Preview Badges across all teaching departments */}
                   <div className="flex-1 lg:max-w-md bg-slate-50 p-4 rounded-xl border border-slate-200/80">
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5 flex items-center justify-between">
                       <span>Assigned Sections & Faculty</span>
@@ -855,25 +1026,73 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                     {subjectAllocations.length === 0 ? (
                       <p className="text-xs text-slate-400 italic">No faculty assigned to any section yet.</p>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {subjectAllocations.map((alloc) => (
-                          <div
-                            key={alloc.id}
-                            className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium flex items-center justify-between space-x-2 shadow-xs"
-                          >
-                            <span className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-                              Sec {alloc.section || 'A'}
-                            </span>
-                            <span className="text-slate-800 font-semibold">{alloc.facultyName}</span>
-                            <button
-                              onClick={() => handleUnassignSection(alloc.id, alloc.section || 'A')}
-                              className="text-slate-400 hover:text-rose-600 p-0.5 transition cursor-pointer"
-                              title="Unassign section"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                      <div className="space-y-2.5">
+                        {(() => {
+                          // Group allocations by teaching department / branch
+                          const grouped: Record<string, HodFacultyAssignmentItem[]> = {};
+                          subjectAllocations.forEach((alloc) => {
+                            const deptKey = (alloc.branch || alloc.departmentCode || 'General').toUpperCase();
+                            if (!grouped[deptKey]) grouped[deptKey] = [];
+                            grouped[deptKey].push(alloc);
+                          });
+
+                          const deptKeys = Object.keys(grouped);
+                          const hasMultipleDepts = deptKeys.length > 1;
+
+                          return deptKeys.map((deptKey) => (
+                            <div key={deptKey} className="space-y-1">
+                              {hasMultipleDepts && (
+                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider px-1">
+                                  {deptKey}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                {grouped[deptKey].map((alloc) => (
+                                  <div
+                                    key={alloc.id}
+                                    className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium flex items-center justify-between space-x-2 shadow-xs"
+                                  >
+                                    <span className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap">
+                                      {!hasMultipleDepts && alloc.branch && alloc.branch !== 'AS' ? (
+                                        <span className="mr-1 text-indigo-500 font-black">{alloc.branch}</span>
+                                      ) : null}
+                                      Sec {alloc.section || 'A'}
+                                    </span>
+                                    <span className="text-slate-800 font-semibold">{alloc.facultyName}</span>
+                                    <div className="flex items-center space-x-1.5 ml-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenTransferModal(alloc, subject)}
+                                        className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer border border-indigo-200/80 flex items-center space-x-1"
+                                        title={`Change Faculty for ${alloc.branch || ''} Section ${alloc.section}`}
+                                      >
+                                        <ArrowRightLeft className="w-3 h-3" />
+                                        <span>Change Faculty</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenHistoryModal(alloc, subject)}
+                                        className="text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer flex items-center space-x-0.5"
+                                        title={`View History for ${alloc.branch || ''} Section ${alloc.section}`}
+                                      >
+                                        <History className="w-3 h-3" />
+                                        <span>History</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnassignSection(alloc.id, alloc.section || 'A')}
+                                        className="text-slate-400 hover:text-rose-600 p-0.5 transition cursor-pointer"
+                                        title={`Unassign ${alloc.branch || ''} Section ${alloc.section}`}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     )}
                   </div>
@@ -1066,7 +1285,11 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                     ) : (
                       <div className="space-y-4">
                         {Array.from(selectedTeachingDepts).map((dCode) => {
-                          const rawSecList = departmentSectionsMap[dCode] || [];
+                          const rawSecList =
+                            departmentSectionsMap[dCode] ||
+                            (dCode === 'CSE-AIML' ? departmentSectionsMap['AIML'] : undefined) ||
+                            (dCode === 'AIML' ? departmentSectionsMap['CSE-AIML'] : undefined) ||
+                            [];
                           
                           // Deduplicate sections by clean code (e.g. 'Section A' and 'A' -> single 'Section A')
                           const seenCodes = new Set<string>();
@@ -1084,13 +1307,6 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                           });
 
                           const currentAllocations = activeModalSubject ? getSubjectAllocations(activeModalSubject) : [];
-                          const allocatedMap = new Map<string, string>();
-                          currentAllocations.forEach((a) => {
-                            if (a.section) {
-                              const cleanSec = a.section.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
-                              allocatedMap.set(cleanSec, a.facultyName);
-                            }
-                          });
 
                           return (
                             <div key={dCode} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
@@ -1114,15 +1330,36 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                                     if (!cleanCode) cleanCode = sec.name;
 
                                     const key = `${dCode}:${cleanCode}`;
-                                    const isAssigned = allocatedMap.has(cleanCode);
-                                    const assignedFac = allocatedMap.get(cleanCode);
+
+                                    // Match against existing active allocations for this subject
+                                    const matchingAlloc = currentAllocations.find((a) => {
+                                      // 1. Exact canonical sectionId match
+                                      if (a.sectionId && sec.id && a.sectionId === sec.id) {
+                                        return true;
+                                      }
+                                      // 2. Matching Teaching Department + Section code
+                                      const aDeptCode = (a.branch || a.departmentCode || '').trim().toUpperCase();
+                                      const targetDCode = dCode.trim().toUpperCase();
+                                      const deptMatch =
+                                        aDeptCode === targetDCode ||
+                                        (targetDCode === 'CSE-AIML' && aDeptCode === 'AIML') ||
+                                        (targetDCode === 'AIML' && aDeptCode === 'CSE-AIML');
+
+                                      if (!deptMatch) return false;
+
+                                      const aSecCode = (a.section || '').replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
+                                      return aSecCode === cleanCode;
+                                    });
+
+                                    const isAssigned = Boolean(matchingAlloc);
+                                    const assignedFac = matchingAlloc?.facultyName;
                                     const isChecked = selectedSectionKeys.has(key);
 
                                     if (isAssigned) {
                                       return (
                                         <div
                                           key={sec.id}
-                                          className="p-3 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between text-xs text-slate-500 cursor-not-allowed opacity-80"
+                                          className="p-3 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between text-xs text-slate-500 opacity-90"
                                         >
                                           <div className="flex items-center space-x-2">
                                             <Lock className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -1131,9 +1368,25 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                                               <span className="text-[11px] text-slate-400 block">{sec.studentCount || 40} Students</span>
                                             </div>
                                           </div>
-                                          <span className="text-[11px] font-medium text-slate-500 italic">
-                                            Assigned to {assignedFac}
-                                          </span>
+                                          <div className="flex items-center space-x-2">
+                                            <span className="text-[11px] font-medium text-slate-500 italic">
+                                              Assigned to {assignedFac}
+                                            </span>
+                                            {matchingAlloc && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  handleCloseModal();
+                                                  handleOpenTransferModal(matchingAlloc, activeModalSubject);
+                                                }}
+                                                className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer border border-indigo-200/80 flex items-center space-x-1"
+                                                title={`Change Faculty for ${sec.name}`}
+                                              >
+                                                <ArrowRightLeft className="w-3 h-3" />
+                                                <span>Change Faculty</span>
+                                              </button>
+                                            )}
+                                          </div>
                                         </div>
                                       );
                                     }
@@ -1243,6 +1496,271 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* CHANGE FACULTY MODAL */}
+      {transferTarget &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-white tracking-wide flex items-center space-x-2">
+                    <ArrowRightLeft className="w-5 h-5 text-indigo-400" />
+                    <span>CHANGE FACULTY</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Transfer teaching allocation to another faculty</p>
+                </div>
+                <button
+                  onClick={handleCloseTransferModal}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleTransferSubmit} className="p-6 space-y-4 bg-slate-50/50">
+                {/* Subject & Section Info */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2.5">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Subject:
+                    </label>
+                    <p className="text-sm font-bold text-slate-900">{transferTarget.subject.name}</p>
+                    <span className="text-xs font-mono font-semibold text-slate-500">
+                      {transferTarget.subject.code} • Semester {selectedSemester}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Section:
+                      </label>
+                      <span className="inline-block mt-0.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200/60">
+                        Section {transferTarget.allocation.section || 'A'}
+                        {transferTarget.allocation.branch ? ` (${transferTarget.allocation.branch})` : ''}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Current Faculty:
+                      </label>
+                      <p className="text-xs font-bold text-slate-800 mt-1">
+                        {transferTarget.allocation.facultyName}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transfer Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Transfer Date: <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={transferDate}
+                    onChange={(e) => setTransferDate(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Previous faculty allocation ends on the day before. New faculty assignment begins on this date.
+                  </p>
+                </div>
+
+                {/* New Faculty Core Department */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    New Faculty Core Department: <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={transferCoreDeptId}
+                    onChange={(e) => handleTransferCoreDeptChange(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="">-- Select Core Department --</option>
+                    {departmentsList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.code} — {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* New Faculty */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    New Faculty: <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={transferFacultyId}
+                    onChange={(e) => setTransferFacultyId(e.target.value)}
+                    disabled={!transferCoreDeptId}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-400 cursor-pointer"
+                  >
+                    {!transferCoreDeptId ? (
+                      <option value="">-- Select Core Department First --</option>
+                    ) : transferEligibleFacultyList.length === 0 ? (
+                      <option value="">
+                        -- No active {transferTargetDeptObj?.code || ''} faculty available --
+                      </option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Faculty --</option>
+                        {transferEligibleFacultyList.map((fac) => (
+                          <option key={fac.id} value={fac.id}>
+                            {fac.name} ({fac.coreDepartmentCode || transferTargetDeptObj?.code || 'Core'})
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Reason */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Reason: <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <select
+                    value={transferReason}
+                    onChange={(e) => setTransferReason(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                  >
+                    <option value="WORKLOAD_REBALANCING">Workload Rebalancing</option>
+                    <option value="FACULTY_LEFT">Faculty Left / Resigned</option>
+                    <option value="LEAVE_OF_ABSENCE">Medical / Extended Leave of Absence</option>
+                    <option value="DEPARTMENT_TRANSFER">Department Reassignment</option>
+                    <option value="OTHER">Other Administrative Reason</option>
+                  </select>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="pt-3 flex items-center justify-end space-x-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleCloseTransferModal}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!transferCoreDeptId || !transferFacultyId || !transferDate || transferSubmitting}
+                    className="px-5 py-2 bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white text-xs font-bold rounded-xl hover:opacity-95 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center space-x-2 cursor-pointer"
+                  >
+                    {transferSubmitting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Transferring...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                        <span>Transfer Faculty</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* FACULTY ALLOCATION HISTORY MODAL */}
+      {historyTarget &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+              <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-white tracking-wide flex items-center space-x-2">
+                    <History className="w-5 h-5 text-indigo-400" />
+                    <span>FACULTY HISTORY</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {historyTarget.subject.name} • Section {historyTarget.allocation.section || 'A'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseHistoryModal}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 bg-slate-50/50 max-h-[70vh] overflow-y-auto">
+                {historyLoading ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-6 h-6 animate-spin text-indigo-600 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500">Loading allocation history...</p>
+                  </div>
+                ) : historyRecords.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-400 italic">
+                    No historical assignments recorded yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {historyRecords.map((item, idx) => {
+                      const isActive = item.status === 'ACTIVE';
+                      const startStr = item.startDate ? item.startDate.split('T')[0] : (item.createdAt ? item.createdAt.split('T')[0] : 'Start');
+                      const endStr = item.endDate ? item.endDate.split('T')[0] : (isActive ? 'Present' : 'Ended');
+                      return (
+                        <div
+                          key={item.id || idx}
+                          className={`p-3.5 rounded-xl border ${
+                            isActive
+                              ? 'bg-emerald-50/80 border-emerald-200'
+                              : 'bg-white border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-slate-900">{item.facultyName}</span>
+                            <span
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                isActive
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono mt-1 flex items-center space-x-1.5">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{startStr} → {endStr}</span>
+                          </div>
+                          {item.transferReason && (
+                            <div className="text-[11px] text-slate-600 mt-1.5 pt-1.5 border-t border-slate-100">
+                              <span className="font-bold text-slate-500 uppercase text-[10px]">Reason: </span>
+                              <span>{item.transferReason.replace(/_/g, ' ')}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 bg-white border-t border-slate-200 flex justify-end">
+                <button
+                  onClick={handleCloseHistoryModal}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>,

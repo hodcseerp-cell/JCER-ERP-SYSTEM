@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -23,6 +23,8 @@ import {
   Square,
   Sliders,
   UserMinus,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, {
@@ -32,6 +34,8 @@ import hodService, {
   HodSectionStudentItem,
 } from '../../services/hod.service';
 import { useAcademicYear } from '../../context/AcademicYearContext';
+
+const ALPHABET_OPTIONS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
 export const HodStudentsSectionPage: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -97,11 +101,30 @@ export const HodStudentsSectionPage: React.FC = () => {
   const [viewSearchQuery, setViewSearchQuery] = useState<string>('');
 
   // Form states
+  const [selectedAlphabet, setSelectedAlphabet] = useState<string>('A');
+  const [alphabetDropdownOpen, setAlphabetDropdownOpen] = useState<boolean>(false);
+  const alphabetDropdownRef = useRef<HTMLDivElement>(null);
   const [formName, setFormName] = useState<string>('');
-  const [formCapacity, setFormCapacity] = useState<number>(60);
+  const [formCapacity, setFormCapacity] = useState<number | string>(60);
   const [formClassroom, setFormClassroom] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Compute alphabets already in use for current branch + semester + AY
+  const existingAlphabets = useMemo(() => {
+    const set = new Set<string>();
+    branchSections.forEach((s) => {
+      if (!s || !s.name) return;
+      const clean = s.name.replace(/^(Section|Sec|Division|Div)\s*/i, '').trim().toUpperCase();
+      if (clean && clean.length === 1 && clean >= 'A' && clean <= 'Z') {
+        set.add(clean);
+      }
+    });
+    return set;
+  }, [branchSections]);
+
+  const isAlphabetAlreadyUsed = Boolean(selectedAlphabet && existingAlphabets.has(selectedAlphabet));
+  const allAlphabetsUsed = existingAlphabets.size >= 26;
 
   // Auto-dismiss notification
   useEffect(() => {
@@ -110,6 +133,30 @@ export const HodStudentsSectionPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  // Close alphabet dropdown on outside click or Escape key
+  useEffect(() => {
+    if (!alphabetDropdownOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (alphabetDropdownRef.current && !alphabetDropdownRef.current.contains(e.target as Node)) {
+        setAlphabetDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAlphabetDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [alphabetDropdownOpen]);
 
   // Sync state from URL query parameters
   useEffect(() => {
@@ -333,24 +380,58 @@ export const HodStudentsSectionPage: React.FC = () => {
     });
   };
 
+  // Capacity Input Handlers (Strips leading zeros real-time so 080 becomes 80)
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw === '') {
+      setFormCapacity('');
+      e.currentTarget.value = '';
+      return;
+    }
+    const digits = raw.replace(/\D/g, '');
+    const clean = digits.replace(/^0+/, '');
+    e.currentTarget.value = clean;
+    setFormCapacity(clean === '' ? '' : parseInt(clean, 10));
+  };
+
+  const handleCapacityBlur = (minAllowed: number = 1) => (e: React.FocusEvent<HTMLInputElement>) => {
+    const raw = String(formCapacity ?? '').trim();
+    const num = parseInt(raw.replace(/^0+/, '') || '0', 10);
+    const fallback = Math.max(minAllowed, 60);
+    const finalVal = isNaN(num) || num < minAllowed ? fallback : Math.min(200, num);
+    e.currentTarget.value = String(finalVal);
+    setFormCapacity(finalVal);
+  };
+
   // Open Create Section Modal
   const handleOpenCreateModal = () => {
     setFormError(null);
-    setFormName('');
+    setAlphabetDropdownOpen(false);
+    const nextAvailable = ALPHABET_OPTIONS.find((letter) => !existingAlphabets.has(letter)) || '';
+    setSelectedAlphabet(nextAvailable);
     setFormCapacity(60);
     setFormClassroom('');
     setFormDescription('');
     setCreateModalOpen(true);
   };
 
-  // Submit Create Section (Manual section creation)
+  // Submit Create Section (Manual section creation with Section + Alphabet)
   const handleCreateSectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim()) {
-      setFormError('Please enter a section name.');
+    if (allAlphabetsUsed) {
+      setFormError('No section names available. All Section A-Z names are already used.');
+      return;
+    }
+    if (!selectedAlphabet) {
+      setFormError('Please select a section alphabet.');
+      return;
+    }
+    if (existingAlphabets.has(selectedAlphabet)) {
+      setFormError(`Section ${selectedAlphabet} already exists for this semester.`);
       return;
     }
 
+    const finalSectionName = `Section ${selectedAlphabet}`;
     const parsedCapacity = parseInt(String(formCapacity).replace(/^0+/, '') || '0', 10);
     if (isNaN(parsedCapacity) || parsedCapacity <= 0 || !Number.isInteger(parsedCapacity)) {
       setFormError('Section capacity must be a positive integer.');
@@ -361,7 +442,7 @@ export const HodStudentsSectionPage: React.FC = () => {
     setFormError(null);
     try {
       await hodService.createSection({
-        name: formName.trim(),
+        name: finalSectionName,
         semester: selectedSemester,
         academicYear: activeAY,
         capacity: parsedCapacity,
@@ -372,7 +453,7 @@ export const HodStudentsSectionPage: React.FC = () => {
 
       setNotification({
         type: 'success',
-        message: `Section "${formName.trim()}" created successfully.`,
+        message: `Section "${finalSectionName}" created successfully.`,
       });
       setCreateModalOpen(false);
       if (selectedBranch) {
@@ -390,7 +471,8 @@ export const HodStudentsSectionPage: React.FC = () => {
   const handleOpenEditModal = (sec: HodSectionItem) => {
     setActiveSection(sec);
     setFormName(sec.name);
-    setFormCapacity(sec.capacity || 60);
+    const cleanCap = sec.capacity ? parseInt(String(sec.capacity).replace(/^0+/, '') || '60', 10) : 60;
+    setFormCapacity(cleanCap || 60);
     setFormClassroom(sec.classroom || '');
     setFormDescription(sec.description || '');
     setFormError(null);
@@ -406,11 +488,12 @@ export const HodStudentsSectionPage: React.FC = () => {
       setFormError('Section name is required.');
       return;
     }
-    if (!formCapacity || formCapacity <= 0) {
+    const parsedCapacity = parseInt(String(formCapacity).replace(/^0+/, '') || '0', 10);
+    if (isNaN(parsedCapacity) || parsedCapacity <= 0) {
       setFormError('Section capacity must be greater than zero.');
       return;
     }
-    if (formCapacity < activeSection.studentCount) {
+    if (parsedCapacity < activeSection.studentCount) {
       setFormError(`Capacity cannot be lower than currently allocated students (${activeSection.studentCount}).`);
       return;
     }
@@ -420,7 +503,7 @@ export const HodStudentsSectionPage: React.FC = () => {
     try {
       await hodService.updateSection(activeSection.id, {
         name: formName.trim(),
-        capacity: formCapacity,
+        capacity: parsedCapacity,
         classroom: formClassroom.trim() || '',
         description: formDescription.trim() || '',
       });
@@ -1230,8 +1313,16 @@ export const HodStudentsSectionPage: React.FC = () => {
                   max={unallocatedStudents.length || 1}
                   value={rangeFrom}
                   onChange={(e) => {
-                    setRangeFrom(e.target.value);
+                    const clean = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                    e.currentTarget.value = clean;
+                    setRangeFrom(clean === '' ? '' : parseInt(clean, 10));
                     setRangeError(null);
+                  }}
+                  onBlur={(e) => {
+                    if (rangeFrom === '' || Number(rangeFrom) <= 0) {
+                      e.currentTarget.value = '1';
+                      setRangeFrom(1);
+                    }
                   }}
                   className="w-20 px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
@@ -1245,8 +1336,17 @@ export const HodStudentsSectionPage: React.FC = () => {
                   max={unallocatedStudents.length || 1}
                   value={rangeTo}
                   onChange={(e) => {
-                    setRangeTo(e.target.value);
+                    const clean = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                    e.currentTarget.value = clean;
+                    setRangeTo(clean === '' ? '' : parseInt(clean, 10));
                     setRangeError(null);
+                  }}
+                  onBlur={(e) => {
+                    if (rangeTo === '' || Number(rangeTo) <= 0) {
+                      const fallback = Math.max(1, unallocatedStudents.length || 60);
+                      e.currentTarget.value = String(fallback);
+                      setRangeTo(fallback);
+                    }
                   }}
                   className="w-20 px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
@@ -1721,8 +1821,8 @@ export const HodStudentsSectionPage: React.FC = () => {
       {createModalOpen &&
         createPortal(
           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
-              <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+            <div className="w-full max-w-md rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-visible">
+              <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 rounded-t-3xl flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
                     <PlusCircle size={20} />
@@ -1733,7 +1833,10 @@ export const HodStudentsSectionPage: React.FC = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => setCreateModalOpen(false)}
+                  onClick={() => {
+                    setCreateModalOpen(false);
+                    setAlphabetDropdownOpen(false);
+                  }}
                   className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer"
                 >
                   <X size={16} />
@@ -1764,22 +1867,122 @@ export const HodStudentsSectionPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section Name Input */}
+                {/* Section Name Selector [ Section ] [ A ▼ ] */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-black text-neutral-800 dark:text-neutral-200">
                     Section Name *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Section A"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-                    Enter a section name such as Section A or Section B.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    {/* Prefix Badge */}
+                    <div className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 text-xs font-black select-none shrink-0 shadow-xs">
+                      Section
+                    </div>
+
+                    {/* Custom Alphabet Selector Popover */}
+                    <div className="relative flex-1" ref={alphabetDropdownRef}>
+                      <button
+                        type="button"
+                        disabled={allAlphabetsUsed}
+                        onClick={() => setAlphabetDropdownOpen((prev) => !prev)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none flex items-center justify-between cursor-pointer disabled:bg-neutral-100 dark:disabled:bg-neutral-800 disabled:cursor-not-allowed shadow-xs transition-colors hover:border-neutral-400"
+                        aria-haspopup="listbox"
+                        aria-expanded={alphabetDropdownOpen}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-black text-blue-600 dark:text-blue-400">
+                            {selectedAlphabet || '—'}
+                          </span>
+                          {isAlphabetAlreadyUsed && (
+                            <span className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded">
+                              Already exists
+                            </span>
+                          )}
+                        </span>
+                        <ChevronDown
+                          size={16}
+                          className={`text-neutral-400 transition-transform duration-200 ${
+                            alphabetDropdownOpen ? 'rotate-180 text-blue-600' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {/* Compact Dropdown Popover */}
+                      {alphabetDropdownOpen && !allAlphabetsUsed && (
+                        <div
+                          role="listbox"
+                          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                        >
+                          <div className="max-h-56 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800 p-1.5 scrollbar-thin">
+                            {ALPHABET_OPTIONS.map((letter) => {
+                              const isUsed = existingAlphabets.has(letter);
+                              const isSelected = selectedAlphabet === letter;
+
+                              return (
+                                <button
+                                  key={letter}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAlphabet(letter);
+                                    setFormError(null);
+                                    setAlphabetDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3 py-2 text-left rounded-lg text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-blue-600 text-white'
+                                      : isUsed
+                                      ? 'text-neutral-400 dark:text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+                                      : 'text-neutral-800 dark:text-neutral-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <span className="font-black text-sm">{letter}</span>
+                                    <span className="text-[11px] font-medium opacity-80">
+                                      Section {letter}
+                                    </span>
+                                  </span>
+
+                                  <span className="text-[10px] font-semibold flex items-center gap-1">
+                                    {isUsed && (
+                                      <span className={isSelected ? 'text-blue-200' : 'text-neutral-400'}>
+                                        Existing
+                                      </span>
+                                    )}
+                                    {isSelected && <Check size={14} className="stroke-[3]" />}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dynamic Preview & Validation Messages */}
+                  {selectedAlphabet && !isAlphabetAlreadyUsed && (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                        Resulting section name:
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] border border-blue-200 dark:border-blue-800">
+                        Preview: Section {selectedAlphabet}
+                      </span>
+                    </div>
+                  )}
+
+                  {isAlphabetAlreadyUsed && (
+                    <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 pt-1">
+                      <AlertCircle size={12} className="shrink-0" />
+                      <span>Section {selectedAlphabet} already exists for this semester.</span>
+                    </p>
+                  )}
+
+                  {allAlphabetsUsed && (
+                    <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 pt-1">
+                      <AlertCircle size={12} className="shrink-0" />
+                      <span>No section names available. All Section A-Z names are already used.</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Section Capacity Input */}
@@ -1792,16 +1995,10 @@ export const HodStudentsSectionPage: React.FC = () => {
                     required
                     min={1}
                     max={200}
+                    placeholder="e.g. 60"
                     value={formCapacity}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === '') {
-                        setFormCapacity('' as any);
-                      } else {
-                        const cleaned = raw.replace(/^0+/, '') || '0';
-                        setFormCapacity(parseInt(cleaned, 10));
-                      }
-                    }}
+                    onChange={handleCapacityChange}
+                    onBlur={handleCapacityBlur(1)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
@@ -1810,14 +2007,17 @@ export const HodStudentsSectionPage: React.FC = () => {
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800">
                   <button
                     type="button"
-                    onClick={() => setCreateModalOpen(false)}
+                    onClick={() => {
+                      setCreateModalOpen(false);
+                      setAlphabetDropdownOpen(false);
+                    }}
                     className="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting || !formName.trim()}
+                    disabled={submitting || !selectedAlphabet || isAlphabetAlreadyUsed || allAlphabetsUsed}
                     className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black shadow-sm transition-all hover:scale-[1.01] cursor-pointer"
                   >
                     {submitting ? 'Creating...' : 'Create Section'}
@@ -1882,8 +2082,10 @@ export const HodStudentsSectionPage: React.FC = () => {
                     required
                     min={activeSection.studentCount || 1}
                     max={200}
+                    placeholder="e.g. 60"
                     value={formCapacity}
-                    onChange={(e) => setFormCapacity(Number(e.target.value))}
+                    onChange={handleCapacityChange}
+                    onBlur={handleCapacityBlur(activeSection.studentCount || 1)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-black text-neutral-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>

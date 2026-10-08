@@ -15,6 +15,7 @@ import logger from '../utils/logger.util';
 import ExcelJS from 'exceljs';
 import attendanceExcelService from './attendanceExcel.service';
 import attendanceBackupQueueService from './attendanceBackupQueue.service';
+import { findDepartmentCanonical, getBranchEquivalents } from '../utils/departmentCanonical.util';
 
 // Helper to normalize section names ('Section A', 'Section  D', 'Division A', 'A' -> 'A')
 export const normalizeSection = (sec?: string | null): string => {
@@ -56,6 +57,23 @@ export const getAcademicYearVariants = (ay?: string | null): string[] => {
   return Array.from(variants);
 };
 
+// Helper to build cohort where clause for an assignment to maintain attendance continuity across faculty transfers
+export const buildAssignmentCohortWhere = (assignment: any): any => {
+  const cohortCondition: any[] = [{ facultyAssignmentId: assignment.id }];
+  if (assignment.subjectId && assignment.semester && assignment.academicYear) {
+    const cohortFilter: any = {
+      subjectId: assignment.subjectId,
+      semester: assignment.semester,
+      academicYear: assignment.academicYear,
+    };
+    if (assignment.section) {
+      cohortFilter.section = assignment.section;
+    }
+    cohortCondition.push(cohortFilter);
+  }
+  return cohortCondition.length > 1 ? { [Op.or]: cohortCondition } : { facultyAssignmentId: assignment.id };
+};
+
 /**
  * Resolves the authoritative Section model record for a FacultyAssignment.
  * Matches by explicit sectionId or by department/branch + semester + normalized section code.
@@ -75,12 +93,10 @@ export const resolveSectionForAssignment = async (assignment: any): Promise<Sect
   const deptCode = assignment.department?.code;
   const branchCodes: string[] = [];
   if (deptCode) {
-    branchCodes.push(deptCode);
-    if (deptCode === 'CSE-AIML') branchCodes.push('AIML');
-    branchCodes.push(`CSE-${deptCode}`);
+    branchCodes.push(...getBranchEquivalents(deptCode));
   }
   if (assignment.branch && assignment.branch !== 'ALL') {
-    branchCodes.push(assignment.branch);
+    branchCodes.push(...getBranchEquivalents(assignment.branch));
   }
 
   const candidateSections = await Section.findAll({
@@ -113,7 +129,7 @@ export const getEnrolledStudentsForAssignment = async (assignment: any, matchedS
 
   let targetDeptId = assignment.departmentId;
   if (isSemHandling && assignment.branch && assignment.branch !== 'ALL') {
-    const branchDept = await Department.findOne({ where: { code: assignment.branch } });
+    const branchDept = await findDepartmentCanonical(assignment.branch);
     if (branchDept) targetDeptId = branchDept.id;
   }
 
@@ -277,22 +293,26 @@ export const facultyService = {
         const { students, matchedSection } = await getEnrolledStudentsForAssignment(a);
         const studentCount = students.length;
 
-        // Check if attendance has been submitted/locked today for this assignment
+        // Check if attendance has been submitted/locked today for this assignment/cohort
+        const cohortWhere = buildAssignmentCohortWhere(a);
         const todayStr = new Date().toISOString().split('T')[0];
         const todaySessionCount = await AttendanceSession.count({
           where: {
-            facultyAssignmentId: a.id,
+            ...cohortWhere,
             attendanceDate: todayStr,
             status: { [Op.in]: ['SUBMITTED', 'LOCKED'] },
           },
         });
 
-        // Calculate attendance percentage for this assignment
+        // Calculate attendance percentage for this assignment/cohort
         const totalAttendanceRecords = await AttendanceRecord.count({
-          where: { facultyAssignmentId: a.id },
+          where: cohortWhere,
         });
         const presentRecords = await AttendanceRecord.count({
-          where: { facultyAssignmentId: a.id, status: 'PRESENT' },
+          where: {
+            ...cohortWhere,
+            status: 'PRESENT',
+          },
         });
 
         const attendancePct =
@@ -396,15 +416,16 @@ export const facultyService = {
 
     const { students, matchedSection } = await getEnrolledStudentsForAssignment(assignment);
 
-    // 3. Fetch all attendance sessions for this assignment (REQUIREMENT 2 & 21)
+    // 3. Fetch all attendance sessions for this assignment/cohort (REQUIREMENT 2 & 21)
+    const cohortWhere = buildAssignmentCohortWhere(assignment);
     const sessions = await AttendanceSession.findAll({
-      where: { facultyAssignmentId: assignment.id },
+      where: cohortWhere,
       order: [['attendanceDate', 'DESC'], ['sessionPeriod', 'DESC']],
     });
 
-    // Fetch all attendance records for this assignment
+    // Fetch all attendance records for this assignment/cohort
     const attendanceRecords = await AttendanceRecord.findAll({
-      where: { facultyAssignmentId: assignment.id },
+      where: cohortWhere,
       order: [['date', 'ASC'], ['sessionPeriod', 'ASC']],
     });
 
@@ -834,8 +855,9 @@ export const facultyService = {
       throw new Error('Unauthorized or inactive attendance assignment. Access denied.');
     }
 
+    const cohortWhere = buildAssignmentCohortWhere(assignment);
     const sessions = await AttendanceSession.findAll({
-      where: { facultyAssignmentId: assignment.id },
+      where: cohortWhere,
       order: [
         ['attendanceDate', 'DESC'],
         ['sessionPeriod', 'DESC'],
@@ -898,14 +920,37 @@ export const facultyService = {
     }
 
     const rawSession = session as any;
-    const assignment = rawSession.facultyAssignment;
-    if (!assignment || assignment.status !== 'ACTIVE') {
-      throw new Error('Associated faculty assignment is inactive or missing.');
+    let assignment = rawSession.facultyAssignment;
+    let isOwner = false;
+
+    if (assignment && assignment.status === 'ACTIVE' && (assignment.userId === userId || (teacherId && assignment.teacherId === teacherId))) {
+      isOwner = true;
+    } else {
+      // Check if user is current active faculty for this subject/section cohort
+      const activeAssignment = await FacultyAssignment.findOne({
+        where: {
+          [Op.or]: [
+            { userId },
+            ...(teacherId ? [{ teacherId }] : []),
+          ],
+          subjectId: session.subjectId,
+          semester: session.semester,
+          academicYear: session.academicYear,
+          ...(session.section ? { section: session.section } : {}),
+          status: 'ACTIVE',
+        },
+        include: [
+          { model: Subject, as: 'subject' },
+          { model: Department, as: 'department' },
+        ],
+      });
+      if (activeAssignment) {
+        isOwner = true;
+        assignment = activeAssignment;
+      }
     }
 
-    // Check ownership
-    const isOwner = assignment.userId === userId || (teacherId && assignment.teacherId === teacherId);
-    if (!isOwner) {
+    if (!isOwner || !assignment) {
       throw new Error('Unauthorized: You do not have permission to view or correct this attendance session.');
     }
 
@@ -1040,14 +1085,33 @@ export const facultyService = {
     }
 
     const rawSession = session as any;
-    const assignment = rawSession.facultyAssignment;
-    if (!assignment || assignment.status !== 'ACTIVE') {
-      throw new Error('Associated faculty assignment is inactive or missing.');
+    let assignment = rawSession.facultyAssignment;
+    let isOwner = false;
+
+    if (assignment && assignment.status === 'ACTIVE' && (assignment.userId === userId || (teacherId && assignment.teacherId === teacherId))) {
+      isOwner = true;
+    } else {
+      // Check if user is current active faculty for this subject/section cohort
+      const activeAssignment = await FacultyAssignment.findOne({
+        where: {
+          [Op.or]: [
+            { userId },
+            ...(teacherId ? [{ teacherId }] : []),
+          ],
+          subjectId: session.subjectId,
+          semester: session.semester,
+          academicYear: session.academicYear,
+          ...(session.section ? { section: session.section } : {}),
+          status: 'ACTIVE',
+        },
+      });
+      if (activeAssignment) {
+        isOwner = true;
+        assignment = activeAssignment;
+      }
     }
 
-    // Validate ownership
-    const isOwner = assignment.userId === userId || (teacherId && assignment.teacherId === teacherId);
-    if (!isOwner) {
+    if (!isOwner || !assignment) {
       throw new Error('Unauthorized: You do not have permission to correct attendance for this session.');
     }
 
@@ -1461,16 +1525,17 @@ export const facultyService = {
         continue;
       }
 
-      // Fetch all conducted sessions for this assignment
+      // Fetch all conducted sessions for this assignment/cohort
+      const cohortWhere = buildAssignmentCohortWhere(a);
       const sessions = await AttendanceSession.findAll({
-        where: { facultyAssignmentId: a.id },
+        where: cohortWhere,
         order: [['attendanceDate', 'DESC'], ['sessionPeriod', 'DESC']],
       });
 
-      // Fetch student's attendance records for this assignment
+      // Fetch student's attendance records for this assignment/cohort
       const records = await AttendanceRecord.findAll({
         where: {
-          facultyAssignmentId: a.id,
+          ...cohortWhere,
           studentId: student.id,
         },
         order: [['date', 'DESC'], ['sessionPeriod', 'DESC']],

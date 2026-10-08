@@ -28,6 +28,7 @@ import {
 import deanService, { FacultyProfileResponse } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 interface FormFieldProps {
   label: string;
@@ -311,7 +312,7 @@ export const DeanFacultyDetailPage: React.FC = () => {
   });
 
   // Formatted ID
-  const facultyIdFormatted = faculty.facultyId || `JCER-${faculty.coreDepartment.code}-${faculty.id.slice(0, 6).toUpperCase()}`;
+  const facultyIdFormatted = (faculty as any).facultyId || `JCER-${faculty.coreDepartment?.code || 'FAC'}-${faculty.id.slice(0, 6).toUpperCase()}`;
 
   // Attendance statistics
   const totalAttendancePresent = attendanceHistory.reduce((sum, a) => sum + (a.present || 0), 0);
@@ -395,16 +396,14 @@ export const DeanFacultyDetailPage: React.FC = () => {
       {/* Main Faculty Info Header Card (Identical Structure to StudentViewPage) */}
       <div className="bg-white/40 dark:bg-neutral-900/40 backdrop-blur-md border border-neutral-200/50 dark:border-neutral-800/50 rounded-3xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-8">
         <div className="flex items-center gap-6">
-          <div className="w-36 h-48 border-2 border-neutral-250 dark:border-neutral-750 rounded-2xl overflow-hidden bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center shrink-0 shadow-sm relative">
-            {faculty.profileImage ? (
-              <img src={faculty.profileImage} alt={faculty.name} className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-center p-2 text-neutral-400 dark:text-neutral-500">
-                <User size={36} className="mx-auto opacity-45" />
-                <span className="text-[10px] font-bold block uppercase tracking-wider mt-1.5">Photo</span>
-              </div>
-            )}
-          </div>
+          <ProfileAvatar
+            imageUrl={faculty.profileImage}
+            name={faculty.name}
+            size="custom"
+            roundedClassName="rounded-2xl"
+            fallbackType="icon"
+            className="w-36 h-48 border-2 border-neutral-250 dark:border-neutral-750 shadow-sm shrink-0"
+          />
           <div>
             <div className="flex items-center gap-3">
               <h3 className="text-xl md:text-2xl font-black text-neutral-900 dark:text-white uppercase tracking-wide">

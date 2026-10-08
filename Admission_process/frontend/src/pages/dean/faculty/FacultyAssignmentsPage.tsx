@@ -3,6 +3,7 @@ import { Search, FileCheck2, Filter, Building2, BookOpen } from 'lucide-react';
 import deanService, { FacultyAssignmentRecord, DepartmentRecord, AcademicYearRecord } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const FacultyAssignmentsPage: React.FC = () => {
   const [assignments, setAssignments] = useState<FacultyAssignmentRecord[]>([]);
@@ -180,13 +181,12 @@ export const FacultyAssignmentsPage: React.FC = () => {
                   <tr key={item.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs overflow-hidden">
-                          {item.profileImage ? (
-                            <img src={item.profileImage} alt={item.facultyName} className="w-full h-full object-cover" />
-                          ) : (
-                            item.facultyName.charAt(0)
-                          )}
-                        </div>
+                        <ProfileAvatar
+                          imageUrl={item.profileImage}
+                          name={item.facultyName}
+                          size="sm"
+                          className="shrink-0"
+                        />
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white block">{item.facultyName}</span>
                           <span className="text-[10px] text-neutral-400">{item.email}</span>

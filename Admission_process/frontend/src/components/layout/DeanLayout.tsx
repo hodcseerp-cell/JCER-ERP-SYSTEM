@@ -33,6 +33,7 @@ import deanService from '../../services/dean.service';
 import usePwa from '../../hooks/usePwa';
 import useDeanNotificationCount from '../../hooks/useDeanNotificationCount';
 import PwaConfirmationModal from '../common/PwaConfirmationModal';
+import { ProfileAvatar } from '../common/ProfileAvatar';
 
 interface MenuItem {
   name: string;
@@ -292,13 +293,12 @@ export const DeanLayout: React.FC = () => {
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className="flex items-center space-x-2.5 p-1.5 pr-3 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all border border-neutral-200/60 dark:border-neutral-700/60"
               >
-                <div className="w-7 h-7 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-xs overflow-hidden">
-                  {user?.profileImage ? (
-                    <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <span>DA</span>
-                  )}
-                </div>
+                <ProfileAvatar
+                  imageUrl={user?.profileImage}
+                  name={user?.name || `${user?.firstName || 'Dr. K.B.'} ${user?.lastName || 'Manwade'}`}
+                  size="xs"
+                  className="w-7 h-7 rounded-full shadow-xs"
+                />
                 <div className="hidden sm:flex flex-col text-left">
                   <span className="text-xs font-bold leading-tight text-neutral-900 dark:text-white">
                     {user?.name || `${user?.firstName || 'Dr. K.B.'} ${user?.lastName || 'Manwade'}`}

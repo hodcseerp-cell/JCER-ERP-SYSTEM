@@ -461,7 +461,7 @@ export const HodStudentsPage: React.FC = () => {
             Quick Filter by Actual Branch
           </label>
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scroll-smooth">
-            {['ALL', 'CSE', 'AIML', 'ECE', 'ME', 'CV'].map((b) => (
+            {['ALL', 'CSE', 'CSE-AIML', 'ECE', 'ME', 'CV'].map((b) => (
               <button
                 key={b}
                 onClick={() => handleSelectBranch(b)}
@@ -869,7 +869,6 @@ export const HodStudentsPage: React.FC = () => {
                   )}
                   <th className="py-4 px-4 text-center text-white">Semester</th>
                   <th className="py-4 px-4 text-center text-white">Section</th>
-                  <th className="py-4 px-4 text-center text-white">Attendance %</th>
                   {!isSemesterHandling && <th className="py-4 px-4 text-center text-white">Batch</th>}
                   <th className="py-4 px-4 text-center text-white">Status</th>
                   <th className="py-4 px-4 text-right text-white">Actions</th>
@@ -909,7 +908,7 @@ export const HodStudentsPage: React.FC = () => {
                       {isSemesterHandling && (
                         <td className="py-4 px-4 text-center whitespace-nowrap">
                           <span className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] border border-blue-200 dark:border-blue-800">
-                            {student.actualBranch || (student.department?.code === 'CSE-AIML' ? 'AIML' : student.department?.code) || (student.branch === 'CSE-AIML' ? 'AIML' : student.branch) || '—'}
+                            {student.actualBranch || student.department?.code || student.branch || '—'}
                           </span>
                         </td>
                       )}
@@ -952,31 +951,6 @@ export const HodStudentsPage: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-neutral-400 font-semibold">—</span>
-                        )}
-                      </td>
-
-                      {/* Attendance % */}
-                      <td className="py-4 px-4 text-center whitespace-nowrap">
-                        {student.attendancePercentage === null ||
-                        student.attendancePercentage === undefined ? (
-                          <span className="text-neutral-400 font-semibold">—</span>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5">
-                            <span
-                              className={`font-black text-xs ${
-                                student.isDefaulter ? 'text-rose-600' : 'text-emerald-600'
-                              }`}
-                            >
-                              {typeof student.attendancePercentage === 'number'
-                                ? `${student.attendancePercentage.toFixed(1)}%`
-                                : `${student.attendancePercentage}%`}
-                            </span>
-                            {student.isDefaulter && (
-                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 font-extrabold text-[9px] uppercase tracking-wider">
-                                Defaulter
-                              </span>
-                            )}
-                          </div>
                         )}
                       </td>
 

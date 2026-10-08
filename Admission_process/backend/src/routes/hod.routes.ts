@@ -81,6 +81,13 @@ router.post('/faculty/:id/reset-password', hodController.resetFacultyPassword as
 router.patch('/faculty/:id/status', hodController.toggleFacultyStatus as any);
 router.post('/faculty/:id/deactivate', hodController.deactivateFaculty as any);
 router.post('/faculty/:id/remove-from-department', hodController.removeFacultyFromTeachingDepartment as any);
+router.post('/faculty/assignment/:assignmentId/transfer', hodController.transferFacultyAssignment as any);
+router.get('/faculty/assignment/:assignmentId/history', hodController.getFacultyAssignmentHistory as any);
+router.post('/teaching-allocations/:allocationId/transfer', hodController.transferFacultyAssignment as any);
+router.get('/teaching-allocations/:allocationId/history', hodController.getFacultyAssignmentHistory as any);
+router.post('/:allocationId/transfer', hodController.transferFacultyAssignment as any);
+router.get('/:allocationId/history', hodController.getFacultyAssignmentHistory as any);
+
 
 
 // ─── 4. Subjects & Academic Scheme Module ──────────────────────────────────

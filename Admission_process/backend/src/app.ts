@@ -349,6 +349,7 @@ v1Router.use('/dean', deanRoutes);
 
 // HOD Dashboard routes
 v1Router.use('/hod', hodRoutes);
+v1Router.use('/teaching-allocations', hodRoutes);
 
 // Faculty Dashboard routes
 v1Router.use('/faculty', facultyRoutes);

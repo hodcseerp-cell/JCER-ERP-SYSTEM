@@ -3,6 +3,7 @@ import { Search, Users, Shield, BookOpen, Layers } from 'lucide-react';
 import principalService, { DepartmentRecord } from '../../services/principal.service';
 import Skeleton from '../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 
 export const PrincipalFacultyListPage: React.FC = () => {
   const [faculty, setFaculty] = useState<any[]>([]);
@@ -157,13 +158,12 @@ export const PrincipalFacultyListPage: React.FC = () => {
                   <tr key={fac.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs overflow-hidden">
-                          {fac.profileImage ? (
-                            <img src={fac.profileImage} alt={fac.name} className="w-full h-full object-cover" />
-                          ) : (
-                            fac.name.charAt(0)
-                          )}
-                        </div>
+                        <ProfileAvatar
+                          imageUrl={fac.profileImage}
+                          name={fac.name}
+                          size="sm"
+                          className="shrink-0"
+                        />
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white block">{fac.name}</span>
                           <span className="text-[10px] text-neutral-400">{fac.phone || 'Phone not set'}</span>

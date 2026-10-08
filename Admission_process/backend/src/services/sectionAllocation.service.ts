@@ -10,6 +10,7 @@ import AdmissionPersonalDetail from '../models/AdmissionPersonalDetail';
 import AuditLog from '../models/AuditLog';
 import { HttpException } from '../utils/error.util';
 import logger from '../utils/logger.util';
+import { findDepartmentCanonical, getBranchEquivalents } from '../utils/departmentCanonical.util';
 
 export interface StudentAllocationInput {
   studentId: string;
@@ -60,23 +61,7 @@ export class SectionAllocationService {
    */
   public static async findDepartmentByBranchCode(branchCode: string | null | undefined, transaction?: any): Promise<Department | null> {
     if (!branchCode || branchCode === 'ALL') return null;
-    const cleanBranch = branchCode.trim();
-    const searchCodes = [
-      cleanBranch,
-      cleanBranch === 'AIML' ? 'CSE-AIML' : cleanBranch,
-      cleanBranch === 'CSE-AIML' ? 'AIML' : cleanBranch,
-      `CSE-${cleanBranch}`,
-      cleanBranch.replace(/^CSE-/, ''),
-    ];
-    return await Department.findOne({
-      where: {
-        [Op.or]: [
-          { code: { [Op.in]: searchCodes } },
-          { name: { [Op.iLike]: `%${cleanBranch}%` } },
-        ],
-      },
-      ...(transaction ? { transaction } : {}),
-    });
+    return await findDepartmentCanonical(branchCode, { transaction });
   }
 
   /**
@@ -103,16 +88,8 @@ export class SectionAllocationService {
     // 2. Department HOD (e.g. CSE HOD) can access Semester 1 & 2 sections belonging to their branch
     if ([1, 2].includes(section.semester) && section.branch) {
       const cleanBranch = section.branch.trim();
-      const rawDeptCode = currentDept.code;
-      const displayDeptCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
-      const branchCodes = [
-        rawDeptCode,
-        displayDeptCode,
-        `CSE-${displayDeptCode}`,
-        displayDeptCode.replace(/^CSE-/, ''),
-        currentDept.name,
-      ];
-      if (branchCodes.includes(cleanBranch)) {
+      const branchCodes = getBranchEquivalents(currentDept.code);
+      if (branchCodes.some((code) => code.toUpperCase() === cleanBranch.toUpperCase())) {
         return true;
       }
     }
@@ -265,7 +242,7 @@ export class SectionAllocationService {
             ],
           });
 
-          const branchCodes = [rawCode, displayCode, `CSE-${displayCode}`, d.name];
+          const branchCodes = getBranchEquivalents(d.code);
           const sections = await Section.findAll({
             where: {
               departmentId: [departmentId, d.id],
@@ -335,7 +312,8 @@ export class SectionAllocationService {
           const unallocatedStudents = Math.max(0, totalStudents - allocatedStudents);
 
           return {
-            branchCode: displayCode,
+            branchCode: d.code,
+            displayCode: displayCode,
             branchName: d.name,
             departmentId: d.id,
             totalStudents,
@@ -372,7 +350,7 @@ export class SectionAllocationService {
         ],
       });
 
-      const branchCodes = [rawCode, displayCode, `CSE-${displayCode}`, dept.name];
+      const branchCodes = getBranchEquivalents(dept.code);
       const sections = await Section.findAll({
         where: {
           semester: semNum,
@@ -442,7 +420,8 @@ export class SectionAllocationService {
 
       branches = [
         {
-          branchCode: displayCode,
+          branchCode: dept.code,
+          displayCode: displayCode,
           branchName: dept.name,
           departmentId: dept.id,
           totalStudents,
@@ -499,26 +478,12 @@ export class SectionAllocationService {
 
       if (branch && branch !== 'ALL') {
         const cleanBranch = branch.trim();
-        const branchCodes = [
-          cleanBranch,
-          cleanBranch === 'AIML' ? 'CSE-AIML' : cleanBranch,
-          cleanBranch === 'CSE-AIML' ? 'AIML' : cleanBranch,
-          `CSE-${cleanBranch}`,
-          cleanBranch.replace(/^CSE-/, ''),
-        ];
+        const branchCodes = getBranchEquivalents(cleanBranch);
         where.branch = { [Op.in]: branchCodes };
       }
     } else {
-      // Standard HOD (e.g. CSE HOD)
-      const rawDeptCode = dept.code;
-      const displayDeptCode = rawDeptCode === 'CSE-AIML' ? 'AIML' : rawDeptCode;
-      const branchCodes = [
-        rawDeptCode,
-        displayDeptCode,
-        `CSE-${displayDeptCode}`,
-        displayDeptCode.replace(/^CSE-/, ''),
-        dept.name,
-      ];
+      // Standard HOD (e.g. CSE HOD, CSE-AIML HOD)
+      const branchCodes = getBranchEquivalents(dept.code);
 
       if (semNum && [1, 2].includes(semNum)) {
         where.semester = semNum;
@@ -887,13 +852,7 @@ export class SectionAllocationService {
     };
     if (sectionMeta.branch && sectionMeta.branch !== 'ALL') {
       const cleanBranch = sectionMeta.branch.trim();
-      const branchCodes = [
-        cleanBranch,
-        cleanBranch === 'AIML' ? 'CSE-AIML' : cleanBranch,
-        cleanBranch === 'CSE-AIML' ? 'AIML' : cleanBranch,
-        `CSE-${cleanBranch}`,
-        cleanBranch.replace(/^CSE-/, ''),
-      ];
+      const branchCodes = getBranchEquivalents(cleanBranch);
       siblingWhere[Op.or] = [
         { branch: { [Op.in]: branchCodes } },
         { departmentId: targetDeptId },
@@ -1103,13 +1062,7 @@ export class SectionAllocationService {
       const siblingWhere: any = { semester: section.semester, status: 'ACTIVE' };
       if (section.branch && section.branch !== 'ALL') {
         const cleanBranch = section.branch.trim();
-        const branchCodes = [
-          cleanBranch,
-          cleanBranch === 'AIML' ? 'CSE-AIML' : cleanBranch,
-          cleanBranch === 'CSE-AIML' ? 'AIML' : cleanBranch,
-          `CSE-${cleanBranch}`,
-          cleanBranch.replace(/^CSE-/, ''),
-        ];
+        const branchCodes = getBranchEquivalents(cleanBranch);
         siblingWhere[Op.or] = [
           { branch: { [Op.in]: branchCodes } },
           { departmentId: targetDeptId },
@@ -1856,7 +1809,8 @@ export class SectionAllocationService {
     };
 
     if (branchVal) {
-      existingWhere.branch = branchVal;
+      const branchCodes = getBranchEquivalents(branchVal);
+      existingWhere.branch = { [Op.in]: branchCodes };
     }
 
     const existing = await Section.findOne({ where: existingWhere });
@@ -1869,10 +1823,12 @@ export class SectionAllocationService {
       );
     }
 
+    const canonicalBranch = branchVal ? (getBranchEquivalents(branchVal)[0] || branchVal) : null;
+
     const newSection = await Section.create({
       departmentId,
       semester: semNum,
-      branch: branchVal,
+      branch: canonicalBranch,
       academicYear: ay,
       name: sectionName,
       capacity: capNum,

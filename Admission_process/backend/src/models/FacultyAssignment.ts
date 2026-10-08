@@ -19,7 +19,13 @@ class FacultyAssignment extends Model {
   public marksAccess!: boolean;
   public createdByHODId!: string | null;
   public assignmentType!: 'REGULAR' | 'HOD_SUBJECT_HANDLING' | string;
-  public status!: 'ACTIVE' | 'INACTIVE';
+  public status!: 'ACTIVE' | 'INACTIVE' | 'TRANSFERRED' | 'ENDED';
+  public startDate!: string | null;
+  public endDate!: string | null;
+  public previousFacultyAssignmentId!: string | null;
+  public transferReason!: string | null;
+  public transferredAt!: Date | null;
+  public transferredByHODId!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -104,9 +110,41 @@ FacultyAssignment.init(
       defaultValue: 'REGULAR',
     },
     status: {
-      type: DataTypes.ENUM('ACTIVE', 'INACTIVE'),
+      type: DataTypes.ENUM('ACTIVE', 'INACTIVE', 'TRANSFERRED', 'ENDED'),
       allowNull: false,
       defaultValue: 'ACTIVE',
+    },
+    startDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    endDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    previousFacultyAssignmentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'faculty_assignments',
+        key: 'id',
+      },
+    },
+    transferReason: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    transferredAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    transferredByHODId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
     },
   },
   {
@@ -119,6 +157,7 @@ FacultyAssignment.init(
       { fields: ['subjectId'] },
       { fields: ['academicYear'] },
       { fields: ['status'] },
+      { fields: ['previousFacultyAssignmentId'] },
     ],
   }
 );
@@ -127,5 +166,7 @@ FacultyAssignment.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 FacultyAssignment.belongsTo(Department, { as: 'department', foreignKey: 'departmentId' });
 FacultyAssignment.belongsTo(Subject, { as: 'subject', foreignKey: 'subjectId' });
 FacultyAssignment.belongsTo(Teacher, { as: 'teacher', foreignKey: 'teacherId' });
+FacultyAssignment.belongsTo(FacultyAssignment, { as: 'previousAssignment', foreignKey: 'previousFacultyAssignmentId' });
+FacultyAssignment.belongsTo(User, { as: 'transferredByHOD', foreignKey: 'transferredByHODId' });
 
 export default FacultyAssignment;

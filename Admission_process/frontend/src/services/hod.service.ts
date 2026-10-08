@@ -1003,6 +1003,25 @@ export const hodService = {
     return res.data.data;
   },
 
+  transferFacultyAssignment: async (
+    allocationId: string,
+    data: {
+      newFacultyCoreDepartmentId?: string;
+      newFacultyCoreDepartmentCode?: string;
+      newFacultyId: string;
+      transferDate?: string;
+      reason?: string;
+    }
+  ): Promise<{ success: boolean; message: string; data: any }> => {
+    const res = await API.post(`/teaching-allocations/${allocationId}/transfer`, data);
+    return res.data;
+  },
+
+  getFacultyAssignmentHistory: async (allocationId: string): Promise<any[]> => {
+    const res = await API.get(`/teaching-allocations/${allocationId}/history`);
+    return res.data.data;
+  },
+
   // 4. Subjects & Academic Scheme
   getDepartmentScheme: async (): Promise<HodDepartmentSchemeData> => {
     const res = await API.get('/hod/scheme');

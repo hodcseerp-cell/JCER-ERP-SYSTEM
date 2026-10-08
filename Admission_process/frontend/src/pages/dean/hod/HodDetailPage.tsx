@@ -15,6 +15,7 @@ import {
 import deanService from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const HodDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -82,13 +83,13 @@ export const HodDetailPage: React.FC = () => {
       {/* ── PROFILE HEADER ── */}
       <div className="p-6 sm:p-8 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center space-x-5">
-          <div className="w-20 h-20 rounded-3xl bg-amber-500 text-white font-extrabold flex items-center justify-center text-3xl overflow-hidden shadow-md">
-            {user?.profileImage ? (
-              <img src={user.profileImage} alt={user.firstName} className="w-full h-full object-cover" />
-            ) : (
-              user?.firstName?.charAt(0) || 'H'
-            )}
-          </div>
+          <ProfileAvatar
+            imageUrl={user?.profileImage}
+            name={`${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'HOD'}
+            size="2xl"
+            roundedClassName="rounded-3xl"
+            className="w-20 h-20 shadow-md shrink-0"
+          />
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <h1 className="text-2xl font-extrabold text-neutral-900 dark:text-white">

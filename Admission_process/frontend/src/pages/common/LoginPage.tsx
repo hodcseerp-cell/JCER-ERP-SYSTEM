@@ -65,19 +65,34 @@ export const LoginPage: React.FC = () => {
       DEAN: '/dean/dashboard',
     };
 
-    const targetDashboard = dashboardRoutes[userRole];
+    const normalizedRole = (userRole || '').trim().toUpperCase();
+    const targetDashboard = dashboardRoutes[normalizedRole];
 
     if (targetDashboard) {
-      const redirectPath = (location.state as any)?.from?.pathname || targetDashboard;
-      if (redirectPath.startsWith('/student') && userRole !== 'STUDENT') {
-        navigate(targetDashboard, { replace: true });
-      } else {
-        navigate(redirectPath, { replace: true });
+      let redirectPath = (location.state as any)?.from?.pathname;
+      if (!redirectPath || redirectPath === '/login' || redirectPath === '/unauthorized' || redirectPath === '/module-unavailable') {
+        redirectPath = targetDashboard;
       }
+      if (redirectPath.startsWith('/student') && normalizedRole !== 'STUDENT') {
+        redirectPath = targetDashboard;
+      }
+      if (redirectPath.startsWith('/admin') && normalizedRole !== 'ADMIN' && normalizedRole !== 'SUPER_ADMIN') {
+        redirectPath = targetDashboard;
+      }
+      if (redirectPath.startsWith('/principal') && normalizedRole !== 'PRINCIPAL' && normalizedRole !== 'SUPER_ADMIN') {
+        redirectPath = targetDashboard;
+      }
+      if (redirectPath.startsWith('/dean') && normalizedRole !== 'DEAN') {
+        redirectPath = targetDashboard;
+      }
+      if (redirectPath.startsWith('/hod') && normalizedRole !== 'HOD') {
+        redirectPath = targetDashboard;
+      }
+      navigate(redirectPath, { replace: true });
     } else {
       authService.logout();
-      dispatch(loginFailure('Invalid user role assigned.'));
-      setToast({ type: 'error', message: 'Account configuration error. Please contact administration.' });
+      dispatch(loginFailure(`Invalid user role assigned: ${userRole}`));
+      setToast({ type: 'error', message: `Account configuration error: Unrecognized role "${userRole}". Please contact administration.` });
     }
   };
 

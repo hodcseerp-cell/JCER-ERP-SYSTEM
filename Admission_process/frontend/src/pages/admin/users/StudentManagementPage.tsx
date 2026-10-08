@@ -163,11 +163,11 @@ export const StudentManagementPage: React.FC = () => {
               >
                 <option value="ALL">All Depts</option>
                 {/* Fallback to code if ID is needed, or just let backend handle it if we adapt it. For now, assuming mock UUIDs aren't available, we use ALL */}
-                <option value="CS">Computer Science</option>
-                <option value="CS-AIML">Computer Science & Engineering (AIML)</option>
-                <option value="EC">Electronics</option>
-                <option value="ME">Mechanical</option>
-                <option value="CV">Civil</option>
+                <option value="CSE">Computer Science & Engineering</option>
+                <option value="CSE-AIML">Computer Science & Engineering (AIML)</option>
+                <option value="ECE">Electronics & Communication Engineering</option>
+                <option value="ME">Mechanical Engineering</option>
+                <option value="CV">Civil Engineering</option>
               </select>
             </div>
 

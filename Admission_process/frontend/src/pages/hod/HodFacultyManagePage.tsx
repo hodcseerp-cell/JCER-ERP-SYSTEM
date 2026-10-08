@@ -14,6 +14,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import hodService from '../../services/hod.service';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 
 export const HodFacultyManagePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -86,9 +87,13 @@ export const HodFacultyManagePage: React.FC = () => {
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 sm:p-8 border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white flex items-center justify-center font-black text-2xl shadow-md border border-[#1e3a8a]/40 shrink-0">
-              {teacher.name?.charAt(0)}
-            </div>
+            <ProfileAvatar
+              imageUrl={teacher.profileImage}
+              name={teacher.name}
+              size="xl"
+              roundedClassName="rounded-2xl"
+              className="w-16 h-16 shadow-md border border-[#1e3a8a]/40 shrink-0"
+            />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white">

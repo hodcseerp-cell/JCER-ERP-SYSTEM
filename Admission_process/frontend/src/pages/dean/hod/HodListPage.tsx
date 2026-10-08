@@ -5,6 +5,7 @@ import { Plus, Search, Users, UserCheck, Eye, History, UserPlus, Trash2, AlertTr
 import deanService, { HodRecord, DepartmentRecord } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const HodListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -189,13 +190,12 @@ export const HodListPage: React.FC = () => {
                   <tr key={h.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold flex items-center justify-center text-xs overflow-hidden">
-                          {h.profileImage ? (
-                            <img src={h.profileImage} alt={h.name} className="w-full h-full object-cover" />
-                          ) : (
-                            h.name.charAt(0)
-                          )}
-                        </div>
+                        <ProfileAvatar
+                          imageUrl={h.profileImage}
+                          name={h.name}
+                          size="sm"
+                          className="shrink-0"
+                        />
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white block">{h.name}</span>
                           <span className="text-[10px] text-neutral-400">{h.phone || 'Phone not set'}</span>

@@ -12,6 +12,7 @@ import {
   Building2,
 } from 'lucide-react';
 import hodService, { HodFacultyItem } from '../../services/hod.service';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 
 export const HodFacultyListPage: React.FC = () => {
   const [faculty, setFaculty] = useState<HodFacultyItem[]>([]);
@@ -220,8 +221,21 @@ export const HodFacultyListPage: React.FC = () => {
 
                       {/* Faculty Name */}
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-neutral-900 dark:text-white">
-                          {member.name}
+                        <div className="flex items-center space-x-3">
+                          <ProfileAvatar
+                            imageUrl={member.profileImage}
+                            name={member.name}
+                            size="sm"
+                            className="shrink-0"
+                          />
+                          <div>
+                            <div className="font-bold text-neutral-900 dark:text-white">
+                              {member.name}
+                            </div>
+                            <div className="text-[10px] text-neutral-400">
+                              {member.email || member.phone || ''}
+                            </div>
+                          </div>
                         </div>
                       </td>
 

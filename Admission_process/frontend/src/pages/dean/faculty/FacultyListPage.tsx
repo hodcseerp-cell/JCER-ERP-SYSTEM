@@ -16,6 +16,7 @@ import {
 import deanService, { FacultyRecord, DepartmentRecord } from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const FacultyListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -237,13 +238,12 @@ export const FacultyListPage: React.FC = () => {
                         onClick={() => navigate(`/dean/faculty/${fac.id}`)}
                         className="flex items-center space-x-3 cursor-pointer group"
                       >
-                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold flex items-center justify-center text-xs overflow-hidden group-hover:ring-2 group-hover:ring-indigo-500 transition-all shrink-0">
-                          {fac.profileImage ? (
-                            <img src={fac.profileImage} alt={fac.name} className="w-full h-full object-cover" />
-                          ) : (
-                            fac.name.charAt(0)
-                          )}
-                        </div>
+                        <ProfileAvatar
+                          imageUrl={fac.profileImage}
+                          name={fac.name}
+                          size="sm"
+                          className="group-hover:ring-2 group-hover:ring-indigo-500 transition-all shrink-0"
+                        />
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors block">
                             {fac.name}

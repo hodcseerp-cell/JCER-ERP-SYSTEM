@@ -22,6 +22,7 @@ import PwaConfirmationModal from '../common/PwaConfirmationModal';
 import { useAcademicYear } from '../../context/AcademicYearContext';
 import AcademicYearSelector from '../common/AcademicYearSelector';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+import { ProfileAvatar } from '../common/ProfileAvatar';
 
 interface MenuItem {
   name: string;
@@ -80,6 +81,7 @@ export const FacultyLayout: React.FC = () => {
     { name: 'Student Attendance', path: '/faculty/student-attendance', icon: UserCheck },
     { name: 'Bitwise Marks Entry', path: '/faculty/marks', icon: Award },
     { name: 'Analytics', path: '/faculty/analytics', icon: BarChart3 },
+    { name: 'My Profile & Settings', path: '/faculty/profile', icon: User },
   ];
 
   const subNavTabs = [
@@ -88,12 +90,14 @@ export const FacultyLayout: React.FC = () => {
     { name: 'Student Attendance', path: '/faculty/student-attendance' },
     { name: 'Bitwise Marks', path: '/faculty/marks' },
     { name: 'Analytics', path: '/faculty/analytics' },
+    { name: 'Settings', path: '/faculty/profile' },
   ];
 
   const getActiveNavPath = (currentPath: string): string => {
     if (currentPath === '/faculty' || currentPath === '/faculty/overview' || currentPath.startsWith('/faculty/dashboard')) {
       return '/faculty/dashboard';
     }
+    if (currentPath.startsWith('/faculty/profile') || currentPath.startsWith('/faculty/settings')) return '/faculty/profile';
     if (currentPath.startsWith('/faculty/student-attendance')) return '/faculty/student-attendance';
     if (currentPath.startsWith('/faculty/attendance')) return '/faculty/attendance';
     if (currentPath.startsWith('/faculty/marks') || currentPath.startsWith('/faculty/bitwise-marks')) return '/faculty/marks';
@@ -117,6 +121,8 @@ export const FacultyLayout: React.FC = () => {
 
   const getPageTitle = () => {
     switch (activeNavPath) {
+      case '/faculty/profile':
+        return 'Faculty Profile & Settings';
       case '/faculty/student-attendance':
         return 'Student Attendance';
       case '/faculty/attendance':
@@ -326,13 +332,12 @@ export const FacultyLayout: React.FC = () => {
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
                 className="flex items-center space-x-2 header-dark-btn h-9 pl-1.5 pr-3 py-1 rounded-full shadow-sm cursor-pointer hover:scale-[1.02] transition-all select-none"
               >
-                <div className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-violet-600 text-white font-bold text-[10px]">
-                  {user?.profileImage ? (
-                    <img src={user.profileImage} alt={facultyName} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{facultyName.charAt(0)}</span>
-                  )}
-                </div>
+                <ProfileAvatar
+                  imageUrl={user?.profileImage}
+                  name={facultyName}
+                  size="xs"
+                  className="w-6 h-6 rounded-full shadow-xs"
+                />
                 <span className="text-xs font-semibold pr-0.5 hidden md:block">
                   {facultyName.split(' ')[0]}
                 </span>
@@ -354,10 +359,21 @@ export const FacultyLayout: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-1">
+                  <div className="py-1">
+                    <Link
+                      to="/faculty/profile"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5 text-neutral-500" />
+                      <span>My Profile & Settings</span>
+                    </Link>
+                  </div>
+
+                  <div className="pt-1 border-t border-neutral-100 dark:border-neutral-800">
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors text-left"
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors text-left cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Sign Out</span>

@@ -27,6 +27,7 @@ import principalService, {
 } from '../../services/principal.service';
 import Skeleton from '../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
 import { useAcademicYear } from '../../context/AcademicYearContext';
 
 export const PrincipalFacultyAuthorizationPage: React.FC = () => {
@@ -386,17 +387,12 @@ export const PrincipalFacultyAuthorizationPage: React.FC = () => {
                           to={`/principal/faculty/authorizations/${reqItem.id}`}
                           className="flex items-center space-x-3 group cursor-pointer"
                         >
-                          <div className="w-9 h-9 rounded-full bg-orange-500/10 text-orange-700 dark:text-orange-300 font-bold flex items-center justify-center text-xs overflow-hidden border border-orange-200/50 dark:border-orange-800/40 group-hover:scale-105 transition-transform shrink-0">
-                            {reqItem.profileImage ? (
-                              <img
-                                src={reqItem.profileImage}
-                                alt={facultyDisplayName}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              initialLetter
-                            )}
-                          </div>
+                          <ProfileAvatar
+                            imageUrl={reqItem.profileImage}
+                            name={facultyDisplayName}
+                            size="sm"
+                            className="w-9 h-9 border border-orange-200/50 dark:border-orange-800/40 group-hover:scale-105 transition-transform shrink-0"
+                          />
                           <div>
                             <span className="font-extrabold text-neutral-900 dark:text-white block group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
                               {facultyDisplayName}

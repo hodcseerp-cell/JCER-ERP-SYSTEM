@@ -16,6 +16,7 @@ import {
 import deanService from '../../../services/dean.service';
 import Skeleton from '../../../components/common/Skeleton';
 import { toast } from 'react-toastify';
+import { ProfileAvatar } from '../../../components/common/ProfileAvatar';
 
 export const DepartmentAcademicInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -219,13 +220,13 @@ export const DepartmentAcademicInfoPage: React.FC = () => {
             {hod ? (
               <div className="space-y-4 pt-2">
                 <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white font-extrabold flex items-center justify-center text-xl overflow-hidden shadow-md">
-                    {hod.profileImage ? (
-                      <img src={hod.profileImage} alt={hod.name} className="w-full h-full object-cover" />
-                    ) : (
-                      hod.name.charAt(0)
-                    )}
-                  </div>
+                  <ProfileAvatar
+                    imageUrl={hod.profileImage}
+                    name={hod.name}
+                    size="lg"
+                    roundedClassName="rounded-2xl"
+                    className="w-14 h-14 shadow-md shrink-0"
+                  />
                   <div>
                     <h4 className="text-base font-extrabold text-neutral-900 dark:text-white">{hod.name}</h4>
                     <p className="text-xs text-neutral-500 dark:text-neutral-400">{hod.email}</p>

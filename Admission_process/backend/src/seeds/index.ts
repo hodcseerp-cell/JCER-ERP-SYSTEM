@@ -17,7 +17,7 @@ import FacultyAssignment from '../models/FacultyAssignment';
 export async function seed(exitOnComplete = false) {
   try {
     console.log('Initiating database schema sync...');
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('Database synced. Starting seed...');
 
     // ─── 1. Academic Years ──────────────────────────────────────────────────

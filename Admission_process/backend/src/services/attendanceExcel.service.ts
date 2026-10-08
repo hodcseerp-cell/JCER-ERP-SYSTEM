@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import ExcelJS from 'exceljs';
 import FacultyAssignment from '../models/FacultyAssignment';
 import Subject from '../models/Subject';
@@ -95,14 +96,25 @@ export const attendanceExcelService = {
       }
     });
 
-    // Fetch attendance sessions and records chronologically
+    // Fetch attendance sessions and records chronologically across transfer lineage
+    const cohortCondition: any[] = [{ facultyAssignmentId: assignment.id }];
+    if (assignment.subjectId && assignment.semester && assignment.academicYear) {
+      cohortCondition.push({
+        subjectId: assignment.subjectId,
+        semester: assignment.semester,
+        academicYear: assignment.academicYear,
+        ...(assignment.section ? { section: assignment.section } : {}),
+      });
+    }
+    const cohortWhere = cohortCondition.length > 1 ? { [Op.or]: cohortCondition } : { facultyAssignmentId: assignment.id };
+
     const sessions = await AttendanceSession.findAll({
-      where: { facultyAssignmentId: assignment.id },
+      where: cohortWhere,
       order: [['attendanceDate', 'ASC'], ['sessionPeriod', 'ASC']],
     });
 
     const attendanceRecords = await AttendanceRecord.findAll({
-      where: { facultyAssignmentId: assignment.id },
+      where: cohortWhere,
       order: [['date', 'ASC'], ['sessionPeriod', 'ASC']],
     });
 

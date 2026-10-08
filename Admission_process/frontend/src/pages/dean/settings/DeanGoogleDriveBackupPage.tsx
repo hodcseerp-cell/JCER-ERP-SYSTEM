@@ -26,6 +26,7 @@ export const DeanGoogleDriveBackupPage: React.FC = () => {
   const [disconnectModalOpen, setDisconnectModalOpen] = useState<boolean>(false);
   const [disconnecting, setDisconnecting] = useState<boolean>(false);
   const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
+  const [selectedDeptPreview, setSelectedDeptPreview] = useState<'CSE' | 'CSE-AIML' | 'ECE' | 'ME' | 'CV'>('CSE');
 
   const fetchStatus = async () => {
     try {
@@ -401,24 +402,108 @@ export const DeanGoogleDriveBackupPage: React.FC = () => {
 
           {/* Folder Hierarchy Preview Card */}
           <div className="rounded-3xl border border-slate-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-900/90 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-neutral-100 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
               <FolderTree className="size-4 text-emerald-600" />
               <span>Automatic Folder Hierarchy</span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-neutral-400 mb-4">
-              Workbooks are organized automatically by Academic Year, Department, Semester, and Section:
+            <p className="text-xs text-slate-500 dark:text-neutral-400 mb-3">
+              Workbooks are organized with permanent Top-Level Department folders, followed by Academic Year, Semester, and Section:
             </p>
+
+            {/* Department inspect selector */}
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+              <span className="text-xs text-slate-400 font-medium mr-1">Inspect:</span>
+              {(['CSE', 'CSE-AIML', 'ECE', 'ME', 'CV'] as const).map((dept) => (
+                <button
+                  key={dept}
+                  type="button"
+                  onClick={() => setSelectedDeptPreview(dept)}
+                  className={`px-2.5 py-0.5 text-xs font-semibold rounded-lg transition-all ${
+                    selectedDeptPreview === dept
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-400 hover:bg-slate-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {dept}
+                </button>
+              ))}
+            </div>
 
             <div className="p-4 rounded-2xl bg-slate-900 text-slate-200 font-mono text-xs space-y-1 overflow-x-auto shadow-inner">
               <p className="text-blue-400 font-bold">JCER ERP Attendance/</p>
-              <p className="pl-3 text-slate-300">└── 2026-27/</p>
-              <p className="pl-6 text-slate-300">├── CSE/</p>
-              <p className="pl-9 text-slate-400">└── Semester 3/</p>
-              <p className="pl-12 text-slate-400">└── Section A/</p>
-              <p className="pl-15 text-emerald-400 font-semibold">├── DBMS.xlsx</p>
-              <p className="pl-15 text-emerald-400 font-semibold">└── Java.xlsx</p>
-              <p className="pl-6 text-slate-300">├── ECE/</p>
-              <p className="pl-6 text-slate-300">└── ME/</p>
+
+              {/* CSE */}
+              <p className={`pl-3 ${selectedDeptPreview === 'CSE' ? 'text-blue-300 font-bold' : 'text-slate-300'}`}>├── CSE/</p>
+              {selectedDeptPreview === 'CSE' ? (
+                <>
+                  <p className="pl-6 text-slate-400">│   └── 2026-27/</p>
+                  <p className="pl-6 text-slate-400">│       ├── Semester 1/</p>
+                  <p className="pl-6 text-slate-400">│       │   ├── Section A/</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">│       │   │   ├── Attendance_DBMS_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">│       │   │   └── Attendance_Java_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-slate-400">│       │   └── Section B/</p>
+                  <p className="pl-6 text-slate-400">│       └── Semester 2/</p>
+                </>
+              ) : (
+                <p className="pl-6 text-slate-500">│   └── 2026-27/</p>
+              )}
+
+              {/* CSE-AIML */}
+              <p className={`pl-3 ${selectedDeptPreview === 'CSE-AIML' ? 'text-blue-300 font-bold' : 'text-slate-300'}`}>├── CSE-AIML/</p>
+              {selectedDeptPreview === 'CSE-AIML' ? (
+                <>
+                  <p className="pl-6 text-slate-400">│   └── 2026-27/</p>
+                  <p className="pl-6 text-slate-400">│       ├── Semester 1/</p>
+                  <p className="pl-6 text-slate-400">│       │   ├── Section A/</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">│       │   │   └── Attendance_AIMath_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-slate-400">│       │   └── Section B/</p>
+                  <p className="pl-6 text-slate-400">│       └── Semester 2/</p>
+                </>
+              ) : (
+                <p className="pl-6 text-slate-500">│   └── 2026-27/</p>
+              )}
+
+              {/* ECE */}
+              <p className={`pl-3 ${selectedDeptPreview === 'ECE' ? 'text-blue-300 font-bold' : 'text-slate-300'}`}>├── ECE/</p>
+              {selectedDeptPreview === 'ECE' ? (
+                <>
+                  <p className="pl-6 text-slate-400">│   └── 2026-27/</p>
+                  <p className="pl-6 text-slate-400">│       ├── Semester 1/</p>
+                  <p className="pl-6 text-slate-400">│       │   └── Section A/</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">│       │       └── Attendance_Signals_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-slate-400">│       └── Semester 2/</p>
+                </>
+              ) : (
+                <p className="pl-6 text-slate-500">│   └── 2026-27/</p>
+              )}
+
+              {/* ME */}
+              <p className={`pl-3 ${selectedDeptPreview === 'ME' ? 'text-blue-300 font-bold' : 'text-slate-300'}`}>├── ME/</p>
+              {selectedDeptPreview === 'ME' ? (
+                <>
+                  <p className="pl-6 text-slate-400">│   └── 2026-27/</p>
+                  <p className="pl-6 text-slate-400">│       ├── Semester 1/</p>
+                  <p className="pl-6 text-slate-400">│       │   └── Section A/</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">│       │       └── Attendance_Thermodynamics_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-slate-400">│       └── Semester 2/</p>
+                </>
+              ) : (
+                <p className="pl-6 text-slate-500">│   └── 2026-27/</p>
+              )}
+
+              {/* CV */}
+              <p className={`pl-3 ${selectedDeptPreview === 'CV' ? 'text-blue-300 font-bold' : 'text-slate-300'}`}>└── CV/</p>
+              {selectedDeptPreview === 'CV' ? (
+                <>
+                  <p className="pl-6 text-slate-400">    └── 2026-27/</p>
+                  <p className="pl-6 text-slate-400">        ├── Semester 1/</p>
+                  <p className="pl-6 text-slate-400">        │   └── Section A/</p>
+                  <p className="pl-6 text-emerald-400 font-semibold">        │       └── Attendance_Surveying_SecA_2026-27.xlsx</p>
+                  <p className="pl-6 text-slate-400">        └── Semester 2/</p>
+                </>
+              ) : (
+                <p className="pl-6 text-slate-500">    └── 2026-27/</p>
+              )}
             </div>
           </div>
         </div>
