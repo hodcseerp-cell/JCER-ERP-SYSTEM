@@ -147,6 +147,8 @@ async function startServer() {
           "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           CONSTRAINT "uq_consolidated_att_backup_cohort" UNIQUE ("academicYear", "departmentId", "semester")
+        );
+
         CREATE INDEX IF NOT EXISTS "idx_consolidated_att_backup_files_status" ON "consolidated_attendance_backup_files"("status");
         CREATE INDEX IF NOT EXISTS "idx_consolidated_att_backup_files_drive_id" ON "consolidated_attendance_backup_files"("googleDriveFileId");
 
@@ -154,101 +156,13 @@ async function startServer() {
         ALTER TABLE "attendance_backup_files" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP WITH TIME ZONE NULL;
         ALTER TABLE "attendance_backup_files" ADD COLUMN IF NOT EXISTS "lastSyncAttemptAt" TIMESTAMP WITH TIME ZONE NULL;
         CREATE INDEX IF NOT EXISTS "idx_att_backup_files_subject" ON "attendance_backup_files"("subjectId");
+
+        -- Ensure student admissionBatch attribute exists
+        ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
       `);
       console.log('✓ Google Drive Attendance, Marks & Consolidated Backup tables verified/created.');
     } catch (gdriveDdlErr: any) {
       console.warn('Google Drive Attendance & Marks Backup migration notice:', gdriveDdlErr.message);
-    }
-
-    // Safe migration: Mentor Management tables (mentor_assignments & mentoring_records)
-    try {
-      await sequelize.query(`
-        CREATE TABLE IF NOT EXISTS "mentor_assignments" (
-          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          "studentId" UUID NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-          "facultyId" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
-          "assignedByHodId" UUID NOT NULL REFERENCES "users"("id"),
-          "academicYear" VARCHAR(30) NOT NULL DEFAULT '2026-27',
-          "semester" INTEGER NOT NULL,
-          "departmentId" UUID NOT NULL REFERENCES "departments"("id"),
-          "mentorDepartmentId" UUID NOT NULL REFERENCES "departments"("id"),
-          "status" VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-          "assignedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          "reassignedAt" TIMESTAMP WITH TIME ZONE NULL,
-          "notes" TEXT NULL,
-          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        );
-
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_student" ON "mentor_assignments"("studentId");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_faculty" ON "mentor_assignments"("facultyId");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_dept" ON "mentor_assignments"("departmentId");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_mentor_dept" ON "mentor_assignments"("mentorDepartmentId");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_status" ON "mentor_assignments"("status");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_ay_sem" ON "mentor_assignments"("academicYear", "semester");
-
-        CREATE TABLE IF NOT EXISTS "mentoring_records" (
-          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          "studentId" UUID NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-          "mentorAssignmentId" UUID NULL REFERENCES "mentor_assignments"("id") ON DELETE SET NULL,
-          "facultyId" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
-          "meetingDate" DATE NOT NULL DEFAULT CURRENT_DATE,
-          "meetingType" VARCHAR(30) NOT NULL DEFAULT 'IN_PERSON',
-          "concernCategory" VARCHAR(50) NOT NULL DEFAULT 'GENERAL',
-          "summary" TEXT NOT NULL,
-          "actionPlan" TEXT NULL,
-          "followUpDate" DATE NULL,
-          "followUpStatus" VARCHAR(30) NOT NULL DEFAULT 'OPEN',
-          "resolutionNotes" TEXT NULL,
-          "resolvedAt" TIMESTAMP WITH TIME ZONE NULL,
-          "createdBy" UUID NOT NULL REFERENCES "users"("id"),
-          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        );
-
-        CREATE INDEX IF NOT EXISTS "idx_mentoring_records_student" ON "mentoring_records"("studentId");
-        CREATE INDEX IF NOT EXISTS "idx_mentoring_records_faculty" ON "mentoring_records"("facultyId");
-        -- Extended Phase-aware Mentor Assignment columns
-        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "phase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_1';
-        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "startSemester" INTEGER NULL DEFAULT 1;
-        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "endSemester" INTEGER NULL DEFAULT 2;
-        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
-        ALTER TABLE "mentor_assignments" ADD COLUMN IF NOT EXISTS "reassignmentReason" TEXT NULL;
-
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_phase" ON "mentor_assignments"("phase");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_assignments_batch" ON "mentor_assignments"("admissionBatch");
-
-        -- Safe Student admissionBatch column
-        ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "admissionBatch" VARCHAR(30) NULL;
-
-        -- Mentor Transitions Queue table for Sem 2 -> Sem 3 promotion
-        CREATE TABLE IF NOT EXISTS "mentor_transitions" (
-          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          "studentId" UUID NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
-          "departmentId" UUID NOT NULL REFERENCES "departments"("id"),
-          "admissionBatch" VARCHAR(30) NOT NULL DEFAULT '2026-27',
-          "fromPhase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_1',
-          "toPhase" VARCHAR(20) NOT NULL DEFAULT 'PHASE_2',
-          "fromSemester" INTEGER NOT NULL DEFAULT 2,
-          "toSemester" INTEGER NOT NULL DEFAULT 3,
-          "previousFacultyId" UUID NULL REFERENCES "users"("id") ON DELETE SET NULL,
-          "newFacultyId" UUID NULL REFERENCES "users"("id") ON DELETE SET NULL,
-          "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-          "decision" VARCHAR(30) NULL,
-          "resolvedByHodId" UUID NULL REFERENCES "users"("id"),
-          "resolvedAt" TIMESTAMP WITH TIME ZONE NULL,
-          "notes" TEXT NULL,
-          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT "unique_student_phase_transition" UNIQUE ("studentId", "toPhase")
-        );
-
-        CREATE INDEX IF NOT EXISTS "idx_mentor_transitions_dept_status" ON "mentor_transitions"("departmentId", "status");
-        CREATE INDEX IF NOT EXISTS "idx_mentor_transitions_student" ON "mentor_transitions"("studentId");
-      `);
-      console.log('✓ Mentor Management tables & Phase Transitions verified/created.');
-    } catch (mentorDdlErr: any) {
-      console.warn('Mentor Management migration notice:', mentorDdlErr.message);
     }
 
     // Pre-cast: fix admission_parent_details.fatherAnnualIncome column type to DECIMAL(38, 2).

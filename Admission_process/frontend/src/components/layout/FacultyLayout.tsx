@@ -91,7 +91,6 @@ export const FacultyLayout: React.FC = () => {
   ];
 
   const getActiveNavPath = (currentPath: string): string => {
-    if (currentPath.startsWith('/faculty/mentor')) return '/faculty/mentor';
     if (currentPath === '/faculty' || currentPath === '/faculty/overview' || currentPath.startsWith('/faculty/dashboard')) {
       return '/faculty/dashboard';
     }
@@ -117,15 +116,6 @@ export const FacultyLayout: React.FC = () => {
   }
 
   const getPageTitle = () => {
-    if (location.pathname.startsWith('/faculty/mentor/mentees/')) {
-      return 'Mentee Profile & Academic Overview';
-    }
-    if (location.pathname === '/faculty/mentor/mentees') {
-      return 'My Mentees';
-    }
-    if (location.pathname.startsWith('/faculty/mentor')) {
-      return 'Faculty Mentor Dashboard';
-    }
     switch (activeNavPath) {
       case '/faculty/student-attendance':
         return 'Student Attendance';
@@ -142,9 +132,6 @@ export const FacultyLayout: React.FC = () => {
   };
 
   const getPageSubtitle = () => {
-    if (location.pathname.startsWith('/faculty/mentor')) {
-      return 'Mentoring, student performance tracking & follow-up actions';
-    }
     return 'Teaching, attendance, marks & academic performance';
   };
 

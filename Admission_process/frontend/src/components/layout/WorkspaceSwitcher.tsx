@@ -3,17 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { useAcademicYear } from '../../context/AcademicYearContext';
-import mentorService from '../../services/mentor.service';
+import authService from '../../services/auth.service';
 import {
   ArrowLeftRight,
   ChevronDown,
   Building2,
   GraduationCap,
-  UserCheck,
   Check,
 } from 'lucide-react';
 
-export type WorkspaceType = 'hod' | 'faculty' | 'mentor';
+export type WorkspaceType = 'hod' | 'faculty';
 
 interface WorkspaceOption {
   id: WorkspaceType;
@@ -32,7 +31,6 @@ interface WorkspaceItem {
   type: string;
   label: string;
   route: string;
-  menteeCount?: number;
 }
 
 export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWorkspace }) => {
@@ -56,9 +54,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
 
       try {
         setLoading(true);
-        const res = await mentorService.getUserWorkspaces();
+        const res = await authService.getUserWorkspaces();
         if (isMounted && res?.workspaces) {
-          setWorkspaces(res.workspaces);
+          setWorkspaces(res.workspaces.filter((w: WorkspaceItem) => ['HOD', 'FACULTY'].includes(w.type.toUpperCase())));
         }
       } catch (err) {
         console.warn('Failed to load user workspaces capability:', err);
@@ -70,9 +68,6 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
           }
           if (user?.role === 'TEACHER' || user?.role === 'FACULTY' || user?.isFaculty || user?.role === 'HOD') {
             list.push({ type: 'FACULTY', label: 'Faculty Dashboard', route: '/faculty/dashboard' });
-          }
-          if (user?.isMentor) {
-            list.push({ type: 'MENTOR', label: 'Mentor Workspace', route: '/mentor/dashboard' });
           }
           setWorkspaces(list);
         }
@@ -113,16 +108,6 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
         colorClass: 'text-cyan-500 dark:text-cyan-400',
       };
     }
-    if (t === 'MENTOR') {
-      return {
-        id: 'mentor',
-        name: 'Mentor Workspace',
-        path: ws.route || '/mentor/dashboard',
-        icon: UserCheck,
-        colorClass: 'text-purple-500 dark:text-purple-400',
-        badge: ws.menteeCount && ws.menteeCount > 0 ? `${ws.menteeCount} Mentees` : undefined,
-      };
-    }
     return {
       id: 'faculty',
       name: 'Faculty Dashboard',
@@ -132,9 +117,11 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
     };
   };
 
-  const availableWorkspaces = workspaces.map(getWorkspaceDetails);
+  const availableWorkspaces = workspaces
+    .filter((w) => w.type.toUpperCase() === 'HOD' || w.type.toUpperCase() === 'FACULTY')
+    .map(getWorkspaceDetails);
 
-  if (availableWorkspaces.length === 0) {
+  if (availableWorkspaces.length <= 1) {
     return null;
   }
 
@@ -197,11 +184,6 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ currentWor
                     <Icon className={`w-4 h-4 flex-shrink-0 ${ws.colorClass}`} />
                     <div className="flex flex-col min-w-0">
                       <span className="truncate leading-tight">{ws.name}</span>
-                      {ws.badge && (
-                        <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
-                          {ws.badge}
-                        </span>
-                      )}
                     </div>
                   </div>
                   {isSelected && (

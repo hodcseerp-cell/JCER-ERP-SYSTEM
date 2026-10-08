@@ -23,7 +23,6 @@ export interface UserSession {
   };
   isHod?: boolean;
   isFaculty?: boolean;
-  isMentor?: boolean;
   workspaces?: string[];
 }
 
@@ -125,6 +124,11 @@ class AuthService {
 
   isAuthenticated(): boolean {
     return !!this.getToken();
+  }
+
+  async getUserWorkspaces(): Promise<any> {
+    const response = await API.get('/auth/workspaces');
+    return response.data?.data || response.data;
   }
 }
 

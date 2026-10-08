@@ -157,7 +157,6 @@ export const HodLayout: React.FC = () => {
         { name: 'Students', path: '/hod/students', icon: Users },
         { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
         { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
-        { name: 'Mentor Management', path: '/hod/mentors', icon: UserCheck },
       ],
     },
     {
@@ -213,7 +212,6 @@ export const HodLayout: React.FC = () => {
         { name: 'Students', path: '/hod/students', icon: Users },
         { name: 'Semester Breakdown', path: '/hod/students/semesters', icon: GraduationCap },
         { name: 'Section Allocation', path: '/hod/students/sections', icon: Layers },
-        { name: 'Mentor Management', path: '/hod/mentors', icon: UserCheck },
       ],
     },
     {
@@ -252,7 +250,6 @@ export const HodLayout: React.FC = () => {
   const subNavTabs = [
     { name: 'Dashboard', path: '/hod/dashboard' },
     { name: 'Students', path: '/hod/students' },
-    { name: 'Mentors', path: '/hod/mentors' },
     { name: 'Faculty', path: '/hod/faculty' },
   ];
 
@@ -261,9 +258,6 @@ export const HodLayout: React.FC = () => {
     '/hod/students': 'Student Management',
     '/hod/students/semesters': 'Semester Student Breakdown',
     '/hod/students/sections': 'Section Allocation',
-    '/hod/mentors': 'Mentor Management',
-    '/hod/mentors/assign': 'Assign Student Mentors',
-    '/hod/mentors/allocations': 'Mentor Allocations Directory',
     '/hod/semester-transition': 'Semester 2 → Semester 3 Transition',
     '/hod/faculty': 'Faculty Management',
     '/hod/faculty/assignments': 'Teaching Allocation',
@@ -280,15 +274,6 @@ export const HodLayout: React.FC = () => {
   };
 
   const getPageTitle = () => {
-    if (location.pathname.startsWith('/hod/mentors/assign')) {
-      return 'Assign Student Mentors';
-    }
-    if (location.pathname.startsWith('/hod/mentors/allocations')) {
-      return 'Mentor Allocations Directory';
-    }
-    if (location.pathname.startsWith('/hod/mentors')) {
-      return 'Mentor Management';
-    }
     if (location.pathname.startsWith('/hod/students/semesters/')) {
       const sem = location.pathname.split('/').pop();
       return `Semester ${sem} Cohort`;

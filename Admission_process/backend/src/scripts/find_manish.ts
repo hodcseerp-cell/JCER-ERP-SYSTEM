@@ -18,7 +18,7 @@ async function f() {
         ]
       }
     });
-    console.log('USERS FOUND:', users.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}`, email: u.email, role: u.role, deptId: u.departmentId })));
+    console.log('USERS FOUND:', users.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}`, email: u.email, role: u.role, deptId: (u as any).departmentId })));
 
     const teachers = await Teacher.findAll({
       include: [{ model: User, as: 'user' }, { model: Department, as: 'department' }]

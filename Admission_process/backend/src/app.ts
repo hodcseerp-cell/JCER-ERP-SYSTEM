@@ -31,7 +31,6 @@ import hodRoutes from './routes/hod.routes';
 import facultyRoutes from './routes/faculty.routes';
 import bitwiseMarksRoutes from './routes/bitwiseMarks.routes';
 import googleDriveRoutes from './routes/googleDrive.routes';
-import { hodMentorRouter, facultyMentorRouter } from './routes/mentor.routes';
 const app: Application = express();
 
 // Trust first proxy hop (e.g. Nginx, Cloudflare, Load Balancer)
@@ -349,12 +348,9 @@ v1Router.use('/principal', principalRoutes);
 v1Router.use('/dean', deanRoutes);
 
 // HOD Dashboard routes
-v1Router.use('/hod/mentors', hodMentorRouter);
 v1Router.use('/hod', hodRoutes);
 
-// Faculty & Mentor Dashboard routes
-v1Router.use('/mentor', facultyMentorRouter);
-v1Router.use('/faculty/mentor', facultyMentorRouter);
+// Faculty Dashboard routes
 v1Router.use('/faculty', facultyRoutes);
 v1Router.use('/faculty/marks', bitwiseMarksRoutes);
 v1Router.use('/faculty/bitwise-marks', bitwiseMarksRoutes);

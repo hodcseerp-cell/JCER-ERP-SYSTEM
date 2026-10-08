@@ -1711,7 +1711,7 @@ export class SectionAllocationService {
       });
 
       // 4. Atomically clear section allocation on Student table
-      // Preserves student records, user accounts, attendance, marks, academic data, mentors
+      // Preserves student records, user accounts, attendance, marks, and academic data
       await Student.update(
         {
           sectionId: null,

@@ -1,4 +1,4 @@
-import { sequelize } from '../config/database';
+import sequelize from '../config/database';
 import FacultyAssignment from '../models/FacultyAssignment';
 import Subject from '../models/Subject';
 import Department from '../models/Department';

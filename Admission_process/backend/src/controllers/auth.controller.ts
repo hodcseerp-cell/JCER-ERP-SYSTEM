@@ -15,7 +15,6 @@ import emailService from '../services/email.service';
 import Otp from '../models/Otp';
 import SystemConfiguration from '../models/SystemConfiguration';
 import FacultyAssignment from '../models/FacultyAssignment';
-import MentorAssignment from '../models/MentorAssignment';
 import path from 'path';
 import fs from 'fs';
 import * as r2Service from '../services/r2.service';
@@ -69,12 +68,10 @@ const getUserPayload = async (user: User) => {
   const isTeacher = user.role === 'TEACHER' || (user.role as string) === 'FACULTY';
   const hasFacultyAssignment = (await FacultyAssignment.count({ where: { userId: user.id, status: 'ACTIVE' } })) > 0;
   const isFaculty = isTeacher || isHod || hasFacultyAssignment;
-  const isMentor = (await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } })) > 0;
 
   const workspaces: string[] = [];
   if (isHod) workspaces.push('hod');
   if (isFaculty) workspaces.push('faculty');
-  if (isMentor) workspaces.push('mentor');
 
   return {
     id: user.id,
@@ -90,7 +87,6 @@ const getUserPayload = async (user: User) => {
     system,
     isHod,
     isFaculty,
-    isMentor,
     workspaces,
   };
 };
@@ -996,9 +992,8 @@ export const getUserWorkspaces = async (req: Request, res: Response, next: NextF
     const isTeacher = user.role === 'TEACHER' || (user.role as string) === 'FACULTY';
     const hasFacultyAssignment = (await FacultyAssignment.count({ where: { userId: user.id, status: 'ACTIVE' } })) > 0;
     const isFaculty = isTeacher || isHod || hasFacultyAssignment;
-    const isMentor = (await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } })) > 0;
 
-    const workspaces: Array<{ type: string; label: string; route: string; menteeCount?: number }> = [];
+    const workspaces: Array<{ type: string; label: string; route: string }> = [];
 
     if (isHod) {
       workspaces.push({
@@ -1013,16 +1008,6 @@ export const getUserWorkspaces = async (req: Request, res: Response, next: NextF
         type: 'FACULTY',
         label: 'Faculty Dashboard',
         route: '/faculty/dashboard',
-      });
-    }
-
-    if (isMentor) {
-      const activeCount = await MentorAssignment.count({ where: { facultyId: user.id, status: 'ACTIVE' } });
-      workspaces.push({
-        type: 'MENTOR',
-        label: 'Mentor Workspace',
-        route: '/mentor/dashboard',
-        menteeCount: activeCount,
       });
     }
 
