@@ -40,8 +40,8 @@ const logAudit = async (req: AuthenticatedRequest, action: string, details: any)
     await AuditLog.create({
       userId: req.user?.id || null,
       action,
-      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || '127.0.0.1',
-      userAgent: req.headers['user-agent'] || 'System',
+      ipAddress: req.ip || req.headers?.['x-forwarded-for']?.toString() || '127.0.0.1',
+      userAgent: req.headers?.['user-agent'] || 'System',
       details,
     });
   } catch (err) {
@@ -825,15 +825,16 @@ export const getHodDepartmentStudents = async (options: {
   const sortDir = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   let orderClause: any[] = [];
   if (sortBy === 'usn') {
+    const nullsOrder = sortDir === 'ASC' ? 'ASC NULLS LAST' : 'DESC NULLS LAST';
     orderClause = [
-      ['usn', sortDir],
+      ['usn', nullsOrder],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
   } else if (sortBy === 'rank' || sortBy === 'enrollment') {
     orderClause = [
-      ['enrollmentNumber', sortDir],
+      ['enrollmentNumber', `${sortDir} NULLS LAST`],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
@@ -845,12 +846,28 @@ export const getHodDepartmentStudents = async (options: {
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
-  } else {
-    // DEFAULT DETERMINISTIC ALPHABETICAL ORDERING (FIRST NAME ASC, LAST NAME ASC, ID ASC)
-    const dir = sortBy === 'name' ? sortDir : 'ASC';
+  } else if (sortBy === 'date') {
     orderClause = [
-      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), dir],
-      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), dir],
+      ['createdAt', sortDir],
+      ['id', 'ASC'],
+    ];
+  } else if (sortBy === 'updatedAt') {
+    orderClause = [
+      ['updatedAt', sortDir],
+      ['id', 'ASC'],
+    ];
+  } else if (sortBy === 'name') {
+    orderClause = [
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), sortDir],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), sortDir],
+      ['id', 'ASC'],
+    ];
+  } else {
+    // DEFAULT: When USNs are assigned, students should be ordered in ascending order of USN (with non-USN students falling back to alphabetical name)
+    orderClause = [
+      ['usn', 'ASC NULLS LAST'],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
   }
@@ -1316,6 +1333,8 @@ export const getHodSemesterCohort = async (
       limit: 2000,
       isSemesterHandling: isSemHandling,
       branch,
+      sortBy: 'usn',
+      sortOrder: 'ASC',
     });
 
     // Resolve department section UUIDs to clean letters ('A', 'B', etc.)
@@ -5718,17 +5737,28 @@ export const transferFacultyAssignment = async (req: AuthenticatedRequest, res: 
     }
 
     // 2. Validate HOD Authorization
-    const departmentId = req.departmentId;
+    let departmentId = req.departmentId;
+    if (!departmentId && req.user?.id) {
+      const hodRec = await HOD.findOne({ where: { userId: req.user.id, isActive: true } });
+      departmentId = hodRec?.departmentId || (req.user as any)?.departmentId;
+    }
+
+    const hodDept = departmentId ? await Department.findByPk(departmentId) : null;
     const isAppliedScience = Boolean(
       req.isSemesterHandling ||
-      (req.user as any)?.departmentCode === 'AS'
+      (req.user as any)?.departmentCode === 'AS' ||
+      hodDept?.code === 'AS' ||
+      hodDept?.type === 'SEMESTER_HANDLING'
     );
 
     const isAuthorized =
       isAppliedScience ||
-      currentAllocation.departmentId === departmentId ||
+      req.user?.role === 'ADMIN' ||
+      req.user?.role === 'SUPER_ADMIN' ||
+      req.user?.role === 'DEAN' ||
+      (departmentId && currentAllocation.departmentId === departmentId) ||
       currentAllocation.createdByHODId === req.user?.id ||
-      (currentAllocation as any).subject?.departmentId === departmentId;
+      (departmentId && (currentAllocation as any).subject?.departmentId === departmentId);
 
     if (!isAuthorized) {
       await transaction.rollback();

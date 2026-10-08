@@ -878,7 +878,13 @@ class AdmissionService {
   // ── Branches / Departments ────────────────────────────────────────────────
 
   async getBranches(): Promise<Department[]> {
-    return Department.findAll({ order: [['name', 'ASC']] });
+    return Department.findAll({
+      where: {
+        code: { [Op.ne]: 'AS' },
+        type: { [Op.ne]: 'SEMESTER_HANDLING' },
+      },
+      order: [['name', 'ASC']]
+    });
   }
 
   async getAvailableBatches(): Promise<string[]> {

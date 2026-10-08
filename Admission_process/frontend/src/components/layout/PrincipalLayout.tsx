@@ -482,18 +482,18 @@ export const PrincipalLayout: React.FC = () => {
         />
 
         {/* ── SUB PAGE ROUTER CONTENT ── */}
-        <main className="flex-1 relative">
+        <main className="flex-1 flex flex-col relative">
           <div 
             className="fixed inset-y-0 right-0 left-0 lg:left-[328px] pointer-events-none flex items-center justify-center z-0 overflow-hidden"
             aria-hidden="true"
           >
             <img 
-              src="/logo.png" 
+              src="/emaillogo.png" 
               alt="" 
               className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
             />
           </div>
-          <div className="relative z-10">
+          <div className="relative z-10 flex-1 flex flex-col">
             <Outlet />
           </div>
         </main>

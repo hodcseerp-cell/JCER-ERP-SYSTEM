@@ -121,7 +121,14 @@ export const AdminPromotionPage: React.FC = () => {
     try {
       const res = await API.get('/admin/promotion/filters');
       if (res.data?.success) {
-        setDepartments(res.data.data.departments || []);
+        const rawDepts = res.data.data.departments || [];
+        const filteredDepts = rawDepts.filter(
+          (d: any) =>
+            d.code !== 'AS' &&
+            d.type !== 'SEMESTER_HANDLING' &&
+            !d.name?.toLowerCase().includes('applied science')
+        );
+        setDepartments(filteredDepts);
         if (res.data.data.academicYears?.length > 0) {
           setAcademicYears(res.data.data.academicYears);
         }
@@ -614,9 +621,18 @@ export const AdminPromotionPage: React.FC = () => {
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="All">All Departments</option>
-                {departments.map(d => (
-                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-                ))}
+                {departments
+                  .filter(
+                    (d) =>
+                      d.code !== 'AS' &&
+                      (d as any).type !== 'SEMESTER_HANDLING' &&
+                      !d.name?.toLowerCase().includes('applied science')
+                  )
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
               </select>
             </div>
 

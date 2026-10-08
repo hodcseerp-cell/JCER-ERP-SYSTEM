@@ -428,6 +428,23 @@ input.light-input-mode::placeholder,
   color: #ffffff !important;
 }
 
+/* Ensure SVG icons inside group-hover elements with white text get white stroke & color */
+.group:hover .group-hover\:text-white,
+.group:hover .group-hover\:\!text-white,
+.group:hover [class*="group-hover:text-white"],
+.group:hover [class*="group-hover:\!text-white"] {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.group:hover .group-hover\:text-white svg,
+.group:hover .group-hover\:\!text-white svg,
+.group:hover [class*="group-hover:text-white"] svg,
+.group:hover [class*="group-hover:\!text-white"] svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 /* Handle Tailwind dark:bg-* variant classes — these apply on elements with class 'dark:bg-neutral-800' etc. in dark mode */
 /* Using [class*=] attribute selector to catch dark:bg-neutral-800, dark:bg-neutral-800/60, dark:bg-neutral-900/95 etc. */
 .dark [class*="dark:bg-neutral-8"],

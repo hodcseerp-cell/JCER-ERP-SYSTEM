@@ -188,16 +188,16 @@ export const FacultyAuthorizationPage: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Faculty Candidate</th>
-                <th className="py-3 px-6 font-semibold">Department</th>
-                <th className="py-3 px-6 font-semibold">Assigned Subject</th>
-                <th className="py-3 px-6 font-semibold text-center">Class</th>
-                <th className="py-3 px-6 font-semibold">Submitted By</th>
-                <th className="py-3 px-6 font-semibold">Submitted On</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-6 font-bold text-white">Faculty Candidate</th>
+                <th className="py-3.5 px-6 font-bold text-white">Department</th>
+                <th className="py-3.5 px-6 font-bold text-white">Assigned Subject</th>
+                <th className="py-3.5 px-6 font-bold text-white text-center">Class</th>
+                <th className="py-3.5 px-6 font-bold text-white">Submitted By</th>
+                <th className="py-3.5 px-6 font-bold text-white">Submitted On</th>
+                <th className="py-3.5 px-6 font-bold text-white text-center">Status</th>
+                <th className="py-3.5 px-6 font-bold text-white text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

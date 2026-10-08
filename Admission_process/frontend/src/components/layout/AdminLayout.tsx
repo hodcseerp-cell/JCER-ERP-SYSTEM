@@ -763,7 +763,7 @@ export const AdminLayout: React.FC = () => {
             aria-hidden="true"
           >
             <img 
-              src="/logo.png" 
+              src="/emaillogo.png" 
               alt="" 
               className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
             />

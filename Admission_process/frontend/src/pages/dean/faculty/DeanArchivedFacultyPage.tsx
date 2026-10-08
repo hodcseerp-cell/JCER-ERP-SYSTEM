@@ -184,17 +184,17 @@ export const DeanArchivedFacultyPage: React.FC = () => {
       <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3.5 px-6 font-semibold">Faculty Name</th>
-                <th className="py-3.5 px-6 font-semibold">Core Department</th>
-                <th className="py-3.5 px-6 font-semibold">Official Email</th>
-                <th className="py-3.5 px-6 font-semibold">Designation</th>
-                <th className="py-3.5 px-6 font-semibold">Joining Date</th>
-                <th className="py-3.5 px-6 font-semibold">Archived Date</th>
-                <th className="py-3.5 px-6 font-semibold">Archived By</th>
-                <th className="py-3.5 px-6 font-semibold">Previous Assignments</th>
-                <th className="py-3.5 px-6 font-semibold text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-6 font-bold text-white">Faculty Name</th>
+                <th className="py-3.5 px-6 font-bold text-white">Core Department</th>
+                <th className="py-3.5 px-6 font-bold text-white">Official Email</th>
+                <th className="py-3.5 px-6 font-bold text-white">Designation</th>
+                <th className="py-3.5 px-6 font-bold text-white">Joining Date</th>
+                <th className="py-3.5 px-6 font-bold text-white">Archived Date</th>
+                <th className="py-3.5 px-6 font-bold text-white">Archived By</th>
+                <th className="py-3.5 px-6 font-bold text-white">Previous Assignments</th>
+                <th className="py-3.5 px-6 font-bold text-white text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

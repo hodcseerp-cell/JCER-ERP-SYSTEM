@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import db from '../config/database';
 import User from '../models/User';
 import Department from '../models/Department';
@@ -153,8 +154,8 @@ async function runTest() {
     });
   }
 
-  // Clean old test assignments for this cohort
-  await FacultyAssignment.destroy({
+  // Clean old test sessions & assignments for this cohort so test is repeatable
+  const oldTestAssignments = await FacultyAssignment.findAll({
     where: {
       subjectId: subject.id,
       section: 'A',
@@ -162,6 +163,12 @@ async function runTest() {
       academicYear,
     },
   });
+  const oldIds = oldTestAssignments.map((a) => a.id);
+  if (oldIds.length > 0) {
+    await AttendanceRecord.destroy({ where: { facultyAssignmentId: { [Op.in]: oldIds } } });
+    await AttendanceSession.destroy({ where: { facultyAssignmentId: { [Op.in]: oldIds } } });
+    await FacultyAssignment.destroy({ where: { id: { [Op.in]: oldIds } } });
+  }
 
   // 8. Create Initial Allocation for Neha Verma
   const initialAssignment = await FacultyAssignment.create({
@@ -208,6 +215,7 @@ async function runTest() {
 
   // 10. Perform Transfer from Neha to Rahul on transferDate: '2026-09-10'
   const mockReq: any = {
+    departmentId: cseDept.id,
     user: {
       id: hodUser.id,
       role: 'HOD',
@@ -243,18 +251,24 @@ async function runTest() {
   await hodController.transferFacultyAssignment(mockReq, mockRes, (() => {}) as any);
   console.log('[Step 3 Complete] Transfer response:', transferResultData.message);
 
-  const newAssignment = transferResultData.data;
-  console.log(`[Step 3 Verification] New assignment ID=${newAssignment.id}, Faculty=${newAssignment.facultyName}, Status=${newAssignment.status}`);
+  const newAssignment = transferResultData.data.newAssignment || transferResultData.data;
+  const newAssignmentId = transferResultData.data.newAssignmentId || newAssignment.id;
+  console.log(`[Step 3 Verification] New assignment ID=${newAssignmentId}, Faculty=${newAssignment.facultyName}, Status=${newAssignment.status}`);
 
   // 11. Verify History
   const historyMockReq: any = {
     user: { id: hodUser.id, role: 'HOD', departmentId: cseDept.id },
-    params: { allocationId: newAssignment.id },
+    params: { allocationId: newAssignmentId },
   };
   let historyData: any = null;
   const historyMockRes: any = {
-    json: (payload: any) => {
-      historyData = payload.data;
+    status: function (code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json: function (payload: any) {
+      historyData = payload.data?.history || payload.data || [];
+      return this;
     },
   };
   await hodController.getFacultyAssignmentHistory(historyMockReq, historyMockRes, (() => {}) as any);

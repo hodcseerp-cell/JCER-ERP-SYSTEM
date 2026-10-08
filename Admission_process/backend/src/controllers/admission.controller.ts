@@ -2137,7 +2137,7 @@ export const listUsnEligibleApplicants = async (
     if (sortBy === 'applicationNumber') {
       order = [['applicationNumber', dir]];
     } else if (sortBy === 'usn') {
-      order = [['usn', dir]];
+      order = [['usn', `${dir} NULLS LAST`]];
     } else if (sortBy === 'usnStatus') {
       order = [['usn', dir === 'ASC' ? 'NULLS FIRST' : 'NULLS LAST']];
     } else {

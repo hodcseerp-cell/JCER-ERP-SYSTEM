@@ -204,22 +204,24 @@ export const FacultyListPage: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Faculty Name</th>
-                <th className="py-3 px-6 font-semibold">Department</th>
-                <th className="py-3 px-6 font-semibold">Official Email</th>
-                <th className="py-3 px-6 font-semibold">Designation</th>
-                <th className="py-3 px-6 font-semibold">Assigned Subjects</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold">Joining Date</th>
-                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-4 font-bold text-white text-center w-16">SL NO</th>
+                <th className="py-3.5 px-6 font-bold text-white">Faculty Name</th>
+                <th className="py-3.5 px-6 font-bold text-white">Department</th>
+                <th className="py-3.5 px-6 font-bold text-white">Official Email</th>
+                <th className="py-3.5 px-6 font-bold text-white">Designation</th>
+                <th className="py-3.5 px-6 font-bold text-white">Assigned Subjects</th>
+                <th className="py-3.5 px-6 font-bold text-white text-center">Status</th>
+                <th className="py-3.5 px-6 font-bold text-white">Joining Date</th>
+                <th className="py-3.5 px-6 font-bold text-white text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
               {loading ? (
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i}>
+                    <td className="py-4 px-4 text-center"><Skeleton className="w-6 h-4 mx-auto" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-32 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-16 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-32 h-4" /></td>
@@ -231,8 +233,11 @@ export const FacultyListPage: React.FC = () => {
                   </tr>
                 ))
               ) : faculty.length ? (
-                faculty.map((fac) => (
+                faculty.map((fac, idx) => (
                   <tr key={fac.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
+                    <td className="py-4 px-4 text-center font-bold text-neutral-500 dark:text-neutral-400 text-xs">
+                      {idx + 1}
+                    </td>
                     <td className="py-4 px-6">
                       <div
                         onClick={() => navigate(`/dean/faculty/${fac.id}`)}
@@ -304,7 +309,7 @@ export const FacultyListPage: React.FC = () => {
                 ))
               ) : fetchError ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400 space-y-3">
+                  <td colSpan={9} className="py-12 text-center text-neutral-400 space-y-3">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <AlertCircle className="w-8 h-8 text-rose-500" />
                       <p className="font-bold text-rose-600 dark:text-rose-400 text-sm">Unable to load faculty directory</p>
@@ -321,7 +326,7 @@ export const FacultyListPage: React.FC = () => {
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-neutral-400">
+                  <td colSpan={9} className="py-10 text-center text-neutral-400">
                     No active faculty records found.
                   </td>
                 </tr>

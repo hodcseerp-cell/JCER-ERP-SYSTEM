@@ -161,21 +161,23 @@ export const HodListPage: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">HOD Name</th>
-                <th className="py-3 px-6 font-semibold">Department</th>
-                <th className="py-3 px-6 font-semibold">Email</th>
-                <th className="py-3 px-6 font-semibold">Academic Year</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold">Tenure Start</th>
-                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-4 font-bold text-white text-center w-16">SL NO</th>
+                <th className="py-3.5 px-6 font-bold text-white">HOD Name</th>
+                <th className="py-3.5 px-6 font-bold text-white">Department</th>
+                <th className="py-3.5 px-6 font-bold text-white">Email</th>
+                <th className="py-3.5 px-6 font-bold text-white">Academic Year</th>
+                <th className="py-3.5 px-6 font-bold text-white text-center">Status</th>
+                <th className="py-3.5 px-6 font-bold text-white">Tenure Start</th>
+                <th className="py-3.5 px-6 font-bold text-white text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
               {loading ? (
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i}>
+                    <td className="py-4 px-4 text-center"><Skeleton className="w-6 h-4 mx-auto" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-32 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-20 h-4" /></td>
                     <td className="py-4 px-6"><Skeleton className="w-32 h-4" /></td>
@@ -186,8 +188,11 @@ export const HodListPage: React.FC = () => {
                   </tr>
                 ))
               ) : hods.length ? (
-                hods.map((h) => (
+                hods.map((h, idx) => (
                   <tr key={h.id} className="hover:bg-neutral-50/60 dark:hover:bg-neutral-800/30 transition-colors">
+                    <td className="py-4 px-4 text-center font-bold text-neutral-500 dark:text-neutral-400 text-xs">
+                      {idx + 1}
+                    </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3">
                         <ProfileAvatar
@@ -196,6 +201,7 @@ export const HodListPage: React.FC = () => {
                           size="sm"
                           className="shrink-0"
                         />
+
                         <div>
                           <span className="font-extrabold text-neutral-900 dark:text-white block">{h.name}</span>
                           <span className="text-[10px] text-neutral-400">{h.phone || 'Phone not set'}</span>
@@ -231,7 +237,7 @@ export const HodListPage: React.FC = () => {
                       <div className="inline-flex items-center space-x-1.5">
                         <button
                           onClick={() => navigate(`/dean/hods/${h.id}`)}
-                          className="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1"
+                          className="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
                           title="View HOD Details"
                         >
                           <Eye className="w-3 h-3" />
@@ -239,7 +245,7 @@ export const HodListPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => navigate(`/dean/hods/assignments?hodUserId=${h.userId}`)}
-                          className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold text-[11px] transition-all flex items-center space-x-1"
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
                           title="Assign Department"
                         >
                           <UserCheck className="w-3 h-3" />
@@ -247,7 +253,7 @@ export const HodListPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => handleDeleteClick(h)}
-                          className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold text-[11px] transition-all flex items-center space-x-1"
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold text-[11px] transition-all flex items-center space-x-1 cursor-pointer"
                           title="Delete HOD"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -259,7 +265,7 @@ export const HodListPage: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-neutral-400">
+                  <td colSpan={8} className="py-10 text-center text-neutral-400">
                     No HOD records found for selected filters.
                   </td>
                 </tr>

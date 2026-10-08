@@ -666,11 +666,23 @@ export const HodLayout: React.FC = () => {
         </header>
 
         {/* ── DYNAMIC PAGE CONTENT ── */}
-        <main className="flex-1 pb-10 min-w-0">
-          <Outlet />
+        <main className="flex-1 pb-10 min-w-0 flex flex-col relative">
+          <div 
+            className="fixed inset-y-0 right-0 left-0 lg:left-[320px] pointer-events-none flex items-center justify-center z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <img 
+              src="/emaillogo.png" 
+              alt="" 
+              className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
+            />
+          </div>
+          <div className="relative z-10 flex-1 flex flex-col">
+            <Outlet />
+          </div>
         </main>
 
-        <GlobalFooter />
+        <GlobalFooter className="mt-auto relative z-20" />
       </div>
 
       <PwaConfirmationModal

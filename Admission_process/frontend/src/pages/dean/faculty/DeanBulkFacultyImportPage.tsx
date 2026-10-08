@@ -314,13 +314,22 @@ export const DeanBulkFacultyImportPage: React.FC = () => {
     <div className="max-w-6xl mx-auto space-y-6">
       {/* ── Breadcrumb ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <Link
-          to="/dean/faculty"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Faculty Directory</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/dean/faculty/create"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Create Options</span>
+          </Link>
+          <span className="text-slate-300 dark:text-slate-700">•</span>
+          <Link
+            to="/dean/faculty"
+            className="text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            Faculty Directory
+          </Link>
+        </div>
       </div>
 
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
@@ -534,17 +543,17 @@ export const DeanBulkFacultyImportPage: React.FC = () => {
           {/* Results Table */}
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                  <th className="py-3 px-3">Row</th>
-                  <th className="py-3 px-3">First Name</th>
-                  <th className="py-3 px-3">Last Name</th>
-                  <th className="py-3 px-3">Email</th>
-                  <th className="py-3 px-3">Designation</th>
-                  <th className="py-3 px-3">Joining Date</th>
-                  <th className="py-3 px-3">Core Department</th>
-                  <th className="py-3 px-3 text-center">Status</th>
-                  <th className="py-3 px-4">Errors & Notes</th>
+              <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                <tr>
+                  <th className="py-3.5 px-3 font-bold text-white">Row</th>
+                  <th className="py-3.5 px-3 font-bold text-white">First Name</th>
+                  <th className="py-3.5 px-3 font-bold text-white">Last Name</th>
+                  <th className="py-3.5 px-3 font-bold text-white">Email</th>
+                  <th className="py-3.5 px-3 font-bold text-white">Designation</th>
+                  <th className="py-3.5 px-3 font-bold text-white">Joining Date</th>
+                  <th className="py-3.5 px-3 font-bold text-white">Core Department</th>
+                  <th className="py-3.5 px-3 font-bold text-white text-center">Status</th>
+                  <th className="py-3.5 px-4 font-bold text-white">Errors & Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -678,14 +687,14 @@ export const DeanBulkFacultyImportPage: React.FC = () => {
 
             <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                    <th className="py-3 px-4">Faculty Name</th>
-                    <th className="py-3 px-4">Login Email</th>
-                    <th className="py-3 px-4">Temporary Password</th>
-                    <th className="py-3 px-4">Core Department</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-3 text-center">Copy</th>
+                <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                  <tr>
+                    <th className="py-3.5 px-4 font-bold text-white">Faculty Name</th>
+                    <th className="py-3.5 px-4 font-bold text-white">Login Email</th>
+                    <th className="py-3.5 px-4 font-bold text-white">Temporary Password</th>
+                    <th className="py-3.5 px-4 font-bold text-white">Core Department</th>
+                    <th className="py-3.5 px-4 font-bold text-white text-center">Status</th>
+                    <th className="py-3.5 px-3 font-bold text-white text-center">Copy</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">

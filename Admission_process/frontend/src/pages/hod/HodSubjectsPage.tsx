@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   PlusCircle,
@@ -20,6 +20,7 @@ import {
   Check,
   Settings,
   HelpCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import hodService, {
@@ -53,12 +54,29 @@ export const HodSubjectsPage: React.FC = () => {
   const [schemeError, setSchemeError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  // URL Query Params
+  const [searchParams, setSearchParams] = useSearchParams();
+
   // Applied Science 2-level filter states
   const [selectedCycle, setSelectedCycle] = usePersistentState<'P_CYCLE' | 'C_CYCLE'>('hod_subjects_cycle_filter', 'P_CYCLE');
   const [selectedAsSemester, setSelectedAsSemester] = usePersistentState<number>('hod_subjects_as_sem_filter', 1);
 
   // Non-Applied Science semester filter
   const [selectedStandardSemester, setSelectedStandardSemester] = usePersistentState<string>('hod_subjects_semester_filter', 'ALL');
+
+  // Sync semester filter from URL query parameter (e.g. from Semester Cohort page)
+  useEffect(() => {
+    const semParam = searchParams.get('semester');
+    if (semParam) {
+      const parsed = parseInt(semParam, 10);
+      if (!isNaN(parsed)) {
+        if (parsed === 1 || parsed === 2) {
+          setSelectedAsSemester(parsed);
+        }
+        setSelectedStandardSemester(semParam);
+      }
+    }
+  }, [searchParams]);
 
   // Add / Edit Master Subject Modal
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -361,6 +379,18 @@ export const HodSubjectsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans text-neutral-800 dark:text-neutral-100">
+      {/* ── Return to Cohort Breadcrumb ────────────────────────────────────── */}
+      {searchParams.get('semester') && searchParams.get('semester') !== 'ALL' && (
+        <div className="flex items-center justify-between">
+          <Link
+            to={`/hod/students/semesters/${searchParams.get('semester')}`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Semester {searchParams.get('semester')} Cohort</span>
+          </Link>
+        </div>
+      )}
       
       {/* ── 1. Page Header with Clean Material Styling ──────────────────────── */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200/80 dark:border-neutral-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
@@ -469,7 +499,12 @@ export const HodSubjectsPage: React.FC = () => {
                 <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-200/80 dark:border-neutral-700/80">
                   <button
                     type="button"
-                    onClick={() => setSelectedAsSemester(1)}
+                    onClick={() => {
+                      setSelectedAsSemester(1);
+                      const p = new URLSearchParams(searchParams);
+                      p.set('semester', '1');
+                      setSearchParams(p, { replace: true });
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       selectedAsSemester === 1
                         ? 'bg-blue-700 text-white shadow-xs'
@@ -480,7 +515,12 @@ export const HodSubjectsPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedAsSemester(2)}
+                    onClick={() => {
+                      setSelectedAsSemester(2);
+                      const p = new URLSearchParams(searchParams);
+                      p.set('semester', '2');
+                      setSearchParams(p, { replace: true });
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       selectedAsSemester === 2
                         ? 'bg-blue-700 text-white shadow-xs'
@@ -528,7 +568,12 @@ export const HodSubjectsPage: React.FC = () => {
               Semester:
             </span>
             <button
-              onClick={() => setSelectedStandardSemester('ALL')}
+              onClick={() => {
+                setSelectedStandardSemester('ALL');
+                const p = new URLSearchParams(searchParams);
+                p.delete('semester');
+                setSearchParams(p, { replace: true });
+              }}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 selectedStandardSemester === 'ALL'
                   ? 'bg-[#0a1931] text-white shadow-xs'
@@ -540,7 +585,13 @@ export const HodSubjectsPage: React.FC = () => {
             {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
               <button
                 key={s}
-                onClick={() => setSelectedStandardSemester(String(s))}
+                onClick={() => {
+                  const val = String(s);
+                  setSelectedStandardSemester(val);
+                  const p = new URLSearchParams(searchParams);
+                  p.set('semester', val);
+                  setSearchParams(p, { replace: true });
+                }}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   selectedStandardSemester === String(s)
                     ? 'bg-[#0a1931] text-white shadow-xs'

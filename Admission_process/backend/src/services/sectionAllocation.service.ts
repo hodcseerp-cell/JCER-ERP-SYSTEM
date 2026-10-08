@@ -772,6 +772,7 @@ export class SectionAllocationService {
         },
       ],
       order: [
+        ['usn', 'ASC NULLS LAST'],
         [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
         [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
         ['id', 'ASC'],
@@ -921,6 +922,7 @@ export class SectionAllocationService {
         },
       ],
       order: [
+        ['usn', 'ASC NULLS LAST'],
         [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
         [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
         ['id', 'ASC'],
