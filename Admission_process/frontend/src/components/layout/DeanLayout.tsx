@@ -25,7 +25,6 @@ import {
   User,
   Shield,
   FileCheck2,
-  FileSpreadsheet,
   Archive,
   Cloud,
 } from 'lucide-react';
@@ -131,7 +130,6 @@ export const DeanLayout: React.FC = () => {
       items: [
         { name: 'Faculty List', path: '/dean/faculty', icon: Users },
         { name: 'Create Faculty', path: '/dean/faculty/create', icon: UserPlus },
-        { name: 'Bulk Faculty Import', path: '/dean/faculty/bulk-import', icon: FileSpreadsheet },
         { name: 'Archived Faculty', path: '/dean/faculty/archived', icon: Archive },
         { name: 'Faculty Assignments', path: '/dean/faculty/assignments', icon: FileCheck2 },
       ],
@@ -195,54 +193,92 @@ export const DeanLayout: React.FC = () => {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="font-extrabold text-[15px] tracking-wider uppercase text-neutral-900 dark:text-white leading-none">JCER ERP</span>
-              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">Dean Academics</span>
+              <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 mt-0.5">Dean Academics</span>
             </div>
           </Link>
 
           {/* Grouped Navigation */}
-          <nav className="flex flex-col space-y-3.5 overflow-y-auto max-h-[calc(100vh-270px)] pr-1 select-none custom-scrollbar">
-            {menuGroups.map((group) => (
-              <div key={group.title} className="flex flex-col space-y-0.5">
-                <span className="px-3.5 text-[9px] font-black tracking-widest text-neutral-400 dark:text-neutral-500 uppercase mb-1">
-                  {group.title}
-                </span>
-                <div className="flex flex-col space-y-0.5">
-                  {group.items.map((item) => {
-                    const isActive = location.pathname === item.path || (item.path !== '/dean/dashboard' && location.pathname.startsWith(item.path));
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.name}
-                        to={item.path}
-                        className={`w-full h-[38px] px-3.5 rounded-xl flex items-center justify-between transition-all duration-200 relative group ${
-                          isActive
-                            ? 'bg-amber-500/10 text-amber-700 font-bold dark:bg-amber-500/20 dark:text-amber-300 shadow-none'
-                            : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100/50 dark:hover:bg-neutral-800/40 hover:scale-[1.01]'
-                        }`}
-                      >
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-amber-600 dark:bg-amber-400 rounded-r" />
-                        )}
-                        <div className="flex items-center space-x-3">
-                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-neutral-400 group-hover:text-neutral-600'}`} strokeWidth={isActive ? 2.5 : 2} />
-                          <span className="text-[11px] font-semibold truncate">{item.name}</span>
-                        </div>
-                        {item.badge !== undefined && item.badge > 0 && (
-                          <span
-                            aria-label={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
-                            title={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
-                            className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs shadow-rose-600/30 ring-2 ring-white dark:ring-neutral-900 leading-none flex-shrink-0 ml-auto"
+          {(() => {
+            const allNavPaths = menuGroups.flatMap((g) => g.items.map((i) => i.path));
+            const getActiveNavPath = (currentPath: string): string => {
+              if (allNavPaths.includes(currentPath)) {
+                return currentPath;
+              }
+              const matchingPaths = allNavPaths.filter(
+                (p) => p !== '/dean/dashboard' && currentPath.startsWith(p + '/')
+              );
+              if (matchingPaths.length > 0) {
+                matchingPaths.sort((a, b) => b.length - a.length);
+                return matchingPaths[0];
+              }
+              if (currentPath === '/dean' || currentPath.startsWith('/dean/dashboard')) {
+                return '/dean/dashboard';
+              }
+              return currentPath;
+            };
+            const activeNavPath = getActiveNavPath(location.pathname);
+
+            return (
+              <nav className="flex flex-col space-y-3.5 overflow-y-auto max-h-[calc(100vh-270px)] pr-1 select-none custom-scrollbar">
+                {menuGroups.map((group) => (
+                  <div key={group.title} className="flex flex-col space-y-0.5">
+                    <span className="px-3.5 text-[9px] font-black tracking-widest text-neutral-400 dark:text-neutral-500 uppercase mb-1">
+                      {group.title}
+                    </span>
+                    <div className="flex flex-col space-y-0.5">
+                      {group.items.map((item) => {
+                        const isActive = item.path === activeNavPath;
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.name}
+                            to={item.path}
+                            className={`w-full h-[38px] px-3.5 rounded-xl flex items-center justify-between transition-all duration-150 relative group border ${
+                              isActive
+                                ? 'bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white font-bold shadow-md shadow-[#070e22]/25 border-[#1e3a8a]/50'
+                                : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-gradient-to-r hover:from-[#070e22] hover:via-[#0c1a40] hover:to-[#0f245c] hover:!text-white hover:border-[#1e3a8a]/40 hover:shadow-sm'
+                            }`}
                           >
-                            {item.badge > 99 ? '99+' : item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
+                            {isActive && (
+                              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-4.5 bg-cyan-400 rounded-r shadow-xs shadow-cyan-400/50" />
+                            )}
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <Icon
+                                className={`w-4 h-4 flex-shrink-0 transition-colors duration-150 ${
+                                  isActive
+                                    ? 'text-cyan-300'
+                                    : 'text-neutral-400 group-hover:!text-cyan-300'
+                                }`}
+                                strokeWidth={isActive ? 2.5 : 2}
+                              />
+                              <span
+                                className={`text-[11px] font-semibold transition-colors duration-150 truncate ${
+                                  isActive
+                                    ? 'text-white font-bold'
+                                    : 'text-neutral-700 dark:text-neutral-300 group-hover:!text-white'
+                                }`}
+                              >
+                                {item.name}
+                              </span>
+                            </div>
+                            {item.badge !== undefined && item.badge > 0 && (
+                              <span
+                                aria-label={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
+                                title={`${item.badge} pending faculty authorization request${item.badge > 1 ? 's' : ''}`}
+                                className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs shadow-rose-600/30 ring-2 ring-white dark:ring-neutral-900 leading-none flex-shrink-0 ml-auto"
+                              >
+                                {item.badge > 99 ? '99+' : item.badge}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+            );
+          })()}
         </div>
 
         {/* Bottom User Info & Logout */}
@@ -250,7 +286,7 @@ export const DeanLayout: React.FC = () => {
           <div className="rounded-xl p-2.5 border text-[10px] space-y-1 bg-neutral-50/50 dark:bg-neutral-800/25 border-neutral-200/50 dark:border-neutral-800/55">
             <div className="flex justify-between items-center">
               <span className="text-neutral-400 font-medium">Role</span>
-              <span className="font-bold text-amber-700 dark:text-amber-300">Dean Academics</span>
+              <span className="font-bold text-cyan-600 dark:text-cyan-400">Dean Academics</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-neutral-400 font-medium">Academic Year</span>
@@ -281,8 +317,8 @@ export const DeanLayout: React.FC = () => {
 
           <div className="flex items-center space-x-3">
             {/* Academic Year Pill */}
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300 text-xs font-bold shadow-xs">
-              <Calendar className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-800 dark:text-cyan-300 text-xs font-bold shadow-xs">
+              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
               <span>AY: {academicYear}</span>
             </div>
 
@@ -292,7 +328,7 @@ export const DeanLayout: React.FC = () => {
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className="flex items-center space-x-2.5 p-1.5 pr-3 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all border border-neutral-200/60 dark:border-neutral-700/60"
               >
-                <div className="w-7 h-7 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-xs overflow-hidden">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs overflow-hidden">
                   {user?.profileImage ? (
                     <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -320,9 +356,9 @@ export const DeanLayout: React.FC = () => {
                     <Link
                       to="/dean/profile"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-700 dark:hover:text-amber-400 transition-colors"
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:text-blue-700 dark:hover:text-cyan-400 transition-colors"
                     >
-                      <User className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <User className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
                       <span>My Profile</span>
                     </Link>
                   </div>
@@ -342,11 +378,23 @@ export const DeanLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Page Content */}
-        <main className="flex-1 pb-10">
-          <Outlet />
+        <main className="flex-1 pb-10 flex flex-col relative">
+          <div 
+            className="fixed inset-y-0 right-0 left-0 lg:left-[304px] pointer-events-none flex items-center justify-center z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <img 
+              src="/emaillogo.png" 
+              alt="" 
+              className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
+            />
+          </div>
+          <div className="relative z-10 flex-1 flex flex-col">
+            <Outlet />
+          </div>
         </main>
 
-        <GlobalFooter />
+        <GlobalFooter className="mt-auto relative z-20" />
       </div>
 
       <PwaConfirmationModal

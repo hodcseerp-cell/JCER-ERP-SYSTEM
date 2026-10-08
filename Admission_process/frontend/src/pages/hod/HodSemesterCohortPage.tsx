@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom'
 import { useSelector } from 'react-redux';
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   UserCheck,
   ChevronRight,
   AlertCircle,
+  ArrowUpRight,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { RootState } from '../../store';
@@ -139,7 +140,17 @@ export const HodSemesterCohortPage: React.FC = () => {
       });
     }
 
-    return list;
+    // Sort students ascending by USN (with assigned USNs first, then by name)
+    return [...list].sort((a, b) => {
+      const usnA = (a.usn || a.enrollmentNumber || '').trim();
+      const usnB = (b.usn || b.enrollmentNumber || '').trim();
+      if (usnA && usnB) {
+        return usnA.localeCompare(usnB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (usnA) return -1;
+      if (usnB) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   }, [data?.students, searchQuery, selectedSectionFilter]);
 
   // Filtered subjects by cycle
@@ -237,65 +248,109 @@ export const HodSemesterCohortPage: React.FC = () => {
       {/* ── 4 SUMMARY CARDS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Students */}
-        <div className="glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs">
+        <Link
+          to={`/hod/students?semester=${semesterNum}`}
+          className="group glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700/60 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer block focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
+          title={`View student directory for Semester ${semesterNum}`}
+        >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Students</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              Students
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 group-hover:scale-110 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/60 transition-all">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin text-indigo-600" /> : totalStudents}
+          <div className="flex items-baseline justify-between">
+            <div className="text-3xl font-black text-slate-900 dark:text-white">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-indigo-600" /> : totalStudents}
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 font-medium">Enrolled students</p>
-        </div>
+          <p className="text-[11px] text-slate-500 mt-1 font-medium group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+            Enrolled students
+          </p>
+        </Link>
 
         {/* Faculty */}
-        <div className="glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs">
+        <Link
+          to={`/hod/faculty/assignments?semester=${semesterNum}`}
+          className="group glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700/60 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer block focus:outline-hidden focus:ring-2 focus:ring-blue-500/30"
+          title={`View faculty allocations for Semester ${semesterNum}`}
+        >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Faculty</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              Faculty
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 group-hover:scale-110 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60 transition-all">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : totalFaculty}
+          <div className="flex items-baseline justify-between">
+            <div className="text-3xl font-black text-slate-900 dark:text-white">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> : totalFaculty}
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 font-medium">Faculty allocated</p>
-        </div>
+          <p className="text-[11px] text-slate-500 mt-1 font-medium group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+            Faculty allocated
+          </p>
+        </Link>
 
         {/* Subjects */}
-        <div className="glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs">
+        <Link
+          to={`/hod/subjects?semester=${semesterNum}`}
+          className="group glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700/60 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer block focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30"
+          title={`View master subjects for Semester ${semesterNum}`}
+        >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Subjects</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+              Subjects
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 group-hover:scale-110 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/60 transition-all">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin text-emerald-600" /> : totalSubjects}
+          <div className="flex items-baseline justify-between">
+            <div className="text-3xl font-black text-slate-900 dark:text-white">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-emerald-600" /> : totalSubjects}
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 font-medium">Subjects assigned</p>
-        </div>
+          <p className="text-[11px] text-slate-500 mt-1 font-medium group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+            Subjects assigned
+          </p>
+        </Link>
 
         {/* Sections */}
-        <div className="glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs">
+        <Link
+          to={`/hod/students/sections?semester=${semesterNum}`}
+          className="group glass-card rounded-2xl p-5 border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 shadow-xs hover:shadow-md hover:border-rose-300 dark:hover:border-rose-700/60 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer block focus:outline-hidden focus:ring-2 focus:ring-rose-500/30"
+          title={`View and manage sections for Semester ${semesterNum}`}
+        >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Sections</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+              Sections
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 group-hover:scale-110 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 transition-all">
               <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-rose-600" />
-            ) : totalSections > 0 ? (
-              totalSections
-            ) : (
-              <span className="text-xl text-slate-400">None</span>
-            )}
+          <div className="flex items-baseline justify-between">
+            <div className="text-3xl font-black text-slate-900 dark:text-white">
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-rose-600" />
+              ) : totalSections > 0 ? (
+                totalSections
+              ) : (
+                <span className="text-xl text-slate-400">None</span>
+              )}
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 font-medium">Sections created</p>
+          <p className="text-[11px] text-slate-500 mt-1 font-medium group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+            Sections created
+          </p>
           {!loading && sectionsList.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap mt-1.5">
               {sectionsList.map((sec) => (
@@ -305,7 +360,7 @@ export const HodSemesterCohortPage: React.FC = () => {
               ))}
             </div>
           )}
-        </div>
+        </Link>
       </div>
 
       {/* ── SUBJECT OVERVIEW ── */}
@@ -343,7 +398,7 @@ export const HodSemesterCohortPage: React.FC = () => {
                 </div>
               )}
               <Link
-                to="/hod/subjects"
+                to={`/hod/subjects?semester=${semesterNum}`}
                 className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 View All <ChevronRight className="w-3.5 h-3.5" />
@@ -426,7 +481,7 @@ export const HodSemesterCohortPage: React.FC = () => {
               </p>
             </div>
             <Link
-              to="/hod/faculty/assignments"
+              to={`/hod/faculty/assignments?semester=${semesterNum}`}
               className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               View All <ChevronRight className="w-3.5 h-3.5" />
@@ -449,7 +504,7 @@ export const HodSemesterCohortPage: React.FC = () => {
               No faculty members have been assigned to subjects for Semester {semesterNum} yet.
             </p>
             <Link
-              to="/hod/faculty/assignments"
+              to={`/hod/faculty/assignments?semester=${semesterNum}`}
               className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors"
             >
               <UserCheck className="w-3.5 h-3.5" />
@@ -527,13 +582,21 @@ export const HodSemesterCohortPage: React.FC = () => {
         {/* Table Header Controls */}
         <div className="p-5 border-b border-slate-200/70 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-600" />
-              <span>Semester {semesterNum} Students</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                {filteredStudents.length} Students
-              </span>
-            </h3>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-600" />
+                <span>Semester {semesterNum} Students</span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                  {filteredStudents.length} Students
+                </span>
+              </h3>
+              <Link
+                to={`/hod/students?semester=${semesterNum}`}
+                className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Open in Student Directory <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Verified students enrolled in Semester {semesterNum} of {deptName}.
             </p>

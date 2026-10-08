@@ -12,6 +12,8 @@ export interface DeanDashboardData {
     id: string;
     name: string;
     code: string;
+    hodId?: string | null;
+    hodUserId?: string | null;
     hodName: string;
     hodEmail: string | null;
     hodImage: string | null;
@@ -160,6 +162,7 @@ export interface FacultyProfileResponse {
   faculty: {
     id: string;
     userId: string;
+    facultyId?: string;
     firstName: string;
     lastName: string;
     name: string;

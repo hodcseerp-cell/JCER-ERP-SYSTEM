@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   BookOpen,
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Info,
+  ArrowLeft,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, {
@@ -83,11 +85,29 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
   const [branchesList, setBranchesList] = useState<HodBranchOverviewItem[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>('CSE');
 
+  // URL Query Parameters Sync
+  const [searchParams, setSearchParams] = useSearchParams();
+  const semQuery = searchParams.get('semester');
+  const initialSemester = semQuery ? parseInt(semQuery, 10) : 1;
+
   // Filters & Tabs State
-  const [selectedSemester, setSelectedSemester] = useState<number>(1);
+  const [selectedSemester, setSelectedSemester] = useState<number>(
+    !isNaN(initialSemester) && initialSemester >= 1 && initialSemester <= 8 ? initialSemester : 1
+  );
   const [selectedCycle, setSelectedCycle] = useState<'P_CYCLE' | 'C_CYCLE'>('P_CYCLE');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+
+  // Sync selectedSemester with URL search params changes
+  useEffect(() => {
+    const semParam = searchParams.get('semester');
+    if (semParam) {
+      const parsed = parseInt(semParam, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 8 && parsed !== selectedSemester) {
+        setSelectedSemester(parsed);
+      }
+    }
+  }, [searchParams]);
 
   // Core Data States
   const [subjects, setSubjects] = useState<HodSubjectItem[]>([]);
@@ -541,6 +561,19 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 bg-slate-50 min-h-screen">
+      {/* ── Return to Cohort Breadcrumb ────────────────────────────────────── */}
+      {searchParams.get('semester') && (
+        <div className="flex items-center justify-between">
+          <Link
+            to={`/hod/students/semesters/${searchParams.get('semester')}`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/80 text-xs font-bold text-slate-700 hover:text-blue-600 hover:border-blue-300 shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Semester {searchParams.get('semester')} Cohort</span>
+          </Link>
+        </div>
+      )}
+
       {/* Toast Notification Banner */}
       {notification && (
         <div
@@ -718,7 +751,12 @@ export const HodFacultyAssignmentsPage: React.FC = () => {
             return (
               <button
                 key={sem}
-                onClick={() => setSelectedSemester(sem)}
+                onClick={() => {
+                  setSelectedSemester(sem);
+                  const newParams = new URLSearchParams(searchParams);
+                  newParams.set('semester', sem.toString());
+                  setSearchParams(newParams, { replace: true });
+                }}
                 className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition flex items-center space-x-2 cursor-pointer ${
                   isActive
                     ? 'bg-[#111111] text-white shadow-sm'

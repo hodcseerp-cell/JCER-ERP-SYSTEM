@@ -54,7 +54,7 @@ export const HodDetailPage: React.FC = () => {
         <p className="text-sm font-semibold">HOD record not found.</p>
         <button
           onClick={() => navigate('/dean/hods')}
-          className="px-4 py-2 rounded-xl bg-amber-600 text-white font-bold text-xs"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs"
         >
           Back to HOD List
         </button>
@@ -71,18 +71,24 @@ export const HodDetailPage: React.FC = () => {
       {/* ── BACK BUTTON ── */}
       <div className="flex items-center space-x-2">
         <button
-          onClick={() => navigate('/dean/hods')}
-          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold text-xs transition-all"
+          onClick={() => {
+            if (window.history.length > 2) {
+              navigate(-1);
+            } else {
+              navigate('/dean/hods');
+            }
+          }}
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-bold text-xs transition-all cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to HOD Directory</span>
+          <span>Back</span>
         </button>
       </div>
 
       {/* ── PROFILE HEADER ── */}
       <div className="p-6 sm:p-8 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center space-x-5">
-          <div className="w-20 h-20 rounded-3xl bg-amber-500 text-white font-extrabold flex items-center justify-center text-3xl overflow-hidden shadow-md">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-[#0f245c] text-white font-extrabold flex items-center justify-center text-3xl overflow-hidden shadow-md">
             {user?.profileImage ? (
               <img src={user.profileImage} alt={user.firstName} className="w-full h-full object-cover" />
             ) : (
@@ -113,9 +119,9 @@ export const HodDetailPage: React.FC = () => {
 
         <button
           onClick={() => navigate(`/dean/hods/assignments?hodUserId=${hod.userId}`)}
-          className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 self-start md:self-center"
+          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 border border-blue-400/30 flex items-center space-x-1.5 self-start md:self-center cursor-pointer"
         >
-          <UserCheck className="w-4 h-4" />
+          <UserCheck className="w-4 h-4 text-white" />
           <span>Reassign Department</span>
         </button>
       </div>
@@ -126,7 +132,7 @@ export const HodDetailPage: React.FC = () => {
         {/* Personal & Account Info */}
         <div className="p-6 rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
           <h3 className="text-base font-bold text-neutral-900 dark:text-white flex items-center space-x-2">
-            <User className="w-4 h-4 text-amber-600" />
+            <User className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
             <span>Personal & Account Details</span>
           </h3>
 
@@ -141,7 +147,7 @@ export const HodDetailPage: React.FC = () => {
             </div>
             <div className="flex justify-between items-center pt-2">
               <span className="text-neutral-400">Account Role</span>
-              <span className="font-bold text-amber-700 dark:text-amber-300">HEAD_OF_DEPARTMENT (HOD)</span>
+              <span className="font-bold text-blue-600 dark:text-cyan-400">HEAD_OF_DEPARTMENT (HOD)</span>
             </div>
             <div className="flex justify-between items-center pt-2">
               <span className="text-neutral-400">Account Status</span>
@@ -191,7 +197,7 @@ export const HodDetailPage: React.FC = () => {
       <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/80 dark:border-neutral-800/80 overflow-hidden shadow-xs">
         <div className="p-6 border-b border-neutral-100 dark:border-neutral-800">
           <h3 className="text-base font-bold text-neutral-900 dark:text-white flex items-center space-x-2">
-            <History className="w-4 h-4 text-amber-600" />
+            <History className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
             <span>Department Assignment History</span>
           </h3>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -201,14 +207,14 @@ export const HodDetailPage: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 font-semibold">Department</th>
-                <th className="py-3 px-6 font-semibold">Academic Year</th>
-                <th className="py-3 px-6 font-semibold">Start Date</th>
-                <th className="py-3 px-6 font-semibold">End Date</th>
-                <th className="py-3 px-6 font-semibold text-center">Status</th>
-                <th className="py-3 px-6 font-semibold">Appointed By</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-6 font-bold text-white">Department</th>
+                <th className="py-3.5 px-6 font-bold text-white">Academic Year</th>
+                <th className="py-3.5 px-6 font-bold text-white">Start Date</th>
+                <th className="py-3.5 px-6 font-bold text-white">End Date</th>
+                <th className="py-3.5 px-6 font-bold text-white text-center">Status</th>
+                <th className="py-3.5 px-6 font-bold text-white">Appointed By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

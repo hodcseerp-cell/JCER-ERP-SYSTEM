@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   UserPlus,
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   RotateCcw,
   Sparkles,
   Shield,
+  FileSpreadsheet,
+  ArrowRight,
 } from 'lucide-react';
 import deanService, { DepartmentRecord } from '../../../services/dean.service';
 import usePersistentFormState from '../../../hooks/usePersistentFormState';
@@ -37,6 +39,9 @@ const defaultDeanFacultyForm: DeanCreateFacultyFormState = {
 
 export const DeanCreateFacultyPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode = searchParams.get('mode');
+  const isIndividualForm = mode === 'individual' || mode === 'single';
 
   // Persistent Form State with LocalStorage
   const {
@@ -168,17 +173,152 @@ export const DeanCreateFacultyPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (!isIndividualForm) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+        {/* ── Breadcrumb Bar ────────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <Link
+            to="/dean/faculty"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Faculty Directory</span>
+          </Link>
+        </div>
+
+        {/* ── Page Header ────────────────────────────────────────────── */}
+        <div className="glass-card rounded-3xl p-6 sm:p-8 border border-white/60 dark:border-slate-800/60 shadow-sm bg-white/80 dark:bg-slate-900/80">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shadow-xs">
+              <UserPlus className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                Create Faculty
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">
+                Choose how you would like to onboard faculty members into the Global Faculty Directory.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 2 Option Cards ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
+          {/* Option 1: Create Individual Faculty */}
+          <div
+            onClick={() => setSearchParams({ mode: 'individual' })}
+            className="group relative cursor-pointer glass-card rounded-3xl p-7 border-2 border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm hover:shadow-xl hover:border-indigo-500/80 dark:hover:border-indigo-500/80 hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-indigo-600 group-hover:!text-white transition-all duration-200 shadow-sm">
+                  <UserPlus className="w-7 h-7 text-indigo-600 dark:text-indigo-400 group-hover:!text-white group-hover:!stroke-white transition-colors duration-200" strokeWidth={2.2} />
+                </div>
+                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
+                  Single Faculty
+                </span>
+              </div>
+
+              <h2 className="text-lg font-black text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                Create Individual Faculty
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                Add a single faculty member directly with personal details, designation, email, phone number, and primary department assignment.
+              </p>
+
+              <div className="mt-5 space-y-2 border-t border-slate-100 dark:border-slate-800/80 pt-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Immediate active account creation</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Direct home department allocation</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Auto-saved session draft protection</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-indigo-600 dark:text-indigo-400 font-bold text-xs">
+              <span>Proceed to Individual Form</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Option 2: Bulk Import Faculty */}
+          <div
+            onClick={() => navigate('/dean/faculty/bulk-import')}
+            className="group relative cursor-pointer glass-card rounded-3xl p-7 border-2 border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-sm hover:shadow-xl hover:border-emerald-500/80 dark:hover:border-emerald-500/80 hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:bg-emerald-600 group-hover:!text-white transition-all duration-200 shadow-sm">
+                  <FileSpreadsheet className="w-7 h-7 text-emerald-600 dark:text-emerald-400 group-hover:!text-white group-hover:!stroke-white transition-colors duration-200" strokeWidth={2.2} />
+                </div>
+                <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                  Bulk Excel Import
+                </span>
+              </div>
+
+              <h2 className="text-lg font-black text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                Bulk Import Faculty
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                Upload multiple faculty records simultaneously using the official Excel template with automated department validation and bulk login credential generation.
+              </p>
+
+              <div className="mt-5 space-y-2 border-t border-slate-100 dark:border-slate-800/80 pt-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Standardized .xlsx template provided</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Real-time database validation checks</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Batch accounts with credentials export</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+              <span>Go to Bulk Import Page</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* ── Breadcrumb & Draft Bar ────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <Link
-          to="/dean/faculty"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Faculty Directory</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Create Options</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">•</span>
+          <Link
+            to="/dean/faculty"
+            className="text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            Faculty Directory
+          </Link>
+        </div>
 
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">

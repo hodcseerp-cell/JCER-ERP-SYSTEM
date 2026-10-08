@@ -123,15 +123,15 @@ export const DepartmentsPage: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-6 text-center w-36 font-semibold">Department Code</th>
-                <th className="py-3 px-6 text-left font-semibold">Department Name</th>
-                <th className="py-3 px-6 text-left font-semibold">Assigned HOD</th>
-                <th className="py-3 px-6 text-center font-semibold w-28">Faculty Count</th>
-                <th className="py-3 px-6 text-center font-semibold w-28">Student Count</th>
-                <th className="py-3 px-6 text-center font-semibold w-24">Status</th>
-                <th className="py-3 px-6 text-center font-semibold w-60">Actions</th>
+            <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+              <tr>
+                <th className="py-3.5 px-6 text-center w-36 font-bold text-white">Department Code</th>
+                <th className="py-3.5 px-6 text-left font-bold text-white">Department Name</th>
+                <th className="py-3.5 px-6 text-left font-bold text-white">Assigned HOD</th>
+                <th className="py-3.5 px-6 text-center font-bold w-28 text-white">Faculty Count</th>
+                <th className="py-3.5 px-6 text-center font-bold w-28 text-white">Student Count</th>
+                <th className="py-3.5 px-6 text-center font-bold w-24 text-white">Status</th>
+                <th className="py-3.5 px-6 text-center font-bold w-60 text-white">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

@@ -1068,10 +1068,55 @@ export const AdminUsnAllocationPage: React.FC = () => {
             <thead>
               <tr className="bg-slate-900 text-white border-b border-neutral-200 dark:border-neutral-800 text-[11px] font-bold uppercase tracking-wider select-none">
                 <th className="py-4 px-5 w-16 text-center">SL. NO.</th>
-                <th className="py-4 px-4">APPLICATION NUMBER</th>
-                <th className="py-4 px-4">STUDENT NAME</th>
+                <th
+                  className="py-4 px-4 cursor-pointer hover:text-violet-400 transition-colors"
+                  onClick={() => {
+                    const newOrder = sortBy === 'applicationNumber' && sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                    setSortBy('applicationNumber');
+                    setSortOrder(newOrder);
+                  }}
+                  title="Sort by Application Number"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>APPLICATION NUMBER</span>
+                    {sortBy === 'applicationNumber' && (
+                      <span className="text-violet-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="py-4 px-4 cursor-pointer hover:text-violet-400 transition-colors"
+                  onClick={() => {
+                    const newOrder = sortBy === 'name' && sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                    setSortBy('name');
+                    setSortOrder(newOrder);
+                  }}
+                  title="Sort by Student Name"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>STUDENT NAME</span>
+                    {sortBy === 'name' && (
+                      <span className="text-violet-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                    )}
+                  </div>
+                </th>
                 <th className="py-4 px-4 text-center w-36">CURRENT SEMESTER</th>
-                <th className="py-4 px-4 min-w-[220px]">USN</th>
+                <th
+                  className="py-4 px-4 min-w-[220px] cursor-pointer hover:text-violet-400 transition-colors"
+                  onClick={() => {
+                    const newOrder = sortBy === 'usn' && sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                    setSortBy('usn');
+                    setSortOrder(newOrder);
+                  }}
+                  title="Sort by USN"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>USN</span>
+                    {sortBy === 'usn' && (
+                      <span className="text-violet-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>

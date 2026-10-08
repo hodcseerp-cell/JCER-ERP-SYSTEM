@@ -84,26 +84,28 @@ export const DepartmentAcademicInfoPage: React.FC = () => {
         </button>
       </div>
 
-      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-amber-700 via-orange-700 to-neutral-900 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-amber-200">
+      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#070e22] via-[#0c1a40] to-[#0f245c] text-white border border-[#1e3a8a]/40 shadow-[0_16px_36px_rgba(7,14,34,0.35)] relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent pointer-events-none" />
+        <div className="absolute top-0 right-0 -mt-12 -mr-12 w-80 h-80 rounded-full bg-gradient-to-br from-cyan-400/20 via-blue-500/15 to-transparent blur-3xl pointer-events-none" />
+        <div className="relative z-10 space-y-1">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-md text-xs font-semibold text-cyan-300">
             <Building2 className="w-3.5 h-3.5" />
             <span>Department Academic Details • AY {academicYear}</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
             {department.name} ({department.code})
           </h1>
-          <p className="text-amber-100 text-xs sm:text-sm font-medium">
+          <p className="text-blue-100/90 text-xs sm:text-sm font-medium">
             Academic infrastructure, appointed HOD, faculty allocation, curriculum, and semester section hierarchy.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2">
           <button
             onClick={() => navigate(`/dean/hods/assignments?dept=${department.id}`)}
-            className="px-4 py-2.5 rounded-xl bg-white text-neutral-900 hover:bg-neutral-100 text-xs font-bold transition-all shadow-md active:scale-95 flex items-center space-x-1.5"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex items-center space-x-1.5 border border-blue-400/30"
           >
-            <UserCheck className="w-4 h-4 text-amber-600" />
+            <UserCheck className="w-4 h-4 text-white" />
             <span>{hod ? 'Reassign HOD' : 'Assign HOD'}</span>
           </button>
         </div>
@@ -310,13 +312,13 @@ export const DepartmentAcademicInfoPage: React.FC = () => {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-6 font-semibold">Faculty Name</th>
-                  <th className="py-3 px-6 font-semibold">Email</th>
-                  <th className="py-3 px-6 font-semibold">Designation</th>
-                  <th className="py-3 px-6 font-semibold">Joining Date</th>
-                  <th className="py-3 px-6 font-semibold text-center">Account Status</th>
+              <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                <tr>
+                  <th className="py-3.5 px-6 font-bold text-white">Faculty Name</th>
+                  <th className="py-3.5 px-6 font-bold text-white">Email</th>
+                  <th className="py-3.5 px-6 font-bold text-white">Designation</th>
+                  <th className="py-3.5 px-6 font-bold text-white">Joining Date</th>
+                  <th className="py-3.5 px-6 font-bold text-white text-center">Account Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
@@ -361,14 +363,14 @@ export const DepartmentAcademicInfoPage: React.FC = () => {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 text-neutral-400 font-bold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-6 font-semibold">Subject Code</th>
-                  <th className="py-3 px-6 font-semibold">Subject Name</th>
-                  <th className="py-3 px-6 font-semibold text-center">Semester</th>
-                  <th className="py-3 px-6 font-semibold text-center">Credits</th>
-                  <th className="py-3 px-6 font-semibold text-center">Type</th>
-                  <th className="py-3 px-6 font-semibold text-center">Status</th>
+              <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                <tr>
+                  <th className="py-3.5 px-6 font-bold text-white">Subject Code</th>
+                  <th className="py-3.5 px-6 font-bold text-white">Subject Name</th>
+                  <th className="py-3.5 px-6 font-bold text-white text-center">Semester</th>
+                  <th className="py-3.5 px-6 font-bold text-white text-center">Credits</th>
+                  <th className="py-3.5 px-6 font-bold text-white text-center">Type</th>
+                  <th className="py-3.5 px-6 font-bold text-white text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">

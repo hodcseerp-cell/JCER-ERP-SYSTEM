@@ -16,6 +16,7 @@ import {
   Clock,
   BookOpen,
   ClipboardList,
+  ArrowLeft,
 } from 'lucide-react';
 import { RootState } from '../../store';
 import hodService, { HodStudentItem } from '../../services/hod.service';
@@ -54,7 +55,7 @@ export const HodStudentsPage: React.FC = () => {
   const [district, setDistrict] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortBy, setSortBy] = useState<string>('usn');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
 
   // Pending Filters State (applied when user clicks "Apply Filters")
@@ -70,7 +71,7 @@ export const HodStudentsPage: React.FC = () => {
   const [pendingDistrict, setPendingDistrict] = useState<string>('');
   const [pendingStartDate, setPendingStartDate] = useState<string>('');
   const [pendingEndDate, setPendingEndDate] = useState<string>('');
-  const [pendingSortBy, setPendingSortBy] = useState<string>('name');
+  const [pendingSortBy, setPendingSortBy] = useState<string>('usn');
   const [pendingSortOrder, setPendingSortOrder] = useState<'ASC' | 'DESC'>('ASC');
 
   // Pagination
@@ -124,6 +125,11 @@ export const HodStudentsPage: React.FC = () => {
         setLimit(urlLimit);
         setPage(1);
       }
+    }
+    // If arriving scoped to a specific semester via URL and no search param was specified, clear any lingering search
+    if (searchParams.get('semester') && !searchParams.get('search') && search) {
+      setSearch('');
+      setPendingSearch('');
     }
   }, [searchParams]);
 
@@ -321,7 +327,7 @@ export const HodStudentsPage: React.FC = () => {
     setPendingDistrict('');
     setPendingStartDate('');
     setPendingEndDate('');
-    setPendingSortBy('name');
+    setPendingSortBy('usn');
     setPendingSortOrder('ASC');
 
     setSearch('');
@@ -336,7 +342,7 @@ export const HodStudentsPage: React.FC = () => {
     setDistrict('');
     setStartDate('');
     setEndDate('');
-    setSortBy('name');
+    setSortBy('usn');
     setSortOrder('ASC');
     setLimit(10);
     setPage(1);
@@ -376,6 +382,19 @@ export const HodStudentsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in w-full pb-12">
+      {/* ── Return to Cohort Breadcrumb ────────────────────────────────────── */}
+      {searchParams.get('semester') && searchParams.get('semester') !== 'ALL' && (
+        <div className="flex items-center justify-between">
+          <Link
+            to={`/hod/students/semesters/${searchParams.get('semester')}`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Semester {searchParams.get('semester')} Cohort</span>
+          </Link>
+        </div>
+      )}
+
       {/* ── Top Row: KPI Card & Actions (Admin Style) ────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Total Department Students KPI Card */}
@@ -722,7 +741,7 @@ export const HodStudentsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 2: Category, District, Submitted Date Range, Sort By, Actions */}
+          {/* Row 2: Category, District, Sort By, Actions */}
           <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
             {/* Category */}
             <div className="space-y-1">
@@ -761,28 +780,6 @@ export const HodStudentsPage: React.FC = () => {
               />
             </div>
 
-            {/* Submitted Date Range */}
-            <div className="space-y-1">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
-                Submitted Date Range
-              </label>
-              <div className="flex items-center gap-2 h-[36px]">
-                <input
-                  type="date"
-                  value={pendingStartDate}
-                  onChange={(e) => setPendingStartDate(e.target.value)}
-                  className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 h-full"
-                />
-                <span className="text-xs font-semibold text-neutral-400">to</span>
-                <input
-                  type="date"
-                  value={pendingEndDate}
-                  onChange={(e) => setPendingEndDate(e.target.value)}
-                  className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 h-full"
-                />
-              </div>
-            </div>
-
             {/* Sort By */}
             <div className="space-y-1">
               <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
@@ -794,10 +791,10 @@ export const HodStudentsPage: React.FC = () => {
                   onChange={(e) => setPendingSortBy(e.target.value)}
                   className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-neutral-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer h-full"
                 >
-                  <option value="date">Date Submitted</option>
-                  <option value="rank">Enrollment Number</option>
-                  <option value="name">Student Name</option>
                   <option value="usn">USN</option>
+                  <option value="name">Student Name</option>
+                  <option value="rank">Enrollment Number</option>
+                  <option value="date">Date Submitted</option>
                   <option value="updatedAt">Last Updated</option>
                 </select>
                 <button
@@ -805,7 +802,13 @@ export const HodStudentsPage: React.FC = () => {
                   onClick={() => setPendingSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'))}
                   className="flex items-center gap-1 px-3 py-2 border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 rounded-lg text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 transition-colors whitespace-nowrap h-full cursor-pointer"
                 >
-                  {pendingSortOrder === 'DESC' ? '↓ Newest' : '↑ Oldest'}
+                  {pendingSortBy === 'date' || pendingSortBy === 'updatedAt'
+                    ? pendingSortOrder === 'DESC'
+                      ? '↓ Newest'
+                      : '↑ Oldest'
+                    : pendingSortOrder === 'DESC'
+                      ? '↓ Descending'
+                      : '↑ Ascending'}
                 </button>
               </div>
             </div>
@@ -858,14 +861,80 @@ export const HodStudentsPage: React.FC = () => {
               <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold border-b border-neutral-800">
                 <tr className="border-b border-neutral-800 text-[10px] font-black uppercase tracking-widest text-white">
                   {isSemesterHandling && <th className="py-4 px-4 text-white text-center w-16">Sl No</th>}
-                  <th className="py-4 px-4 text-white">Student</th>
+                  <th
+                    className="py-4 px-4 text-white cursor-pointer hover:text-blue-400 transition-colors select-none"
+                    onClick={() => {
+                      if (sortBy === 'name') {
+                        const newOrder = sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                        setSortOrder(newOrder);
+                        setPendingSortOrder(newOrder);
+                      } else {
+                        setSortBy('name');
+                        setPendingSortBy('name');
+                        setSortOrder('ASC');
+                        setPendingSortOrder('ASC');
+                      }
+                    }}
+                    title="Sort by Student Name"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Student</span>
+                      {sortBy === 'name' && (
+                        <span className="text-blue-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                      )}
+                    </div>
+                  </th>
                   {isSemesterHandling ? (
                     <>
                       <th className="py-4 px-4 text-center text-white">Actual Branch</th>
-                      <th className="py-4 px-4 text-white">USN / App ID</th>
+                      <th
+                        className="py-4 px-4 text-white cursor-pointer hover:text-blue-400 transition-colors select-none"
+                        onClick={() => {
+                          if (sortBy === 'usn') {
+                            const newOrder = sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                            setSortOrder(newOrder);
+                            setPendingSortOrder(newOrder);
+                          } else {
+                            setSortBy('usn');
+                            setPendingSortBy('usn');
+                            setSortOrder('ASC');
+                            setPendingSortOrder('ASC');
+                          }
+                        }}
+                        title="Sort by USN"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>USN / App ID</span>
+                          {sortBy === 'usn' && (
+                            <span className="text-blue-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                          )}
+                        </div>
+                      </th>
                     </>
                   ) : (
-                    <th className="py-4 px-4 text-white">USN / Enrollment</th>
+                    <th
+                      className="py-4 px-4 text-white cursor-pointer hover:text-blue-400 transition-colors select-none"
+                      onClick={() => {
+                        if (sortBy === 'usn') {
+                          const newOrder = sortOrder === 'ASC' ? 'DESC' : 'ASC';
+                          setSortOrder(newOrder);
+                          setPendingSortOrder(newOrder);
+                        } else {
+                          setSortBy('usn');
+                          setPendingSortBy('usn');
+                          setSortOrder('ASC');
+                          setPendingSortOrder('ASC');
+                        }
+                      }}
+                      title="Sort by USN"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>USN / Enrollment</span>
+                        {sortBy === 'usn' && (
+                          <span className="text-blue-400 text-xs">{sortOrder === 'ASC' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
+                    </th>
                   )}
                   <th className="py-4 px-4 text-center text-white">Semester</th>
                   <th className="py-4 px-4 text-center text-white">Section</th>

@@ -82,13 +82,6 @@ export const FacultyLayout: React.FC = () => {
     { name: 'Analytics', path: '/faculty/analytics', icon: BarChart3 },
   ];
 
-  const subNavTabs = [
-    { name: 'Overview', path: '/faculty/dashboard' },
-    { name: 'Attendance', path: '/faculty/attendance' },
-    { name: 'Student Attendance', path: '/faculty/student-attendance' },
-    { name: 'Bitwise Marks', path: '/faculty/marks' },
-    { name: 'Analytics', path: '/faculty/analytics' },
-  ];
 
   const getActiveNavPath = (currentPath: string): string => {
     if (currentPath === '/faculty' || currentPath === '/faculty/overview' || currentPath.startsWith('/faculty/dashboard')) {
@@ -289,25 +282,6 @@ export const FacultyLayout: React.FC = () => {
             </div>
           </div>
 
-          {/* Sub-Nav Pill Bar (4 core quick tabs for Faculty) */}
-          <div className="hidden lg:flex items-center glass-bar p-1 rounded-full flex-shrink-0">
-            {subNavTabs.map((tab) => {
-              const isActive = activeNavPath === tab.path || (tab.path === '/faculty/dashboard' && (location.pathname === '/faculty' || location.pathname === '/faculty/overview' || location.pathname === '/faculty/dashboard'));
-              return (
-                <Link
-                  key={tab.name}
-                  to={tab.path}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-300 ${
-                    isActive
-                      ? 'admin-nav-pill-active shadow-sm text-white'
-                      : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-                  }`}
-                >
-                  {tab.name}
-                </Link>
-              );
-            })}
-          </div>
 
           {/* Right Controls */}
           <div className="flex items-center space-x-2 flex-shrink-0">
@@ -370,11 +344,23 @@ export const FacultyLayout: React.FC = () => {
         </header>
 
         {/* ── DYNAMIC PAGE CONTENT ── */}
-        <main className="flex-1 pb-10 min-w-0">
-          <Outlet />
+        <main className="flex-1 pb-10 min-w-0 flex flex-col relative">
+          <div 
+            className="fixed inset-y-0 right-0 left-0 lg:left-[320px] pointer-events-none flex items-center justify-center z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <img 
+              src="/emaillogo.png" 
+              alt="" 
+              className="w-[620px] h-[620px] max-w-[70vw] max-h-[70vh] object-contain opacity-[0.045] dark:opacity-[0.025] select-none" 
+            />
+          </div>
+          <div className="relative z-10 flex-1 flex flex-col">
+            <Outlet />
+          </div>
         </main>
 
-        <GlobalFooter />
+        <GlobalFooter className="mt-auto relative z-20" />
       </div>
 
       <PwaConfirmationModal

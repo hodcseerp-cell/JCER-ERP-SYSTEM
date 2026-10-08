@@ -22,7 +22,12 @@ interface AuthenticatedRequest extends Request {
 export const getPromotionFilters = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
   try {
     const departments = await Department.findAll({
-      attributes: ['id', 'name', 'code'],
+      where: {
+        code: { [Op.ne]: 'AS' },
+        type: { [Op.ne]: 'SEMESTER_HANDLING' },
+        name: { [Op.notILike]: '%Applied Science%' },
+      },
+      attributes: ['id', 'name', 'code', 'type'],
       order: [['name', 'ASC']]
     });
 

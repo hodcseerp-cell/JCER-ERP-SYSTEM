@@ -845,15 +845,16 @@ export const getHodDepartmentStudents = async (options: {
   const sortDir = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   let orderClause: any[] = [];
   if (sortBy === 'usn') {
+    const nullsOrder = sortDir === 'ASC' ? 'ASC NULLS LAST' : 'DESC NULLS LAST';
     orderClause = [
-      ['usn', sortDir],
+      ['usn', nullsOrder],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
   } else if (sortBy === 'rank' || sortBy === 'enrollment') {
     orderClause = [
-      ['enrollmentNumber', sortDir],
+      ['enrollmentNumber', `${sortDir} NULLS LAST`],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
@@ -865,12 +866,28 @@ export const getHodDepartmentStudents = async (options: {
       [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
-  } else {
-    // DEFAULT DETERMINISTIC ALPHABETICAL ORDERING (FIRST NAME ASC, LAST NAME ASC, ID ASC)
-    const dir = sortBy === 'name' ? sortDir : 'ASC';
+  } else if (sortBy === 'date') {
     orderClause = [
-      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), dir],
-      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), dir],
+      ['createdAt', sortDir],
+      ['id', 'ASC'],
+    ];
+  } else if (sortBy === 'updatedAt') {
+    orderClause = [
+      ['updatedAt', sortDir],
+      ['id', 'ASC'],
+    ];
+  } else if (sortBy === 'name') {
+    orderClause = [
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), sortDir],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), sortDir],
+      ['id', 'ASC'],
+    ];
+  } else {
+    // DEFAULT: When USNs are assigned, students should be ordered in ascending order of USN (with non-USN students falling back to alphabetical name)
+    orderClause = [
+      ['usn', 'ASC NULLS LAST'],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.firstName'), '')), 'ASC'],
+      [sequelize.fn('LOWER', sequelize.fn('COALESCE', sequelize.col('user.lastName'), '')), 'ASC'],
       ['id', 'ASC'],
     ];
   }
@@ -1336,6 +1353,8 @@ export const getHodSemesterCohort = async (
       limit: 2000,
       isSemesterHandling: isSemHandling,
       branch,
+      sortBy: 'usn',
+      sortOrder: 'ASC',
     });
 
     // Resolve department section UUIDs to clean letters ('A', 'B', etc.)

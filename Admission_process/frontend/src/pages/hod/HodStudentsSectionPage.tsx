@@ -756,6 +756,19 @@ export const HodStudentsSectionPage: React.FC = () => {
       {/* ── VIEW 1: MAIN SECTION ALLOCATION PAGE (BRANCHES OVERVIEW) ───────────── */}
       {activeView === 'OVERVIEW' && (
         <div className="space-y-6">
+          {/* ── Return to Cohort Breadcrumb ────────────────────────────────────── */}
+          {searchParams.get('semester') && (
+            <div className="flex items-center justify-between pb-1">
+              <Link
+                to={`/hod/students/semesters/${searchParams.get('semester')}`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700 shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-4 h-4 text-neutral-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to Semester {searchParams.get('semester')} Cohort</span>
+              </Link>
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-100 dark:border-neutral-800">
             <div>

@@ -311,7 +311,7 @@ export const DeanFacultyDetailPage: React.FC = () => {
   });
 
   // Formatted ID
-  const facultyIdFormatted = faculty.facultyId || `JCER-${faculty.coreDepartment.code}-${faculty.id.slice(0, 6).toUpperCase()}`;
+  const facultyIdFormatted = faculty.facultyId || `JCER-${faculty.coreDepartment?.code || 'FAC'}-${faculty.id ? faculty.id.slice(0, 6).toUpperCase() : '000000'}`;
 
   // Attendance statistics
   const totalAttendancePresent = attendanceHistory.reduce((sum, a) => sum + (a.present || 0), 0);
@@ -629,14 +629,14 @@ export const DeanFacultyDetailPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   {[...teachingAssignments, ...historicalAssignments].length > 0 ? (
                     <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/30 text-neutral-500 font-extrabold uppercase text-[10px] tracking-wider">
-                          <th className="py-3 px-4">Academic Year</th>
-                          <th className="py-3 px-4">Subject Name & Code</th>
-                          <th className="py-3 px-4">Teaching Dept</th>
-                          <th className="py-3 px-4">Semester</th>
-                          <th className="py-3 px-4 text-center">Section</th>
-                          <th className="py-3 px-4 text-center">Status</th>
+                      <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                        <tr>
+                          <th className="py-3.5 px-4 font-bold text-white">Academic Year</th>
+                          <th className="py-3.5 px-4 font-bold text-white">Subject Name & Code</th>
+                          <th className="py-3.5 px-4 font-bold text-white">Teaching Dept</th>
+                          <th className="py-3.5 px-4 font-bold text-white">Semester</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Section</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
@@ -733,16 +733,16 @@ export const DeanFacultyDetailPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   {filteredAttendance.length > 0 ? (
                     <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/30 text-neutral-500 font-extrabold uppercase text-[10px] tracking-wider">
-                          <th className="py-3 px-4">Date</th>
-                          <th className="py-3 px-4">Subject & Code</th>
-                          <th className="py-3 px-4 text-center">Sem / Sec</th>
-                          <th className="py-3 px-4 text-center">Period</th>
-                          <th className="py-3 px-4 text-center text-emerald-600">Present</th>
-                          <th className="py-3 px-4 text-center text-rose-600">Absent</th>
-                          <th className="py-3 px-4 text-center">Rate</th>
-                          <th className="py-3 px-4 text-center">Status</th>
+                      <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                        <tr>
+                          <th className="py-3.5 px-4 font-bold text-white">Date</th>
+                          <th className="py-3.5 px-4 font-bold text-white">Subject & Code</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Sem / Sec</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Period</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center text-emerald-400">Present</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center text-rose-400">Absent</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Rate</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
@@ -848,14 +848,14 @@ export const DeanFacultyDetailPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   {filteredMarks.length > 0 ? (
                     <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/30 text-neutral-500 font-extrabold uppercase text-[10px] tracking-wider">
-                          <th className="py-3 px-4">Subject & Code</th>
-                          <th className="py-3 px-4 text-center">Section</th>
-                          <th className="py-3 px-4">Assessment Component</th>
-                          <th className="py-3 px-4 text-center">Max Marks</th>
-                          <th className="py-3 px-4 text-center">Academic Year</th>
-                          <th className="py-3 px-4 text-center">Status</th>
+                      <thead className="bg-[#111111] dark:bg-neutral-950 text-white uppercase tracking-wider font-extrabold text-[10px] border-b border-neutral-800">
+                        <tr>
+                          <th className="py-3.5 px-4 font-bold text-white">Subject & Code</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Section</th>
+                          <th className="py-3.5 px-4 font-bold text-white">Assessment Component</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Max Marks</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Academic Year</th>
+                          <th className="py-3.5 px-4 font-bold text-white text-center">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60">
